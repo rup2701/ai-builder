@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "about": "Template decisions every app starts from. Agents do not reopen these. To change one, write a change request.",
+  "decisions": [
+    { "id": "framework", "choice": "Next.js 16 (App Router), React 19, TypeScript strict", "why": "What Fernhollow and the Builder already use, and what the agent writes best." },
+    { "id": "orm", "choice": "Drizzle ORM with node-postgres", "why": "No native engine binary, so it installs in sandboxes and runs on serverless. Prisma's engine download failed in the build sandbox, and the builder agent runs in one too." },
+    { "id": "database", "choice": "Postgres. Neon in production, one database per app", "why": "Real apps need a real database. The benchmark's 'front-end demonstration' scope no longer applies." },
+    { "id": "ui", "choice": "shadcn/ui components copied into src/components/ui, Radix primitives, Tailwind CSS 4 with CSS variable tokens", "why": "Accessibility is handled, the code is owned by the app, agents know it well, and the store's look settings can drive every component." },
+    { "id": "validation", "choice": "Zod at every boundary", "why": "Keeps model and user input inside the schema." },
+    { "id": "tests", "choice": "Playwright end-to-end scripts in e2e/, plus one check per edge in specs/edges.json", "why": "Verification is automatic; a run passes only when these pass." },
+    { "id": "deploy", "choice": "One GitHub repo per app, one Vercel project per repo, production deploys on merge to main, branch previews for changes", "why": "Same flow as Fernhollow. Git holds history, rollback and handoff. Deployed by a publish script, by hand for the first apps." },
+    { "id": "settings", "choice": "Owner-editable settings live in one file, separate from template code. Record the template version per app", "why": "Keeps a later move to shared configuration cheap and lets template fixes be applied across apps." },
+    { "id": "payments", "choice": "Stripe, test mode only, until the payments experiment passes", "why": "No real money and no customer-facing promise yet." }
+  ]
+}

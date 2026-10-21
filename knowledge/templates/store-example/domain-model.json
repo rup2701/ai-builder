@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Describe the business concepts and rules for the handmade-goods store without prescribing database tables, code structures, or framework-specific implementation.",
+  "entities": [
+    {
+      "name": "Product",
+      "description": "A handmade item offered for sale.",
+      "concepts": [
+        "identity and name",
+        "description and imagery",
+        "category",
+        "base price",
+        "availability",
+        "purchasable options",
+        "personalization rules"
+      ],
+      "rules": [
+        "Only products available for sale should appear in the shopper catalog.",
+        "A product may have configurable options or be sold as a single configuration.",
+        "Personalization is available only when explicitly supported by the product."
+      ]
+    },
+    {
+      "name": "ProductOption",
+      "description": "A choice a shopper can make when configuring a product, such as size, color, or finish.",
+      "concepts": [
+        "option name",
+        "available values",
+        "price impact, if any",
+        "availability of each valid configuration"
+      ],
+      "rules": [
+        "Only valid product configurations may be purchased.",
+        "Unavailable configurations cannot be added to the cart.",
+        "The final product price must reflect any applicable option-based adjustment."
+      ]
+    },
+    {
+      "name": "Cart",
+      "description": "A shopper's current collection of configured products.",
+      "concepts": [
+        "selected product configurations",
+        "personalization details",
+        "quantities",
+        "unit prices",
+        "subtotal"
+      ],
+      "rules": [
+        "Each cart item represents a specific product configuration.",
+        "Different configurations or personalization details must remain distinguishable.",
+        "The subtotal equals the sum of each item's unit price multiplied by its quantity.",
+        "Removing an item and changing its quantity must update the cart consistently."
+      ]
+    },
+    {
+      "name": "Order",
+      "description": "A record of a shopper's submitted checkout in this demo application.",
+      "concepts": [
+        "order reference",
+        "customer and shipping details",
+        "purchased product configurations",
+        "quantities and prices",
+        "subtotal and displayed additional charges",
+        "order status"
+      ],
+      "rules": [
+        "An order preserves the product details, options, quantities, and prices agreed at checkout.",
+        "Order totals must equal the sum of their components.",
+        "Submitting checkout creates a demo order, not a real payment or fulfillment request.",
+        "Viewing or refreshing an existing order must not create another order."
+      ]
+    },
+    {
+      "name": "Customer",
+      "description": "A shopper providing contact and shipping information for a demo order.",
+      "concepts": [
+        "full name",
+        "email address",
+        "shipping address"
+      ],
+      "rules": [
+        "Required contact and shipping information must be validated before an order is submitted.",
+        "No payment-card information is required or collected."
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "between": ["Product", "ProductOption"],
+      "meaning": "A product may have zero or more purchasable options."
+    },
+    {
+      "between": ["Cart", "Product"],
+      "meaning": "A cart contains one or more configured products, each with a quantity."
+    },
+    {
+      "between": ["Order", "Product"],
+      "meaning": "An order preserves a snapshot of each purchased product configuration and its price."
+    },
+    {
+      "between": ["Order", "Customer"],
+      "meaning": "An order is associated with the customer and shipping details submitted at checkout."
+    }
+  ],
+  "implementation_guidance": {
+    "prescriptive": false,
+    "instruction": "This is a conceptual reference model, not a required database schema or code design. Choose an implementation appropriate to the application. You may refine or replace these concepts where justified, provided the intended business rules and user-facing behavior are preserved. Document meaningful deviations and assumptions."
+  }
+}

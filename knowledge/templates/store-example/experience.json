@@ -1,0 +1,299 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Describe the important pages, user interactions, and journeys for the handmade-goods store. This is a behavioral reference, not a prescribed UI layout or technical implementation.",
+  "global_experience": {
+    "store_identity": "The store should feel personal, trustworthy, and focused on the craft behind handmade products.",
+    "navigation": [
+      "Home",
+      "Shop",
+      "Cart"
+    ],
+    "expectations": [
+      "Shoppers can understand where they are and what they can do next.",
+      "The cart count and cart contents remain consistent throughout the shopping journey.",
+      "Important actions provide clear feedback.",
+      "Errors explain what went wrong and how to recover.",
+      "The experience works across mobile, tablet, and desktop."
+    ],
+    "footer": {
+      "change_request": "CR-002",
+      "links": [
+        "Shop all",
+        "Help & FAQ",
+        "Returns & refunds",
+        "Contact us"
+      ],
+      "subfooter": [
+        "Accepted payment methods (text labels, marked as demo)",
+        "Copyright and demo-store notice"
+      ]
+    }
+  },
+  "pages": [
+    {
+      "id": "home",
+      "purpose": "Introduce the store and encourage shoppers to discover its products.",
+      "content": [
+        "Store name and identity",
+        "A concise introduction to the handmade products",
+        "An inviting visual introduction to the products or craftsmanship",
+        "A selection of featured products",
+        "A clear path to browse the catalog",
+        "A row of four reassurances just above the footer: named makers, returns, shipping, contact (CR-005)"
+      ],
+      "primary_action": "Browse products",
+      "success_criteria": [
+        "A first-time visitor can understand what the store sells.",
+        "The path from the home page to the catalog is obvious."
+      ]
+    },
+    {
+      "id": "product-catalog",
+      "purpose": "Help shoppers discover and compare products.",
+      "content": [
+        "A collection of available products",
+        "Product imagery, names, prices, and brief descriptions",
+        "Product categories or other useful discovery aids where appropriate"
+      ],
+      "interactions": [
+        "Open a product to see its details.",
+        "Filter products if filtering is supported.",
+        "Clear an active filter to see the full collection."
+      ],
+      "states": [
+        "Normal catalog",
+        "Filtered catalog, if supported",
+        "Empty results, if applicable",
+        "Unavailable catalog or error, if applicable"
+      ],
+      "success_criteria": [
+        "Shoppers can identify products and understand their basic differences.",
+        "Selecting a product opens the correct product details."
+      ]
+    },
+    {
+      "id": "product-detail",
+      "purpose": "Help shoppers understand a product and configure it before purchasing.",
+      "content": [
+        "Product imagery",
+        "Product name, description, and price",
+        "Availability",
+        "Purchasable options, where applicable",
+        "Personalization, where supported",
+        "A clear add-to-cart action"
+      ],
+      "interactions": [
+        "Explore product images and descriptions.",
+        "Select valid product options.",
+        "See price changes resulting from selected options.",
+        "Enter personalization when supported.",
+        "Add a valid configuration to the cart."
+      ],
+      "states": [
+        "Default product view",
+        "Required option missing",
+        "Unavailable configuration",
+        "Item added successfully",
+        "Product not found"
+      ],
+      "success_criteria": [
+        "Shoppers understand what they will receive and how much it costs.",
+        "Required choices are clear before purchase.",
+        "Invalid or unavailable configurations cannot be added to the cart.",
+        "After adding an item, shoppers receive clear feedback and can continue shopping or view the cart."
+      ]
+    },
+    {
+      "id": "shopping-cart",
+      "purpose": "Let shoppers review and modify their intended purchase.",
+      "content": [
+        "Selected products and their configurations",
+        "Personalization details where applicable",
+        "Quantities, unit prices, and line totals",
+        "Cart subtotal and any clearly labeled demo charges",
+        "A route to checkout"
+      ],
+      "interactions": [
+        "Change item quantities.",
+        "Remove items.",
+        "Continue shopping.",
+        "Proceed to checkout when the cart contains items."
+      ],
+      "states": [
+        "Cart with items",
+        "Empty cart"
+      ],
+      "success_criteria": [
+        "Shoppers can identify exactly what they intend to purchase.",
+        "Changes to the cart update its contents, item count, and totals consistently.",
+        "An empty cart provides a clear path back to shopping."
+      ]
+    },
+    {
+      "id": "checkout",
+      "purpose": "Collect the information needed to demonstrate a completed order.",
+      "content": [
+        "Customer contact details",
+        "Shipping address",
+        "Order summary",
+        "Clearly explained demo totals",
+        "An explicit notice that checkout is simulated"
+      ],
+      "interactions": [
+        "Enter contact and shipping details.",
+        "Correct invalid or missing information.",
+        "Review the order summary.",
+        "Submit the demo order."
+      ],
+      "states": [
+        "Ready for checkout",
+        "Validation errors",
+        "Submitting",
+        "Order created",
+        "Empty cart"
+      ],
+      "success_criteria": [
+        "Required information is validated with understandable messages.",
+        "Entered information is preserved when validation fails.",
+        "The order summary agrees with the cart.",
+        "No payment-card information is requested or collected.",
+        "Successful submission leads to an order confirmation."
+      ]
+    },
+    {
+      "id": "order-confirmation",
+      "purpose": "Confirm that the demo order was created and summarize the purchase.",
+      "content": [
+        "A clear order confirmation message",
+        "A unique order reference",
+        "Purchased products, configurations, quantities, and totals",
+        "A clear indication that this is a demo order",
+        "A route back to shopping"
+      ],
+      "success_criteria": [
+        "The confirmation matches the submitted order.",
+        "Refreshing the confirmation does not create a duplicate order.",
+        "An unknown order reference produces a helpful recovery path."
+      ]
+    },
+    {
+      "id": "returns-policy",
+      "change_request": "CR-001",
+      "purpose": "Explain returns, exchanges and refunds so shoppers can buy with confidence.",
+      "content": [
+        "Summary of the policy at a glance",
+        "Return window and item condition",
+        "How to start a return",
+        "Refund method and timing",
+        "Return shipping costs",
+        "Personalized and final-sale items",
+        "Damaged or incorrect items",
+        "Demo-policy notice",
+        "A route to contact the studio"
+      ],
+      "success_criteria": [
+        "A shopper can find the return window and refund timing within a few seconds.",
+        "Final-sale rules for personalized items are unambiguous."
+      ]
+    },
+    {
+      "id": "help",
+      "change_request": "CR-002",
+      "purpose": "Answer common shopper questions without contacting the studio.",
+      "content": [
+        "Questions grouped by topic: orders and shipping, returns, personalization, care, this demo",
+        "A route to contact the studio"
+      ],
+      "interactions": [
+        "Expand and collapse answers"
+      ],
+      "success_criteria": [
+        "Answers are keyboard accessible and readable on mobile."
+      ]
+    },
+    {
+      "id": "contact",
+      "change_request": "CR-002",
+      "purpose": "Show shoppers how to reach the studio.",
+      "content": [
+        "Email address and response time",
+        "Studio hours",
+        "Links to Help and Returns",
+        "Notice that this is a demo store and messages are not monitored"
+      ],
+      "success_criteria": [
+        "Contact details are easy to copy.",
+        "No form submits or transmits data."
+      ]
+    }
+  ],
+  "primary_journeys": [
+    {
+      "id": "discover-and-purchase",
+      "name": "Discover a product and complete a purchase",
+      "steps": [
+        "Visit the home page.",
+        "Browse the catalog.",
+        "Open a product.",
+        "Review its details and select any required options.",
+        "Add the configured product to the cart.",
+        "Review the cart.",
+        "Proceed to checkout.",
+        "Enter valid contact and shipping information.",
+        "Submit the demo order.",
+        "Review the order confirmation."
+      ],
+      "expected_outcome": "The shopper reaches a confirmation that accurately reflects the selected products and agreed totals."
+    },
+    {
+      "id": "invalid-product-selection",
+      "name": "Recover from an invalid product selection",
+      "steps": [
+        "Open a product with required options.",
+        "Leave a required option unselected or select an unavailable configuration.",
+        "Attempt to add the product to the cart.",
+        "Receive clear guidance about the issue.",
+        "Correct the selection and retry."
+      ],
+      "expected_outcome": "No invalid configuration enters the cart, and the shopper can recover without losing unrelated choices."
+    },
+    {
+      "id": "modify-cart",
+      "name": "Modify a cart before checkout",
+      "steps": [
+        "Add multiple product configurations.",
+        "Change a quantity.",
+        "Remove an item.",
+        "Review the updated cart."
+      ],
+      "expected_outcome": "The cart contents, item count, and totals consistently reflect the latest changes."
+    }
+  ],
+  "design_intent": {
+    "note": "Added after the first build. The original specs left overall style to the builder, which is a gap: this is something the owner should choose during onboarding.",
+    "layout": {
+      "width": "full",
+      "product_cards": "image-first",
+      "reading_pages": "narrow column"
+    },
+    "style": {
+      "direction": "not chosen by the owner. The builder used a warm, contemporary craft look.",
+      "options_to_offer": ["modern", "contemporary", "antique"],
+      "what_each_changes": ["typefaces", "colour palette", "corner radius and borders", "image treatment", "ornament and texture", "copy tone"]
+    }
+  },
+  "design_principles": [
+    "Product imagery and craftsmanship should be prominent.",
+    "Browsing pages use the full screen width; product cards give the image most of the space (CR-003, CR-004).",
+    "Visual styling should feel cohesive, considered, and appropriate for an independent handmade-goods brand.",
+    "The interface should make available actions and current state understandable.",
+    "Primary actions should be easy to identify without overwhelming the page.",
+    "Layouts should adapt naturally to different screen sizes.",
+    "Accessibility, readable contrast, keyboard operation, and meaningful form labels are expected.",
+    "The implementation agent may choose the visual design and interaction details that best fulfill these goals."
+  ],
+  "implementation_guidance": {
+    "prescriptive": false,
+    "instruction": "Choose page layouts, components, routes, state management, and interaction patterns based on good product and engineering judgment. The page descriptions and journeys define expected user-facing behavior, not a mandatory implementation. Document significant assumptions or deviations."
+  }
+}

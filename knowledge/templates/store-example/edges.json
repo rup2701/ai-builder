@@ -1,0 +1,388 @@
+{
+  "schema_version": "1.0",
+  "app_type": "online-store",
+  "reference_build": "Fernhollow Goods",
+  "reviewed": "2026-10-16",
+  "purpose": "The things that go wrong, or get awkward, in an online store that neither the shopper nor the store owner will think to specify. For each one: what the shopper sees, what the owner sees, what the default behavior is, and whether a test proves it. This file is the reusable part: every store of this type starts from it, and every incident adds to it.",
+  "how_to_read": {
+    "status": {
+      "handled": "The app has defined behavior for this and the shopper and owner both get a clear experience.",
+      "partial": "The app copes, but someone is left unaware, or only part of the situation is covered.",
+      "open": "Not handled. The owner has a decision to make, or it needs a feature the current specs exclude."
+    },
+    "tested": {
+      "yes": "An automated check in e2e/ proves it.",
+      "partial": "Part of the behavior is checked.",
+      "no": "Built in, but no automated check yet."
+    },
+    "owner_decision": "Choices the store owner should make in plain language, with the default marked. Never ask the owner a technical question."
+  },
+  "edges": [
+    {
+      "id": "E-001",
+      "area": "product",
+      "edge": "Shopper tries to add a product without choosing a required option.",
+      "shopper_sees": "A message naming the missing choice (\"Please choose a glaze before adding to your cart\"), and focus moves to that option.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Block the add. Keep everything else the shopper chose.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["missing required option blocked"]
+    },
+    {
+      "id": "E-002",
+      "area": "product",
+      "edge": "Shopper picks a combination that is sold out.",
+      "shopper_sees": "The option is struck through and labelled \"Sold out\". If they add anyway, a message says that combination is sold out and their other choices are kept.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Block the add and explain.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["unavailable variant blocked"]
+    },
+    {
+      "id": "E-003",
+      "area": "product",
+      "edge": "Personalization text is too long or uses unsupported characters.",
+      "shopper_sees": "A specific message (limit, or which characters are allowed) next to the field, plus a live character count.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Reject the text. Letters, numbers, spaces and & . , ' - only; limit set per product.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["invalid personalization blocked", "middle dot rejected by charset", "maxLength enforced on input"]
+    },
+    {
+      "id": "E-004",
+      "area": "product",
+      "edge": "Personalization contains only spaces.",
+      "shopper_sees": "The item is added with no personalization.",
+      "owner_sees": "No blank engraving requests.",
+      "default_behavior": "Trim and collapse whitespace; an empty result means no personalization (and the item stays returnable).",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["E-004 spaces-only engraving is not stored as personalization"]
+    },
+    {
+      "id": "E-005",
+      "area": "product",
+      "edge": "Shopper opens a link to a product that does not exist.",
+      "shopper_sees": "\"We couldn't find that product\" with a path back to the shop.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "404 with a recovery path.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["unknown product → not found"]
+    },
+    {
+      "id": "E-006",
+      "area": "product",
+      "edge": "Shopper opens a bookmarked link to a product that is no longer for sale.",
+      "shopper_sees": "\"This piece isn't available right now\" with a link to the shop. No add-to-cart button.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Hide from the catalog; the direct link explains instead of showing an error.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["E-006 unavailable product explains itself", "E-006 unavailable product has no add-to-cart button"]
+    },
+    {
+      "id": "E-007",
+      "area": "cart",
+      "edge": "Shopper adds more of an item than the per-item maximum (10).",
+      "shopper_sees": "A message saying they already have 10 and what to do. No false \"Added\" confirmation. (Before 2026-10-16 the add was silently ignored while the page said \"Added to your cart\".)",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Cap at 10 per line and say so.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": [
+        "E-007 cart line reaches the maximum of 10",
+        "E-007 increase button disabled at the maximum",
+        "E-007 adding beyond the maximum explains why",
+        "E-007 no false 'Added to your cart' confirmation",
+        "E-007 quantity stays at 10"
+      ],
+      "found_by": "edge review of the reference build",
+      "owner_decision": {
+        "question": "What's the most of one item a shopper can buy at once?",
+        "options": ["10 (default)", "Set it per product", "No limit"]
+      }
+    },
+    {
+      "id": "E-008",
+      "area": "cart",
+      "edge": "Same product added twice, or two versions of it (different option or different engraving).",
+      "shopper_sees": "Identical items combine into one line with a higher quantity. Different options or engraving stay as separate lines.",
+      "owner_sees": "Each configuration is a separate line on the order.",
+      "default_behavior": "A line is product + option choices + personalization.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["cart has 3 distinct lines (merged identical, kept distinct configs)", "identical config merged qty 2"]
+    },
+    {
+      "id": "E-009",
+      "area": "cart",
+      "edge": "Shopper tries to take a quantity below 1.",
+      "shopper_sees": "The minus button is disabled at 1. Removing is a separate, labelled action.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Quantity is 1-10; Remove deletes the line.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["decrease disabled at 1", "qty change updates line + subtotal"]
+    },
+    {
+      "id": "E-010",
+      "area": "cart",
+      "edge": "Shopper's browser blocks storage (private mode, strict settings).",
+      "shopper_sees": "The cart works for this visit. It is not saved if they close the tab, and nothing tells them that.",
+      "owner_sees": "Nothing. These shoppers lose carts without anyone knowing.",
+      "default_behavior": "Fall back to an in-memory cart.",
+      "status": "partial",
+      "tested": "yes",
+      "tests": ["E-010 cart works for this visit when storage is blocked", "E-010 no crash when storage is blocked"],
+      "gap": "Add a one-line notice (\"Your cart won't be saved if you close this tab\") when storage is unavailable."
+    },
+    {
+      "id": "E-011",
+      "area": "cart",
+      "edge": "Shopper has the store open in two tabs.",
+      "shopper_sees": "The cart count and contents stay in sync across tabs.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Sync on browser storage events.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["E-011 other tab's cart count updates without reload"]
+    },
+    {
+      "id": "E-012",
+      "area": "cart",
+      "edge": "Owner changes a price while the item is already in someone's cart.",
+      "shopper_sees": "The cart keeps showing the old price until checkout, where the new price is caught (see E-017).",
+      "owner_sees": "Nothing.",
+      "default_behavior": "Prices are re-checked at checkout; the browser cart is never trusted.",
+      "status": "partial",
+      "tested": "no",
+      "tests": [],
+      "gap": "The cart page itself should refresh prices on load so shoppers aren't surprised at the last step.",
+      "owner_decision": {
+        "question": "When you change a price, what should happen to carts that already have the item?",
+        "options": ["Update the cart right away and tell the shopper", "Update only at checkout (current)", "Honor the old price for 24 hours"]
+      }
+    },
+    {
+      "id": "E-013",
+      "area": "cart",
+      "edge": "Removing an item drops the order below the free-shipping amount.",
+      "shopper_sees": "Shipping appears, and the totals agree on the cart and checkout pages.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "One shared function computes shipping and totals for cart, checkout and the saved order.",
+      "status": "handled",
+      "tested": "partial",
+      "tests": ["subtotal = sum of line totals", "checkout summary agrees with cart"],
+      "notes": "Subtotal agreement is tested; crossing the free-shipping threshold is not.",
+      "owner_decision": {
+        "question": "What are your shipping charges and free-shipping amount?",
+        "options": ["$6 flat, free over $75 (demo default)", "Free shipping always", "Rates by location"]
+      }
+    },
+    {
+      "id": "E-014",
+      "area": "checkout",
+      "edge": "Shopper reaches checkout with an empty cart.",
+      "shopper_sees": "\"There's nothing to check out yet\" with a link to the shop.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "No form is shown.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["checkout unavailable with empty cart"]
+    },
+    {
+      "id": "E-015",
+      "area": "checkout",
+      "edge": "Contact or shipping details are missing or invalid.",
+      "shopper_sees": "A summary of problems that links to each field, a message under each field, and everything they typed is kept.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "Validate on the shopper's device and again on the server.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["validation errors shown", "values preserved after failed validation"]
+    },
+    {
+      "id": "E-016",
+      "area": "checkout",
+      "edge": "An item in the cart becomes unavailable before the shopper places the order.",
+      "shopper_sees": "A message naming the item, with a Remove button. No order is created.",
+      "owner_sees": "Nothing.",
+      "default_behavior": "The server re-checks every line against the database.",
+      "status": "handled",
+      "tested": "no",
+      "tests": []
+    },
+    {
+      "id": "E-017",
+      "area": "checkout",
+      "edge": "A price changed between adding to the cart and placing the order.",
+      "shopper_sees": "Their summary updates, and they are asked to review and place the order again. No order is created at the old price.",
+      "owner_sees": "Nothing.",
+      "default_behavior": "The server prices every line itself.",
+      "status": "handled",
+      "tested": "no",
+      "tests": []
+    },
+    {
+      "id": "E-018",
+      "area": "checkout",
+      "edge": "Shopper double-clicks Place order, goes back and resubmits, or the network retries.",
+      "shopper_sees": "One order, one confirmation.",
+      "owner_sees": "No duplicate orders.",
+      "default_behavior": "Each cart carries a one-time token; the same token always returns the same order.",
+      "status": "handled",
+      "tested": "partial",
+      "tests": ["refresh keeps same order"],
+      "notes": "The database enforces uniqueness, but no check yet submits the same token twice at once."
+    },
+    {
+      "id": "E-019",
+      "area": "checkout",
+      "edge": "The database or network fails while the order is being placed.",
+      "shopper_sees": "\"Something went wrong placing your demo order. Nothing was charged. Please try again.\"",
+      "owner_sees": "Nothing. The failure is only in a server log nobody reads.",
+      "default_behavior": "Fail safely; never create half an order (it is one transaction).",
+      "status": "partial",
+      "tested": "no",
+      "tests": [],
+      "gap": "Tell the owner when checkout fails, in plain words, with what to try.",
+      "owner_decision": {
+        "question": "Where should we tell you when checkout stops working?",
+        "options": ["Email me", "Text me", "Show it on my dashboard only"]
+      }
+    },
+    {
+      "id": "E-020",
+      "area": "order",
+      "edge": "Shopper refreshes or revisits the confirmation page.",
+      "shopper_sees": "The same confirmation.",
+      "owner_sees": "No duplicate orders.",
+      "default_behavior": "The confirmation page only reads; it never creates.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["refresh keeps same order", "cart cleared"]
+    },
+    {
+      "id": "E-021",
+      "area": "order",
+      "edge": "Shopper mistypes or loses their order reference.",
+      "shopper_sees": "\"We couldn't find that order\" with the format to look for and a path back to the shop.",
+      "owner_sees": "Nothing needed.",
+      "default_behavior": "404 with guidance.",
+      "status": "handled",
+      "tested": "yes",
+      "tests": ["unknown order → not found"]
+    },
+    {
+      "id": "E-022",
+      "area": "order",
+      "edge": "A product is edited, repriced or deleted after it was ordered.",
+      "shopper_sees": "Their confirmation still shows what they bought, at the price they paid.",
+      "owner_sees": "Past orders never change.",
+      "default_behavior": "Each order stores its own copy of names, options and prices.",
+      "status": "handled",
+      "tested": "no",
+      "tests": []
+    },
+    {
+      "id": "E-023",
+      "area": "stock",
+      "edge": "Two shoppers buy the last piece at the same time.",
+      "shopper_sees": "Both succeed. One of them is let down later.",
+      "owner_sees": "Nothing until they notice.",
+      "default_behavior": "None. \"Sold out\" is a switch the owner flips by hand; the store keeps no stock numbers.",
+      "status": "open",
+      "tested": "no",
+      "tests": [],
+      "owner_decision": {
+        "question": "How does stock work for each product?",
+        "options": [
+          "One-of-a-kind: only one can ever be sold",
+          "Made to order: always available, with the lead time shown",
+          "Counted stock: numbers go down with each order and it sells out at zero"
+        ]
+      }
+    },
+    {
+      "id": "E-024",
+      "area": "operations",
+      "edge": "Owner re-runs the seed script on a live store.",
+      "shopper_sees": "Products they were looking at may vanish or change.",
+      "owner_sees": "Every catalog change they made is gone. (Past orders survive.)",
+      "default_behavior": "None. The script wipes and reloads the catalog without asking.",
+      "status": "open",
+      "tested": "no",
+      "tests": [],
+      "gap": "Refuse to reseed a store that already has products unless the owner explicitly confirms.",
+      "owner_decision": {
+        "question": "Should we stop you from accidentally wiping your product catalog?",
+        "options": ["Yes, ask me to confirm first (recommended)", "No, let me reset freely"]
+      }
+    },
+    {
+      "id": "E-025",
+      "area": "operations",
+      "edge": "The database is unreachable when pages load.",
+      "shopper_sees": "\"The shop is having a moment\" with Try again, and a reminder their cart is saved.",
+      "owner_sees": "Nothing.",
+      "default_behavior": "A friendly error page instead of a stack trace.",
+      "status": "partial",
+      "tested": "no",
+      "tests": [],
+      "gap": "Same owner alert as E-019, plus a status check the owner can open to see what's wrong."
+    },
+    {
+      "id": "E-026",
+      "area": "operations",
+      "edge": "Owner wants to see, manage or fulfil orders.",
+      "shopper_sees": "Their confirmation says nothing will ship (demo).",
+      "owner_sees": "No way to list or update orders. Statuses never change.",
+      "default_behavior": "None. A seller dashboard is outside the current specs.",
+      "status": "open",
+      "tested": "no",
+      "tests": [],
+      "owner_decision": {
+        "question": "How do you want to see your orders?",
+        "options": ["Emailed to me as they arrive", "A simple order list page", "Export to a spreadsheet"]
+      }
+    },
+    {
+      "id": "E-027",
+      "area": "operations",
+      "edge": "A real order is placed and nobody is told.",
+      "shopper_sees": "No confirmation email.",
+      "owner_sees": "No new-order notification.",
+      "default_behavior": "None. Email is outside the current specs; the confirmation page says no email is sent.",
+      "status": "open",
+      "tested": "no",
+      "tests": [],
+      "owner_decision": {
+        "question": "Who should be emailed when an order comes in?",
+        "options": ["The shopper and me", "Only me", "Nobody yet"]
+      }
+    },
+    {
+      "id": "E-028",
+      "area": "operations",
+      "edge": "A shopper asks to cancel, or is owed a refund.",
+      "shopper_sees": "The returns page says to email the studio.",
+      "owner_sees": "No tool to cancel an order or record a refund.",
+      "default_behavior": "None. The returns policy is text only.",
+      "status": "open",
+      "tested": "no",
+      "tests": [],
+      "owner_decision": {
+        "question": "How should cancellations and refunds be handled?",
+        "options": ["By email, tracked by me", "A cancel button before the order ships", "Full self-service returns"]
+      }
+    }
+  ],
+  "implementation_guidance": {
+    "prescriptive": false,
+    "instruction": "Treat each edge as expected behavior to preserve. When a new failure is found in any store of this type, add an entry here, add a check to e2e/, and mark its status honestly. Ask the owner only the owner_decision questions, in their own words."
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "schema_version": "1.0",
+  "product": "Handmade Goods Store",
+  "currency": "USD",
+  "features": [
+    {
+      "id": "catalog-browse",
+      "name": "Browse product catalog",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Allow shoppers to discover and browse a curated collection of handmade products.",
+      "acceptance_criteria": [
+        "The home page introduces the store and provides a clear path to browse products.",
+        "The catalog displays multiple products with an image, name, price, and short description or category.",
+        "Selecting a product opens its corresponding detail page.",
+        "If category filtering is provided, shoppers can clear the filter to return to the full catalog.",
+        "Unknown product URLs display a helpful not-found state with a path back to shopping."
+      ],
+      "verification": [
+        "Navigate from the home page to the catalog.",
+        "Confirm multiple product cards display meaningful content.",
+        "Open a product and verify its details correspond to the selected card.",
+        "Open an invalid product URL and verify the not-found state."
+      ]
+    },
+    {
+      "id": "product-details",
+      "name": "View and configure products",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Allow shoppers to understand product details and select valid options before adding products to the cart.",
+      "acceptance_criteria": [
+        "A product detail page displays its name, price, description, images, and availability.",
+        "Products with variants expose their relevant options, such as size, color, or finish.",
+        "Selecting a variant updates the displayed price when that variant has a price adjustment.",
+        "Products supporting personalization display an optional text field with a clear character limit or validation rule.",
+        "Required options must be selected before a product can be added to the cart.",
+        "Unavailable variants cannot be added to the cart, and their unavailable state is communicated clearly.",
+        "The selected variant and personalization are preserved when the product is added to the cart.",
+        "The page remains usable on narrow mobile screens without horizontal page overflow."
+      ],
+      "verification": [
+        "Select multiple variants and check their displayed prices.",
+        "Test a product that supports personalization and one that does not.",
+        "Attempt to add a product without selecting a required option.",
+        "Attempt to add an unavailable variant.",
+        "Verify that the chosen configuration appears correctly in the cart."
+      ]
+    },
+    {
+      "id": "shopping-cart",
+      "name": "Manage shopping cart",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Allow shoppers to review configured products and modify their cart before checkout.",
+      "acceptance_criteria": [
+        "Shoppers can add valid product configurations to the cart.",
+        "Each cart item displays its product name, selected options, applicable personalization, unit price, quantity, and line total.",
+        "The line total equals unit price multiplied by quantity.",
+        "The subtotal equals the sum of all line totals.",
+        "Shoppers can change quantities and remove items.",
+        "Quantity cannot be reduced below one through the quantity control; removing an item is a separate action.",
+        "Different variants or personalization values remain distinguishable as separate configurations.",
+        "Identical configurations may combine into one cart line with an increased quantity.",
+        "An empty cart displays a helpful message and a path back to the catalog.",
+        "Cart contents persist during navigation, and browser-local persistence is acceptable."
+      ],
+      "verification": [
+        "Add a product and confirm it appears in the cart.",
+        "Add a second configuration of the same product and verify the configurations remain distinguishable.",
+        "Change a quantity and verify the line total and subtotal update.",
+        "Remove an item and verify the cart count and subtotal update.",
+        "Navigate away from the cart and return to confirm the cart state is preserved."
+      ]
+    },
+    {
+      "id": "demo-checkout",
+      "name": "Complete simulated checkout",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Demonstrate a complete order journey without collecting payment information or processing a real payment.",
+      "acceptance_criteria": [
+        "Checkout is unavailable when the cart is empty.",
+        "The checkout form collects full name, email, address, city, state or region, postal code, and country.",
+        "Required fields and email format are validated with clear, actionable messages.",
+        "Form values remain available when validation fails.",
+        "The checkout summary displays the ordered items and internally consistent totals.",
+        "The interface clearly states that checkout is simulated and no payment will be collected.",
+        "The checkout does not request payment-card details or make real payment API calls.",
+        "Submitting valid details creates a demo order and displays an order reference and summary.",
+        "The cart is cleared after successful demo order creation.",
+        "Revisiting an order confirmation does not create a duplicate order."
+      ],
+      "verification": [
+        "Attempt to access checkout with an empty cart.",
+        "Submit incomplete details and verify the validation messages.",
+        "Complete checkout with valid details and verify the order confirmation.",
+        "Verify the confirmation matches the cart contents and totals.",
+        "Confirm the cart is cleared after successful submission.",
+        "Inspect the implementation for payment-card fields and real payment calls."
+      ]
+    },
+    {
+      "id": "order-confirmation",
+      "name": "Display order confirmation",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Show a clear summary of the simulated order after checkout.",
+      "acceptance_criteria": [
+        "The confirmation page displays a unique order reference.",
+        "The page displays ordered products, selected options, personalization where applicable, quantities, and totals.",
+        "The page clearly identifies the order as a demo.",
+        "The page provides a path back to shopping.",
+        "Unknown order references display a helpful not-found state.",
+        "Refreshing a valid confirmation does not create another order."
+      ],
+      "verification": [
+        "Complete a demo order and inspect its confirmation.",
+        "Refresh the confirmation page and verify the order remains consistent.",
+        "Open an invalid order reference and verify the not-found state."
+      ]
+    },
+    {
+      "id": "responsive-accessible-ui",
+      "name": "Provide a polished, accessible interface",
+      "priority": "must-have",
+      "status": "approved",
+      "description": "Deliver a visually coherent storefront that works across common screen sizes and supports basic accessibility.",
+      "acceptance_criteria": [
+        "The layout works at mobile, tablet, and desktop widths.",
+        "Navigation and primary actions are keyboard accessible.",
+        "Form fields have visible labels or accessible names.",
+        "Interactive elements have visible focus states.",
+        "Text and controls have readable contrast and reasonable sizing.",
+        "Informative images have meaningful alternative text; decorative images use empty alternative text.",
+        "Important state changes, such as cart updates and form errors, are communicated clearly.",
+        "The visual design feels consistent across the home, catalog, product, cart, checkout, and confirmation pages."
+      ],
+      "verification": [
+        "Inspect the main pages at representative mobile and desktop widths.",
+        "Navigate the primary shopping journey using the keyboard.",
+        "Check form labels, focus states, image alternative text, and validation feedback.",
+        "Review consistency of typography, spacing, color, and interactive states."
+      ]
+    },
+    {
+      "id": "returns-policy",
+      "name": "Publish a returns and refunds policy",
+      "priority": "must-have",
+      "status": "approved",
+      "change_request": "CR-001: Add a return and refund page",
+      "description": "Give shoppers a clear, findable explanation of how returns, exchanges and refunds work before and after they buy.",
+      "acceptance_criteria": [
+        "A dedicated returns and refunds page exists and is reachable from the site footer on every page.",
+        "The page states the return window, item condition requirements, how to start a return, refund method and timing, who pays return shipping, and how damaged or incorrect items are handled.",
+        "The page states that personalized items are final sale unless they arrive damaged or incorrect.",
+        "Products that support personalization tell shoppers, near the personalization field, that personalized pieces are final sale.",
+        "The cart or checkout links to the returns policy.",
+        "The page clearly states that this is a sample policy for a demo store and that no real returns are processed."
+      ],
+      "verification": [
+        "Open the returns page from the footer.",
+        "Confirm each policy element is present.",
+        "Confirm the final-sale note appears on a personalizable product and not on others.",
+        "Follow the returns link from the cart."
+      ]
+    },
+    {
+      "id": "site-footer",
+      "name": "Provide a footer with help, contact and payment information",
+      "priority": "must-have",
+      "status": "approved",
+      "change_request": "CR-002: Add a subfooter with payment types accepted and contact us and help links",
+      "description": "Every page ends with a consistent footer and subfooter that lets shoppers find help, contact the studio and see which payment methods the store accepts.",
+      "acceptance_criteria": [
+        "Every page shows the same footer with links to Help & FAQ, Returns & refunds and Contact us.",
+        "A subfooter lists accepted payment methods as text labels with accessible names; no third-party card-brand logos are reproduced.",
+        "The subfooter makes clear that payment methods are shown for a demo and that checkout does not collect payment.",
+        "Help & FAQ and Contact us links lead to real pages, not placeholders.",
+        "The Help page answers common questions about shipping, returns, personalization, care and the demo checkout.",
+        "The Contact page lists ways to reach the studio and expected response time, and does not submit or transmit messages.",
+        "The footer and subfooter work at mobile widths without horizontal overflow."
+      ],
+      "verification": [
+        "Check the footer on home, product, cart and checkout pages.",
+        "Follow each footer link and confirm the destination page loads.",
+        "Confirm payment methods have accessible text and no brand logos.",
+        "Inspect the footer at 375 px wide."
+      ]
+    },
+    {
+      "id": "full-width-layout",
+      "name": "Browsing pages use the full width of the screen",
+      "priority": "must-have",
+      "status": "approved",
+      "change_request": "CR-003: Online stores should occupy full width",
+      "description": "Home, catalog and product pages, the header and the footer fill the browser width (to a very large maximum) instead of sitting in a narrow centered column. Reading-heavy pages (cart, checkout, policies, help, contact, order confirmation) keep a narrower column so lines stay readable.",
+      "acceptance_criteria": [
+        "At 1440 px wide, the catalog grid spans at least 90% of the viewport.",
+        "The catalog shows more products per row as the screen widens (2, 3, 4, 5, then 6 columns).",
+        "Header, footer and page content share the same left and right edges on browsing pages.",
+        "Text-heavy pages keep a readable line length.",
+        "No horizontal overflow at 375 px."
+      ],
+      "verification": [
+        "Measure the catalog grid width against the viewport at 1440 px.",
+        "Count columns at several widths.",
+        "Check the policy and checkout pages are still narrower than the catalog."
+      ]
+    },
+    {
+      "id": "image-first-cards",
+      "name": "Product cards put the image first",
+      "priority": "must-have",
+      "status": "approved",
+      "change_request": "CR-004: Cards should maximize for image over whitespace",
+      "description": "Product cards give the picture as much of the card as possible: no frame or padding around the image, tight gaps between cards, and a compact text block (category, name, one-line tagline, price).",
+      "acceptance_criteria": [
+        "The product image fills the full width of its card with no border or inner padding.",
+        "Image area is at least 70% of the card's height.",
+        "Gaps between cards are no more than 16 px on desktop.",
+        "Cards remain a single click target with one keyboard tab stop."
+      ],
+      "verification": [
+        "Measure image height against card height on the catalog page.",
+        "Measure the gap between cards.",
+        "Tab through the catalog and confirm one stop per card."
+      ]
+    },
+    {
+      "id": "home-trust-strip",
+      "name": "Home page reassurance strip above the footer",
+      "priority": "should-have",
+      "status": "approved",
+      "change_request": "CR-005: Just above the footer, add a similar section on the home page",
+      "description": "The last section of the home page is a row of four reassurances, each with an icon, a short heading and one or two lines: named makers, returns, shipping and contact. It uses only terms this store really has, and its numbers are read from the same settings checkout uses.",
+      "acceptance_criteria": [
+        "The strip is the last section on the home page, directly above the footer.",
+        "It shows four items, each with an icon, a heading and a short description.",
+        "The returns item states the 30-day window and links to the returns page.",
+        "The shipping item states the free-shipping threshold and the flat rate below it, labelled as a demo estimate, and the values match checkout.",
+        "The contact item states the two-business-day reply time and links to the contact page.",
+        "Four across on wide screens, two across on tablets, one column on phones, with no horizontal overflow at 375 px.",
+        "Icons are decorative (hidden from assistive technology) and no claim is made about years trading or customer counts."
+      ],
+      "verification": [
+        "Scroll to the bottom of the home page and count the items.",
+        "Compare the shipping and returns wording with the Help page and checkout totals.",
+        "Resize to 1440, 700 and 390 px."
+      ]
+    }
+  ],
+  "out_of_scope": [
+    "Real payment processing or collection of payment-card information",
+    "User accounts and authentication",
+    "Seller or administrator dashboard",
+    "Real shipping-rate calculation",
+    "Real tax calculation",
+    "External inventory synchronization",
+    "Production order storage",
+    "Order email notifications",
+    "Analytics integrations",
+    "Multi-seller marketplace functionality"
+  ]
+}
