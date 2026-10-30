@@ -1,4 +1,6 @@
 import type { WorkspaceState } from "@/lib/workspace/types";
+import { makeModelInterviewer } from "./model-interviewer";
+import { anthropicComplete } from "./anthropic";
 import { intakeTurn, type TurnResult } from "@/lib/workspace/state";
 
 /**
@@ -19,6 +21,8 @@ export const ruleInterviewer: Interviewer = {
 };
 
 export function getInterviewer(): Interviewer {
-  // When ANTHROPIC_API_KEY is set and the model interviewer exists, return it here.
-  return ruleInterviewer;
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || process.env.INTERVIEWER === "rules") return ruleInterviewer;
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+  return makeModelInterviewer(anthropicComplete({ apiKey: key, model }), model);
 }

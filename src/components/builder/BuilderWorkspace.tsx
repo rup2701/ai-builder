@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
+import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
 import type { StoreConfig } from "@/lib/builder/storeConfig";
 import type { WorkspaceState } from "@/lib/workspace/types";
@@ -450,7 +451,8 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
     published ? "done" : publishOpen ? "active" : "todo",
   ];
 
-  const qOptions = optionsFor(st.qid);
+  const lastMsg = msgs[msgs.length - 1];
+  const qOptions = lastMsg?.kind === "bot" && lastMsg.free ? lastMsg.options ?? [] : optionsFor(st.qid);
   const chips: { label: string; send?: string; fill?: string }[] =
     phase === "intake"
       ? [...qOptions.map((o) => ({ label: o, send: o })), { label: "Just build it", send: "just build it" }]
@@ -461,6 +463,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
           : [];
 
   const lastSummaryId = [...msgs].reverse().find((m) => m.kind === "summary")?.id;
+  const lastRecapId = [...msgs].reverse().find((m) => m.kind === "recap")?.id;
   const lastChangeId = [...msgs].reverse().find((m) => m.kind === "change")?.id;
 
   const back: ReactNode = (
@@ -528,6 +531,36 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                     <div key={m.id} className="max-w-[92%]">
                       <p className="text-sm leading-relaxed text-foreground">{m.text}</p>
                       {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
+                      {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
+                        <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
+                          {m.palette.map((name) => (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => send(name)}
+                              className={`flex w-[72px] flex-col items-center gap-1.5 rounded-xl border border-foreground/10 bg-white px-2 py-2.5 text-xs capitalize text-foreground hover:border-foreground/30 ${focusRing}`}
+                            >
+                              <span className="h-9 w-9 rounded-full" style={{ background: accentHex(name) ?? "#999" }} aria-hidden="true" />
+                              {name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                case "recap":
+                  // Only the latest recap is shown, so the chat does not repeat itself.
+                  if (m.id !== lastRecapId || phase !== "intake") return null;
+                  return (
+                    <div key={m.id} className="max-w-[92%] rounded-2xl bg-foreground/[0.04] px-3 py-2.5" data-testid="recap">
+                      <p className="text-xs text-foreground/60">What I know so far</p>
+                      <ul className="mt-1 space-y-0.5 text-sm leading-relaxed text-foreground">
+                        {m.items.map((it) => (
+                          <li key={it.label}>
+                            <span className="text-foreground/60">{it.label}:</span> {it.value}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   );
                 case "summary": {

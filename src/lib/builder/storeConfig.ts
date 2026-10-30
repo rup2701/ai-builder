@@ -163,7 +163,7 @@ export const PRESETS: Preset[] = [
     subhead: {
       warm: "Seasonal pieces, picked with care and ready for pickup.",
       refined: "A considered edit of the season, in small quantities.",
-      playful: "New drops, bold colour and easy returns.",
+      playful: "New drops, bold color and easy returns.",
     },
     cta: "Shop new in",
   },
@@ -297,7 +297,7 @@ export const PRESETS: Preset[] = [
       { name: "Soy candle", price: 26, art: "candle" },
       { name: "Desk plant", price: 22, art: "succulent" },
     ],
-    headline: { warm: "Good things, close to home", refined: "A considered collection", playful: "Your next favourite thing" },
+    headline: { warm: "Good things, close to home", refined: "A considered collection", playful: "Your next favorite thing" },
     subhead: {
       warm: "A small shop with things worth having.",
       refined: "A short list of things chosen with care.",

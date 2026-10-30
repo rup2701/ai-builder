@@ -29,6 +29,11 @@ const COLORS: Record<string, string> = {
   chocolate: "#5a3a2a", charcoal: "#333a40", black: "#1a1a1a", grey: "#6b7075", gray: "#6b7075",
 };
 const COLOR_WORDS = Object.keys(COLORS).sort((a, b) => b.length - a.length);
+/** Accent colors the builder can use, for the interviewer and its validator. */
+export const ACCENT_NAMES = Object.keys(COLORS).filter((k) => k !== "grey") as [string, ...string[]];
+export function accentHex(name: string): string | null {
+  return COLORS[name.toLowerCase()] ?? null;
+}
 const COLOR_RE = new RegExp(`(?:\\b(dark|deep|light|soft|pale)\\s+)?\\b(${COLOR_WORDS.join("|")})\\b`, "i");
 
 function pickColor(text: string): { hex: string; label: string } | null {
@@ -219,6 +224,6 @@ export function applyInstruction(prev: StoreConfig, input: string): { config: St
 }
 
 export const HELP_TEXT =
-  "I can change the name, headline, colours, style (modern, contemporary or antique), tone, categories and dark mode. Try “rename it to Willow & Thread”, “use sage green” or “make it more modern”.";
+  "I can change the name, headline, colors, style (modern, contemporary or antique), tone, categories and dark mode. Try “rename it to Willow & Thread”, “use sage green” or “make it more modern”.";
 
 export { contrast };

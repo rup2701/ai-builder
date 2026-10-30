@@ -7,9 +7,10 @@
 import {
   QUESTIONS,
   REOPEN_WORDS,
-  briefToIdea,
+  configFromBrief,
   nextQuestion,
   readAnswer,
+  recapItems,
   reopen,
   seedBrief,
   settleAll,
@@ -45,17 +46,25 @@ export function emptyState(): WorkspaceState {
 export const ASK_FIRST =
   "What do you want to launch? Describe it in a sentence, like “an online clothing boutique in Los Gatos”.";
 
-function askNext(s: WorkspaceState, b: StoreBrief): WorkspaceState {
+/** Show what we know so far, but only when it has changed since the last recap. */
+export function withRecap(s: WorkspaceState, b: StoreBrief): WorkspaceState {
+  const items = recapItems(b);
+  const lastRecap = [...s.msgs].reverse().find((m) => m.kind === "recap") as { items: unknown } | undefined;
+  return items.length && JSON.stringify(lastRecap?.items) !== JSON.stringify(items) ? pushMsg(s, { kind: "recap", items }) : s;
+}
+
+export function askNext(s: WorkspaceState, b: StoreBrief): WorkspaceState {
   const q = nextQuestion(b);
   if (!q) {
     let n = pushMsg({ ...s, brief: b, phase: "summary", qid: null }, { kind: "summary", data: summarizeBrief(b) });
     n = pushMsg(n, { kind: "bot", text: "Does this look right? Say “build it” to go ahead, or tell me what to change." });
     return n;
   }
-  return pushMsg({ ...s, brief: b, phase: "intake", qid: q.id }, { kind: "bot", text: q.ask, hint: q.how });
+  const n = withRecap({ ...s, brief: b, phase: "intake", qid: q.id }, b);
+  return pushMsg(n, { kind: "bot", text: q.ask, hint: q.how });
 }
 
-function startIntake(s: WorkspaceState, text: string): WorkspaceState {
+export function startIntake(s: WorkspaceState, text: string): WorkspaceState {
   const b = seedBrief(text);
   const n = pushMsg({ ...s, firstIdea: text, published: false }, {
     kind: "bot",
@@ -73,7 +82,8 @@ export function initialState(idea?: string): WorkspaceState {
   return s;
 }
 
-export type TurnResult = { state: WorkspaceState; action?: "build" };
+export type TurnUsage = { model: string; inputTokens: number; outputTokens: number; costUsd: number };
+export type TurnResult = { state: WorkspaceState; action?: "build"; usage?: TurnUsage };
 
 /** One user message during idle, intake or summary (and "start over" after a build). */
 export function intakeTurn(prev: WorkspaceState, raw: string): TurnResult {
@@ -98,7 +108,7 @@ export function intakeTurn(prev: WorkspaceState, raw: string): TurnResult {
   }
 
   if (s.phase === "summary") {
-    if (/^\s*(?:yes|yep|ok(?:ay)?|go(?: ahead)?|looks good|sounds good|do it|build(?:\s+it)?)\b/i.test(text)) {
+    if (/^\s*(?:yes|yep|go(?: ahead)?|looks good|sounds good|do it|build(?:\s+it)?)\b/i.test(text)) {
       s = pushMsg({ ...s, phase: "build", buildStep: 0, qid: null }, { kind: "bot", text: "Got it. Building your store." });
       s = pushMsg(s, { kind: "build" });
       return { state: s, action: "build" };
@@ -119,7 +129,7 @@ export function intakeTurn(prev: WorkspaceState, raw: string): TurnResult {
 /** What the worker writes when a build finishes. */
 export function finishBuild(prev: WorkspaceState): WorkspaceState {
   if (!prev.brief) throw new Error("Cannot build without a brief.");
-  const { config, lines } = buildFromIdea(briefToIdea(prev.brief));
+  const { config, lines } = configFromBrief(prev.brief);
   let s: WorkspaceState = { ...prev, history: [config], buildStep: BUILD_STEPS.length, phase: "verify" };
   s = pushMsg(s, { kind: "bot", text: lines.join(" ") });
   s = pushMsg(s, { kind: "bot", text: "Running checks." });

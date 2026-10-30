@@ -6,8 +6,9 @@ export type Phase = "idle" | "intake" | "summary" | "build" | "verify" | "iterat
 
 type MsgBody =
   | { kind: "user"; text: string }
-  | { kind: "bot"; text: string; hint?: string }
+  | { kind: "bot"; text: string; hint?: string; free?: true; options?: string[]; palette?: string[] }
   | { kind: "build" }
+  | { kind: "recap"; items: { label: string; value: string }[] }
   | { kind: "summary"; data: BriefSummary }
   | { kind: "checks"; results: Check[] }
   | { kind: "change"; lines: string[]; version: number; results: Check[] };

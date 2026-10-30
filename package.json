@@ -13,7 +13,8 @@
     "worker": "tsx --env-file=.env worker/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
-    "test:e2e": "node e2e/flow.mjs"
+    "test:e2e": "node e2e/flow.mjs",
+    "test:interviewer": "tsx test/interviewer.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

@@ -14,7 +14,8 @@
  */
 
 import { PRESETS, presetById, type PresetId, type StyleId, type ToneId } from "./storeConfig";
-import { STYLE_RULES, TONE_RULES, buildFromIdea } from "./interpret";
+import { STYLE_RULES, TONE_RULES, accentHex, buildFromIdea } from "./interpret";
+import type { StoreConfig } from "./storeConfig";
 
 export type Fulfilment = "ship" | "pickup" | "both";
 export type CatalogSource = "shopify" | "photos" | "later";
@@ -31,6 +32,9 @@ export type StoreBrief = {
   pickupSites?: number;
   style?: StyleId;
   tone?: ToneId;
+  /** Accent color name from the supported list, chosen by the person. */
+  accent?: string;
+  dark?: boolean;
   catalog?: CatalogSource;
   /** Question ids that are answered or skipped. */
   settled: QId[];
@@ -42,7 +46,7 @@ export type CapStatus = "available" | "partial" | "planned";
 export type Capability = { id: string; label: string; status: CapStatus; note: string };
 
 export const CAPABILITIES: Record<string, Capability> = {
-  look: { id: "look", label: "Your look", status: "available", note: "Colours, type and tone chosen to suit your store." },
+  look: { id: "look", label: "Your look", status: "available", note: "White or off-white backgrounds (dark mode on request), one accent color you choose, plus type and tone to suit your store." },
   storefront: { id: "storefront", label: "Storefront", status: "available", note: "Home page, collections and product pages with photo galleries." },
   policies: { id: "policies", label: "Returns, Help and Contact pages", status: "available", note: "Sample wording until you confirm your own." },
   checkout: { id: "checkout", label: "Cart and checkout", status: "partial", note: "Works end to end, but as a simulated checkout." },
@@ -54,6 +58,17 @@ export const CAPABILITIES: Record<string, Capability> = {
   dashboard: { id: "dashboard", label: "Owner area", status: "planned", note: "See orders, edit products and edit policies." },
   payments: { id: "payments", label: "Real payments", status: "planned", note: "Until then the store runs in demo mode and says so." },
 };
+
+/** What each page of a store holds today, so the interviewer can answer "where will X go?" accurately. */
+export const PAGES: { page: string; holds: string }[] = [
+  { page: "Home", holds: "Header with the store name and cart, a headline with a button, a Featured row of products, and a strip of points about shipping, returns and contact." },
+  { page: "Collections", holds: "A page per category listing its products." },
+  { page: "Product", holds: "Photo gallery, price, description and add to cart." },
+  { page: "Cart and checkout", holds: "Cart and a simulated checkout (no real payment yet)." },
+  { page: "Returns", holds: "The returns policy, with sample wording until the owner confirms their own." },
+  { page: "Help", holds: "Common questions, with sample wording until confirmed." },
+  { page: "Contact", holds: "How to reach the store. The owner's address and opening hours go here once they send them after the build." },
+];
 
 /** Which capabilities a brief needs. */
 export function needsFor(b: StoreBrief): Capability[] {
@@ -272,7 +287,55 @@ export function briefToIdea(b: StoreBrief): string {
   return parts.join(" ");
 }
 
+/* ---------- What must be known before the summary ---------- */
+
+/** The first required answer still missing, or null. Everything else has a default that the summary lists as an assumption. */
+export function missingRequired(b: StoreBrief): QId | null {
+  if (!b.what) return "what";
+  if (!b.fulfilment) return "fulfilment";
+  if ((b.fulfilment === "pickup" || b.fulfilment === "both") && !b.pickupSites) return "sites";
+  return null;
+}
+
+export function questionById(id: QId) {
+  return Q[id];
+}
+
+/* ---------- Recap ---------- */
+
+/** What we know so far, in the person's terms. Shown in the chat after each answer. */
+export function recapItems(b: StoreBrief): { label: string; value: string }[] {
+  const out: { label: string; value: string }[] = [];
+  if (b.what) out.push({ label: "Selling", value: b.what });
+  if (b.name) out.push({ label: "Name", value: b.name });
+  if (b.settled.includes("location")) out.push({ label: "Town", value: b.location || "Online only" });
+  if (b.fulfilment) {
+    const f = b.fulfilment === "ship" ? "Shipped" : b.fulfilment === "pickup" ? "Pickup in store" : "Shipped or pickup";
+    const n = b.pickupSites ? ` (${b.pickupSites} pickup ${b.pickupSites === 1 ? "location" : "locations"})` : "";
+    out.push({ label: "Orders", value: f + n });
+  }
+  const look = [b.style, b.tone && `${b.tone} tone`, b.accent && `${b.accent} accent`, b.dark && "dark"].filter(Boolean).join(", ");
+  if (look) out.push({ label: "Look", value: look });
+  if (b.catalog) out.push({ label: "Products", value: b.catalog === "shopify" ? "On Shopify" : b.catalog === "photos" ? "Photos to upload" : "Not yet, sample ones for now" });
+  return out;
+}
+
 /* ---------- Summary ---------- */
+
+/** The store config for a brief: the idea sentence sets the defaults, then what the person chose wins. */
+export function configFromBrief(b: StoreBrief): { config: StoreConfig; lines: string[] } {
+  const built = buildFromIdea(briefToIdea(b));
+  const config = { ...built.config };
+  const lines = [...built.lines];
+  const hex = b.accent ? accentHex(b.accent) : null;
+  if (hex || b.dark !== undefined) {
+    if (hex) config.accent = hex;
+    if (b.dark !== undefined) config.dark = b.dark;
+    const i = lines.findIndex((l) => l.startsWith("Look:"));
+    if (i >= 0) lines[i] = `Look: ${config.style}, ${config.tone} tone${b.accent ? `, ${b.accent} accent` : ""}${config.dark ? ", dark" : ""}.`;
+  }
+  return { config, lines };
+}
 
 export type BriefSummary = {
   title: string;
@@ -284,11 +347,11 @@ export type BriefSummary = {
 };
 
 export function summarizeBrief(b: StoreBrief): BriefSummary {
-  const cfg = buildFromIdea(briefToIdea(b)).config;
+  const cfg = configFromBrief(b).config;
   const preset = presetById(b.presetId ?? cfg.presetId);
   const caps = needsFor(b);
   const build: string[] = [
-    `A ${cfg.style} look with a ${cfg.tone} tone for your ${preset.kind}${cfg.location ? ` in ${cfg.location}` : ""}.`,
+    `A ${cfg.style} look with a ${cfg.tone} tone${b.accent ? `, ${b.accent} accent` : ""}${cfg.dark ? ", dark mode" : ", white and off-white backgrounds"} for your ${preset.kind}${cfg.location ? ` in ${cfg.location}` : ""}.`,
     `A home page, collections for ${cfg.categories.slice(0, 3).join(", ")}, and product pages.`,
     "A cart and a simulated checkout.",
     "Returns, Help and Contact pages.",

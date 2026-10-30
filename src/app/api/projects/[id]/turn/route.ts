@@ -43,7 +43,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     .update(schema.projects)
     .set({ state, idea, title: titleFor(state, idea), status: statusFor(state), updatedAt: new Date() })
     .where(eq(schema.projects.id, p.id));
-  await logUsage({ projectId: p.id, jobId, step: "intake", model: interviewer.model });
+  await logUsage({
+    projectId: p.id,
+    jobId,
+    step: "intake",
+    model: result.usage?.model ?? interviewer.model,
+    inputTokens: result.usage?.inputTokens,
+    outputTokens: result.usage?.outputTokens,
+    costUsd: result.usage?.costUsd,
+  });
 
   return NextResponse.json({ state });
 }

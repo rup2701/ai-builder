@@ -31,7 +31,7 @@ Local sign-in without Google: set `ALLOW_DEV_LOGIN=1` (ignored in production) an
 | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Google sign-in | Google Cloud console, OAuth client; redirect URI `<AUTH_URL>/api/auth/callback/google` |
 | `ALLOWED_EMAILS` | access control | comma-separated; adding someone here is how you share the builder |
 | `ALLOW_DEV_LOGIN` | local only | `1` on your machine, unset in production |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | the model interviewer | Anthropic console (not used until the model interviewer is added) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | the model interviewer | Anthropic console (setting the key turns the model interviewer on; without it the rule interviewer runs) |
 | `INTEGRATIONS` | publishing | `stub` (default) or `live` |
 | `GITHUB_ORG`, `GITHUB_TOKEN`, `GITHUB_TEMPLATE_REPO` | publishing | org for stores; GitHub App or fine-grained token (create repos, write contents and PRs); the template repo |
 | `VERCEL_TOKEN`, `VERCEL_TEAM_ID` | publishing | token scoped to one team; the Vercel GitHub integration installed on the org |
@@ -52,7 +52,7 @@ Tokens stay server side and never go into an agent's context.
 
 ## Not built yet
 
-- Model-backed interviewer, spec writer and spec checker.
+- Spec writer and spec checker. (The model interviewer exists: set `ANTHROPIC_API_KEY` to turn it on; `npm run test:interviewer` checks it against a fake model.)
 - The builder agent (specs to repo to tests) in the worker; today it is a stub that draws the preview.
 - Live GitHub, Vercel and Neon calls; the real preview deployment.
 - Completion email (a build shows as ready in Your projects).
