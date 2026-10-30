@@ -1,6 +1,7 @@
 import type { WorkspaceState } from "@/lib/workspace/types";
 import { makeModelInterviewer } from "./model-interviewer";
-import { anthropicComplete } from "./anthropic";
+import { anthropicChat, anthropicComplete } from "./anthropic";
+import { makeSiteInterviewer } from "./site-interviewer";
 import { intakeTurn, type TurnResult } from "@/lib/workspace/state";
 
 /**
@@ -25,4 +26,12 @@ export function getInterviewer(): Interviewer {
   if (!key || process.env.INTERVIEWER === "rules") return ruleInterviewer;
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
   return makeModelInterviewer(anthropicComplete({ apiKey: key, model }), model);
+}
+
+/** The website interview needs the model; there is no rule-based version of it. */
+export function getSiteInterviewer(): Interviewer | null {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+  return makeSiteInterviewer(anthropicChat({ apiKey: key, model }), model);
 }

@@ -4,11 +4,14 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned, statusFor, titleFor } from "@/lib/projects";
-import { getInterviewer } from "@/lib/agents/interviewer";
+import { getInterviewer, getSiteInterviewer } from "@/lib/agents/interviewer";
+import { saveBriefForRunner } from "@/lib/builder/site-files";
 import { logUsage } from "@/lib/usage";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
 export const dynamic = "force-dynamic";
+// The model writes a whole brief in one reply, which can take a while.
+export const maxDuration = 120;
 
 const Body = z.object({ text: z.string().min(1).max(2000) });
 
@@ -28,9 +31,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "A build is running. Come back when it finishes." }, { status: 409 });
   }
 
-  const interviewer = getInterviewer();
+  const site = p.kind === "site";
+  const interviewer = site ? getSiteInterviewer() : getInterviewer();
+  if (!interviewer) return NextResponse.json({ error: "The website interview needs the model key (ANTHROPIC_API_KEY)." }, { status: 503 });
   const result = await interviewer.turn(prev, body.data.text);
   let state = result.state;
+  if (site && state.site?.brief && JSON.stringify(state.site.brief) !== JSON.stringify(prev.site?.brief)) {
+    await saveBriefForRunner(p.id, state).catch((e) => console.error("could not save the brief for the runner:", e instanceof Error ? e.message : e));
+  }
   let jobId: string | null = null;
 
   if (result.action === "build") {

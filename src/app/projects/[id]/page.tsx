@@ -12,5 +12,5 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   if (!user) redirect("/signin");
   const project = await loadOwned(id, user.id);
   if (!project) notFound();
-  return <BuilderWorkspace projectId={project.id} initial={project.state as WorkspaceState} homeHref="/projects" />;
+  return <BuilderWorkspace projectId={project.id} initial={project.state as WorkspaceState} homeHref="/projects" kind={project.kind === "site" ? "site" : "store"} />;
 }

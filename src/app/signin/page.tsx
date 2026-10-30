@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 
 export const dynamic = "force-dynamic";
 
-export default async function SignIn({ searchParams }: { searchParams: Promise<{ idea?: string; error?: string }> }) {
-  const { idea, error } = await searchParams;
+export default async function SignIn({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string; error?: string }> }) {
+  const { idea, kind, error } = await searchParams;
   // Your idea travels with the sign-in, so it is still there when you arrive.
-  const target = idea?.trim() ? `/new?idea=${encodeURIComponent(idea.trim().slice(0, 1000))}` : "/projects";
+  const newParams = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}) }).toString();
+  const target = newParams ? `/new?${newParams}` : "/projects";
   const session = await auth();
   if (session?.user) redirect(target);
 
@@ -25,7 +26,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     try {
       await signIn("dev", { email: String(fd.get("email") ?? ""), redirectTo: target });
     } catch (e) {
-      if (e instanceof AuthError) redirect(`/signin?error=AccessDenied${idea ? `&idea=${encodeURIComponent(idea)}` : ""}`);
+      if (e instanceof AuthError) redirect(`/signin?error=AccessDenied${idea ? `&idea=${encodeURIComponent(idea)}` : ""}${kind === "site" ? "&kind=site" : ""}`);
       throw e;
     }
   }

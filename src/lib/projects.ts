@@ -17,6 +17,8 @@ export async function loadOwned(projectId: string, userId: string): Promise<Proj
 }
 
 export function titleFor(state: WorkspaceState, idea: string): string {
+  const siteName = (state.site?.brief as { site?: { name?: string } } | undefined)?.site?.name;
+  if (siteName) return siteName;
   const cfg = state.history[state.history.length - 1];
   if (cfg?.name) return cfg.name;
   const t = idea.trim();
@@ -24,6 +26,7 @@ export function titleFor(state: WorkspaceState, idea: string): string {
 }
 
 export function statusFor(state: WorkspaceState): string {
+  if (state.site?.brief && state.phase !== "build" && state.phase !== "verify") return "ready";
   if (state.phase === "build" || state.phase === "verify") return "building";
   if (state.history.length > 0) return state.published ? "published" : "ready";
   return "draft";

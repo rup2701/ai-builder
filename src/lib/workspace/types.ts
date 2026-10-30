@@ -29,4 +29,6 @@ export type WorkspaceState = {
   firstIdea: string;
   published: boolean;
   jobId: string | null;
+  /** Website projects: the brief the interview saved (the runner's brief.json). */
+  site?: { brief: Record<string, unknown> };
 };

@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
+import SitePane from "./SitePane";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
@@ -26,6 +27,8 @@ type Props = {
   initial: WorkspaceState;
   homeHref: string;
   publishNote?: string;
+  /** "site" runs the website interview; the default is the store builder. */
+  kind?: "store" | "site";
 };
 
 type StepState = "todo" | "active" | "done";
@@ -289,7 +292,8 @@ function PublishDialog({
 
 /* ---------- Workspace ---------- */
 
-export default function BuilderWorkspace({ projectId, initial, homeHref, publishNote }: Props) {
+export default function BuilderWorkspace({ projectId, initial, homeHref, publishNote, kind = "store" }: Props) {
+  const site = kind === "site";
   const [st, setSt] = useState<WorkspaceState>(initial);
   const [input, setInput] = useState("");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
@@ -454,7 +458,9 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
   const lastMsg = msgs[msgs.length - 1];
   const qOptions = lastMsg?.kind === "bot" && lastMsg.free ? lastMsg.options ?? [] : optionsFor(st.qid);
   const chips: { label: string; send?: string; fill?: string }[] =
-    phase === "intake"
+    site
+      ? []
+      : phase === "intake"
       ? [...qOptions.map((o) => ({ label: o, send: o })), { label: "Just build it", send: "just build it" }]
       : phase === "summary"
         ? [{ label: "Build it", send: "build it" }, { label: "Change the name", send: "change the name" }, { label: "Change the look", send: "change the look" }]
@@ -477,17 +483,18 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
 
   return (
     <div className="flex h-[100dvh] min-h-[40rem] flex-col bg-background text-foreground">
-      <h1 className="sr-only">Store builder</h1>
+      <h1 className="sr-only">{site ? "Website builder" : "Store builder"}</h1>
 
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
         <a href={homeHref} className={`rounded-lg ${focusRing}`}>
           {back}
         </a>
         <div className="order-last flex w-full justify-center md:order-none md:w-auto">
-          <Stepper states={states} />
+          {!site && <Stepper states={states} />}
         </div>
         <button
           ref={publishBtn}
+          hidden={site}
           type="button"
           disabled={!canPublish}
           onClick={() => setPublishOpen(true)}
@@ -654,7 +661,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
 
           <form onSubmit={onSubmit} className="flex items-end gap-2 p-3">
             <label htmlFor="builder-input" className="sr-only">
-              {phase === "intake" ? "Your answer" : cur ? "Ask for a change" : "Describe your store"}
+              {phase === "intake" || site ? "Your answer" : cur ? "Ask for a change" : "Describe your store"}
             </label>
             <textarea
               id="builder-input"
@@ -664,7 +671,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
               disabled={busy}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder={busy ? "Working on it…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
+              placeholder={busy ? "Working on it…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
               className="field-sizing-content max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-foreground/15 bg-transparent px-3.5 py-2 text-base leading-snug outline-none placeholder:text-foreground/40 focus:border-foreground/50 disabled:opacity-60"
             />
             <button
@@ -680,7 +687,10 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
           </form>
         </section>
 
-        {/* Preview */}
+        {site ? (
+          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} />
+        ) : (
+          <>
         <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
             <p className="flex items-center gap-2 text-sm text-foreground/60">
@@ -749,6 +759,8 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
             </div>
           )}
         </section>
+          </>
+        )}
       </div>
 
       {publishOpen && cur && (
