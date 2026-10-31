@@ -21,6 +21,7 @@ import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
 import type { StoreConfig } from "@/lib/builder/storeConfig";
 import type { WorkspaceState } from "@/lib/workspace/types";
+import { AGENT_NAME } from "@/lib/brand";
 
 type Props = {
   projectId: string;
@@ -82,6 +83,44 @@ function ChecksList({ results }: { results: Check[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The assistant's avatar: a small compass mark in a rounded square. Original artwork, no image file needed. */
+function AgentAvatar() {
+  return (
+    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-foreground text-background" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M15.5 8.5l-2 5-5 2 2-5z" />
+      </svg>
+    </span>
+  );
+}
+
+function AgentLabel() {
+  return (
+    <p className="mb-1 flex items-center gap-2 text-xs font-medium text-foreground/60">
+      <AgentAvatar />
+      {AGENT_NAME}
+    </p>
+  );
+}
+
+/** Shown while the model is working on a reply. */
+function Typing() {
+  return (
+    <div data-testid="typing">
+      <AgentLabel />
+      <p className="flex items-center gap-1.5 text-sm text-foreground/60">
+        <span className="flex gap-1" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="h-1.5 w-1.5 rounded-full bg-foreground/40 motion-safe:animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+          ))}
+        </span>
+        <span>{AGENT_NAME} is thinking…</span>
+      </p>
+    </div>
   );
 }
 
@@ -287,6 +326,13 @@ function PublishDialog({
         )}
       </div>
     </div>
+  );
+}
+
+/** Shows **bold** in a chat message as bold text. Everything else stays plain text (no HTML is ever built from it). */
+function boldText(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
   );
 }
 
@@ -525,19 +571,20 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
         {/* Chat */}
         <section aria-label="Chat" className={`${pane === "chat" ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
           <div ref={logRef} role="log" aria-live="polite" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            {msgs.map((m) => {
+            {msgs.map((m, idx) => {
               switch (m.kind) {
                 case "user":
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-sm leading-relaxed text-background">{m.text}</p>
+                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-sm leading-tight text-background ">{m.text}</p>
                     </div>
                   );
                 case "bot":
                   return (
                     <div key={m.id} className="max-w-[92%]">
-                      <p className="text-sm leading-relaxed text-foreground">{m.text}</p>
-                      {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
+                      {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-tight text-foreground">{boldText(m.text)}</p>
+                      {m.hint && <p className="mt-0.5 text-xs leading-tight text-foreground/55">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
                         <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
                           {m.palette.map((name) => (
@@ -631,6 +678,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                 }
               }
             })}
+            {pending && phase !== "build" && phase !== "verify" && <Typing />}
             {phase === "build" && (
               <p className="text-xs leading-relaxed text-foreground/55" data-testid="step-away">
                 This takes a minute or so. You can close this tab. The build keeps running, and your project will be waiting in Your projects.
