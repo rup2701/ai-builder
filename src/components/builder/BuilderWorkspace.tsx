@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The builder workspace: chat on the left, live store preview on the right.
+ * The builder workspace: live store preview on the left, chat on the right.
  *
  *   Build    reads the idea and drafts the store
  *   Verify   runs the checks
@@ -349,6 +349,22 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
   const [sentTo, setSentTo] = useState("");
   const [pending, setPending] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  // A per-viewer convenience: remember the chat size. Storage can be missing or blocked, so every access is guarded.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("builder-chat-expanded") === "1") setExpanded(true);
+    } catch {}
+  }, []);
+  function toggleExpanded() {
+    setExpanded((v) => {
+      try {
+        localStorage.setItem("builder-chat-expanded", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  }
 
   const dirty = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -356,6 +372,8 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
   const publishBtn = useRef<HTMLButtonElement>(null);
 
   const { phase, msgs, history, buildStep, published } = st;
+  /** In the larger chat, the conversation stays a readable width in the middle. */
+  const column = expanded ? "mx-auto w-full max-w-[640px]" : "";
   const cur: StoreConfig | undefined = history[history.length - 1];
   const results = useMemo(() => (cur ? verify(cur) : []), [cur]);
   const sum = summarize(results);
@@ -368,7 +386,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
     setSt(fn);
   }, []);
 
-  /** Website projects: queue the build for the worker, then watch it in the right-hand pane. */
+  /** Website projects: queue the build for the worker, then watch it in the side pane. */
   const startBuild = useCallback(async () => {
     if (starting) return;
     setStarting(true);
@@ -588,10 +606,101 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-3 px-3 pb-3 lg:grid-cols-[minmax(340px,430px)_minmax(0,1fr)]">
+      <div className={`grid min-h-0 flex-1 gap-3 px-3 pb-3 ${expanded ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(340px,430px)]"}`}>
+        {site ? (
+          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} />
+        ) : (
+          <>
+        <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
+            <p className="flex items-center gap-2 text-sm text-foreground/60">
+              Preview
+              {cur && (
+                <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs text-foreground" data-testid="version">
+                  v{history.length}
+                </span>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              {cur && (
+                <button
+                  type="button"
+                  aria-expanded={checksOpen}
+                  onClick={() => setChecksOpen((o) => !o)}
+                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/80 hover:border-foreground/50 ${focusRing}`}
+                >
+                  <span className="sr-only">Checks: </span>
+                  <Summary results={results} />
+                </button>
+              )}
+              <div role="group" aria-label="Preview size" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
+                {(["desktop", "phone"] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={device === d}
+                    onClick={() => setDevice(d)}
+                    className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/60"}`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-foreground/[0.04]">
+            {cur ? (
+              device === "desktop" ? (
+                <StorePreview config={cur} />
+              ) : (
+                <div data-testid="phone-frame" className="mx-auto my-4 w-[390px] max-w-[calc(100%-2rem)] overflow-hidden rounded-3xl border border-foreground/15 bg-white shadow-sm">
+                  <StorePreview config={cur} />
+                </div>
+              )
+            ) : (
+              <div className="grid h-full min-h-48 place-items-center p-6 text-center text-sm text-foreground/50">
+                {busy ? "Drawing your store…" : "Your store appears here."}
+              </div>
+            )}
+          </div>
+
+          {checksOpen && cur && (
+            <div className="absolute inset-x-0 bottom-0 max-h-[65%] overflow-y-auto border-t border-foreground/10 bg-white p-4 shadow-[0_-12px_28px_rgba(0,0,0,0.08)]">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm text-foreground">
+                  Checks: <Summary results={results} />
+                </p>
+                <button type="button" onClick={() => setChecksOpen(false)} className={`rounded-lg px-2 py-1 text-xs text-foreground/70 hover:text-foreground ${focusRing}`}>
+                  Close
+                </button>
+              </div>
+              <ChecksList results={results} />
+            </div>
+          )}
+        </section>
+          </>
+        )}
+
         {/* Chat */}
         <section aria-label="Chat" className={`${pane === "chat" ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
-          <div ref={logRef} role="log" aria-live="polite" className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="hidden items-center justify-between border-b border-foreground/10 px-4 py-2 lg:flex">
+            <p className="text-sm text-foreground/60">Chat with {AGENT_NAME}</p>
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              aria-pressed={expanded}
+              aria-label={expanded ? "Make chat smaller" : "Make chat larger"}
+              title={expanded ? "Make chat smaller" : "Make chat larger"}
+              className={`grid h-8 w-8 place-items-center rounded-lg text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={expanded ? "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" : "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"} />
+              </svg>
+            </button>
+          </div>
+          <div ref={logRef} role="log" aria-live="polite" className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className={`space-y-4 ${column}`}>
             {msgs.map((m, idx) => {
               switch (m.kind) {
                 case "user":
@@ -705,10 +814,12 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                 This takes a minute or so. You can close this tab. The build keeps running, and your project will be waiting in Your projects.
               </p>
             )}
+            </div>
           </div>
 
           {chips.length > 0 && (
-            <div className="flex flex-wrap gap-2 border-t border-foreground/10 px-3 pt-3">
+            <div className="border-t border-foreground/10 px-3 pt-3">
+            <div className={`flex flex-wrap gap-2 ${column}`}>
               {chips.map((s) => (
                 <button
                   key={s.label}
@@ -726,110 +837,58 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                 </button>
               ))}
             </div>
+            </div>
           )}
 
-          <form onSubmit={onSubmit} className="flex items-end gap-2 p-3">
-            <label htmlFor="builder-input" className="sr-only">
-              {phase === "intake" || site ? "Your answer" : cur ? "Ask for a change" : "Describe your store"}
-            </label>
-            <textarea
-              id="builder-input"
-              ref={inputRef}
-              rows={1}
-              value={input}
-              disabled={busy}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-              placeholder={busy ? "Working on it…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
-              className="field-sizing-content max-h-32 min-h-10 flex-1 resize-none rounded-2xl border border-foreground/15 bg-transparent px-3.5 py-2 text-base leading-snug outline-none placeholder:text-foreground/40 focus:border-foreground/50 disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={busy || !input.trim()}
-              aria-label="Send"
-              className={`grid h-10 w-10 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30 ${focusRing}`}
+          <form onSubmit={onSubmit} className="p-3">
+            <div
+              className={`mx-auto w-full cursor-text rounded-2xl border border-foreground/15 bg-white transition-colors focus-within:border-foreground/50 ${expanded ? "lg:max-w-[640px]" : ""}`}
+              onClick={(e) => {
+                if (!(e.target as HTMLElement).closest("button")) inputRef.current?.focus();
+              }}
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 19V5M6 11l6-6 6 6" />
-              </svg>
-            </button>
+              <label htmlFor="builder-input" className="sr-only">
+                {phase === "intake" || site ? "Your answer" : cur ? "Ask for a change" : "Describe your store"}
+              </label>
+              <textarea
+                id="builder-input"
+                ref={inputRef}
+                rows={1}
+                value={input}
+                disabled={busy}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+                placeholder={busy ? "Working on it…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
+                className="field-sizing-content block max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base leading-snug outline-none placeholder:text-foreground/40 disabled:opacity-60"
+              />
+              <div className="flex items-center justify-between px-2 pb-2">
+                <div className="flex items-center gap-0.5">
+                  {/* Not built yet: shown dimmed so the layout is final. Remove these two when you would rather not show them. */}
+                  <button type="button" disabled title="Attach a file (coming soon)" aria-label="Attach a file (coming soon)" className="grid h-8 w-8 place-items-center rounded-lg text-foreground/30">
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                  <button type="button" disabled title="Talk instead of typing (coming soon)" aria-label="Talk instead of typing (coming soon)" className="grid h-8 w-8 place-items-center rounded-lg text-foreground/30">
+                    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={busy || !input.trim()}
+                  aria-label="Send"
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30 ${focusRing}`}
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 19V5M6 11l6-6 6 6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </form>
         </section>
-
-        {site ? (
-          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} />
-        ) : (
-          <>
-        <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
-            <p className="flex items-center gap-2 text-sm text-foreground/60">
-              Preview
-              {cur && (
-                <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs text-foreground" data-testid="version">
-                  v{history.length}
-                </span>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              {cur && (
-                <button
-                  type="button"
-                  aria-expanded={checksOpen}
-                  onClick={() => setChecksOpen((o) => !o)}
-                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/80 hover:border-foreground/50 ${focusRing}`}
-                >
-                  <span className="sr-only">Checks: </span>
-                  <Summary results={results} />
-                </button>
-              )}
-              <div role="group" aria-label="Preview size" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
-                {(["desktop", "phone"] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    aria-pressed={device === d}
-                    onClick={() => setDevice(d)}
-                    className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/60"}`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto bg-foreground/[0.04]">
-            {cur ? (
-              device === "desktop" ? (
-                <StorePreview config={cur} />
-              ) : (
-                <div data-testid="phone-frame" className="mx-auto my-4 w-[390px] max-w-[calc(100%-2rem)] overflow-hidden rounded-3xl border border-foreground/15 bg-white shadow-sm">
-                  <StorePreview config={cur} />
-                </div>
-              )
-            ) : (
-              <div className="grid h-full min-h-48 place-items-center p-6 text-center text-sm text-foreground/50">
-                {busy ? "Drawing your store…" : "Your store appears here."}
-              </div>
-            )}
-          </div>
-
-          {checksOpen && cur && (
-            <div className="absolute inset-x-0 bottom-0 max-h-[65%] overflow-y-auto border-t border-foreground/10 bg-white p-4 shadow-[0_-12px_28px_rgba(0,0,0,0.08)]">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm text-foreground">
-                  Checks: <Summary results={results} />
-                </p>
-                <button type="button" onClick={() => setChecksOpen(false)} className={`rounded-lg px-2 py-1 text-xs text-foreground/70 hover:text-foreground ${focusRing}`}>
-                  Close
-                </button>
-              </div>
-              <ChecksList results={results} />
-            </div>
-          )}
-        </section>
-          </>
-        )}
       </div>
 
       {publishOpen && cur && (

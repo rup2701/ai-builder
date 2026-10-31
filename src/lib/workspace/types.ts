@@ -33,7 +33,7 @@ export type WorkspaceState = {
   site?: { brief: Record<string, unknown>; build?: SiteBuild };
 };
 
-/** Progress of a website build, written by the worker and read by the right-hand pane. */
+/** Progress of a website build, written by the worker and read by the side pane. */
 export type SiteBuild = {
   /** Index into SITE_STAGES. The last index means finished. */
   stage: number;
@@ -41,6 +41,8 @@ export type SiteBuild = {
   finishedAt?: string;
   /** Files the agent has written so far: a sign of life during the long stage. */
   files: number;
+  /** Written by the worker every few seconds while it runs the build. A stale value means the worker stopped. */
+  heartbeatAt?: string;
   /** Set when a stage failed. The stage index it stopped at, and a plain message. */
   failedStage?: number;
   error?: string;

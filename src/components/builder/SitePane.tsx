@@ -5,13 +5,15 @@ import SiteTimeline from "./SiteTimeline";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
-/** The right-hand side for a website project: the brief as the interview saved it, until the site is built. */
+/** The side panel for a website project: the brief as the interview saved it, until the site is built. */
 export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: () => void; starting: boolean }) {
   const brief = st.site?.brief;
   const c = brief ? briefCard(brief) : null;
   const build = st.site?.build;
   const running = st.phase === "build" || st.phase === "verify";
   const canBuild = Boolean(c) && !running && !starting;
+  const kind = (brief?.site as { kind?: string } | undefined)?.kind;
+  const buildLabel = kind === "waitlist" ? "Build my waitlist site" : "Build my site";
   const finishedForReal = Boolean(build && build.stage >= DONE_STAGE && !build.fake);
   const buildButton = (label: string) => (
     <button
@@ -41,7 +43,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
         {build && c ? (
           <div>
             <SiteTimeline build={build} siteName={c.name || "your site"} />
-            {!running && !finishedForReal && <div className="mt-6">{buildButton(build.failedStage !== undefined ? "Try again" : "Build my site")}</div>}
+            {!running && !finishedForReal && <div className="mt-6">{buildButton(build.failedStage !== undefined ? "Try again" : buildLabel)}</div>}
             <details className="mt-8 border-t border-foreground/10 pt-4">
               <summary className="cursor-pointer text-sm text-foreground/60">Your brief</summary>
               <div className="mt-4 space-y-5">{briefBody(c)}</div>
@@ -56,7 +58,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
             {briefBody(c)}
             <div className="rounded-xl bg-foreground/[0.04] p-4">
               <p className="text-foreground/70">When the brief looks right, build the site. It takes about half an hour, and you can close this window while it runs.</p>
-              <div className="mt-3">{buildButton("Build my site")}</div>
+              <div className="mt-3">{buildButton(buildLabel)}</div>
             </div>
           </div>
         )}
