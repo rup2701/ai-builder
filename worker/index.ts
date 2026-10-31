@@ -7,7 +7,8 @@
  */
 import { Pool } from "pg";
 import { finishBuild, BUILD_STEPS } from "../src/lib/workspace/state";
-import type { WorkspaceState } from "../src/lib/workspace/types";
+import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
+import { DONE_STAGE, SITE_STAGES } from "../src/lib/builder/site-stages";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const STEP_MS = Number(process.env.WORKER_STEP_MS ?? 700);
@@ -25,6 +26,47 @@ async function claim() {
 
 async function setBuildStep(projectId: string, step: number) {
   await pool.query(`UPDATE projects SET state = jsonb_set(state, '{buildStep}', to_jsonb($2::int)), updated_at = now() WHERE id = $1`, [projectId, step]);
+}
+
+/** Merge a few fields into projects.state.site.build. The pane polls this. */
+async function patchSiteBuild(projectId: string, patch: Partial<SiteBuild>) {
+  await pool.query(
+    `UPDATE projects
+        SET state = jsonb_set(state, '{site,build}', COALESCE(state #> '{site,build}', '{}'::jsonb) || $2::jsonb),
+            updated_at = now()
+      WHERE id = $1`,
+    [projectId, JSON.stringify(patch)],
+  );
+}
+
+/**
+ * Piece 1 of "build from the chat": walks the six stages with short waits and writes nothing real.
+ * WORKER_FAKE_STAGE_MS sets how long a stage lasts (default 4000). The real version replaces this
+ * with the runner's create and deploy, and keeps the same writes to site.build.
+ */
+async function runSiteBuildFake(job: { id: string; project_id: string }) {
+  const stageMs = Number(process.env.WORKER_FAKE_STAGE_MS ?? 4000);
+  await patchSiteBuild(job.project_id, { fake: true, stage: 0, files: 0 });
+  for (let stage = 0; stage < DONE_STAGE; stage++) {
+    await patchSiteBuild(job.project_id, { stage });
+    const ticks = 4;
+    for (let t = 0; t < ticks; t++) {
+      await sleep(stageMs / ticks);
+      if (stage === 1) await patchSiteBuild(job.project_id, { files: (t + 1) * 9 });
+    }
+  }
+  const { rows } = await pool.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
+  const s = rows[0].state as WorkspaceState;
+  const build = s.site?.build;
+  const done: WorkspaceState = {
+    ...s,
+    phase: "summary",
+    jobId: null,
+    msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: "This was a practice run: the stages ran, but no site was built. The real build comes next." }],
+    nextId: s.nextId + 1,
+    site: { brief: s.site!.brief, build: { ...build!, stage: DONE_STAGE, finishedAt: new Date().toISOString(), fake: true } },
+  };
+  await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
 }
 
 async function runBuild(job: { id: string; project_id: string }) {
@@ -50,7 +92,19 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
   await pool.query(`UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, [job.id, message]);
   const { rows } = await pool.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
   const s = rows[0]?.state as WorkspaceState | undefined;
-  if (s) {
+  if (s?.site?.build) {
+    const stage = s.site.build.stage;
+    const label = SITE_STAGES[Math.min(stage, DONE_STAGE)].label;
+    const back: WorkspaceState = {
+      ...s,
+      phase: "summary",
+      jobId: null,
+      msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: `The build stopped at "${label}". Nothing was lost. Press Build my site to try again.` }],
+      nextId: s.nextId + 1,
+      site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: message.slice(0, 300) } },
+    };
+    await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(back)]);
+  } else if (s) {
     const back: WorkspaceState = {
       ...s,
       phase: "summary",
@@ -73,6 +127,7 @@ async function main() {
     console.log(`worker: ${job.type} job ${job.id}`);
     try {
       if (job.type === "build") await runBuild(job);
+      else if (job.type === "site_build") await runSiteBuildFake(job);
       else throw new Error(`Unknown job type: ${job.type}`);
       await pool.query(`UPDATE jobs SET status = 'done', finished_at = now() WHERE id = $1`, [job.id]);
     } catch (e) {

@@ -348,6 +348,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
   const [publishOpen, setPublishOpen] = useState(false);
   const [sentTo, setSentTo] = useState("");
   const [pending, setPending] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const dirty = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -366,6 +367,26 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
     dirty.current = true;
     setSt(fn);
   }, []);
+
+  /** Website projects: queue the build for the worker, then watch it in the right-hand pane. */
+  const startBuild = useCallback(async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const r = await fetch(`/api/projects/${projectId}/build`, { method: "POST" });
+      const j = (await r.json().catch(() => ({}))) as { state?: WorkspaceState; error?: string };
+      if (r.ok && j.state) {
+        setSt(j.state);
+        setPane("preview");
+      } else {
+        setSt((s) => pushMsg(s, { kind: "bot", text: j.error ?? "I couldn't start the build. Try again in a moment." }));
+      }
+    } catch {
+      setSt((s) => pushMsg(s, { kind: "bot", text: "I couldn't reach the server just now. Try again in a moment." }));
+    } finally {
+      setStarting(false);
+    }
+  }, [projectId, starting]);
 
   // While a build runs on the worker, follow it. This also resumes after the tab was closed.
   useEffect(() => {
@@ -576,15 +597,15 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                 case "user":
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-sm leading-tight text-background ">{m.text}</p>
+                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-sm leading-relaxed text-background">{m.text}</p>
                     </div>
                   );
                 case "bot":
                   return (
                     <div key={m.id} className="max-w-[92%]">
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-tight text-foreground">{boldText(m.text)}</p>
-                      {m.hint && <p className="mt-0.5 text-xs leading-tight text-foreground/55">{m.hint}</p>}
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{boldText(m.text)}</p>
+                      {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
                         <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
                           {m.palette.map((name) => (
@@ -736,7 +757,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
         </section>
 
         {site ? (
-          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} />
+          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} />
         ) : (
           <>
         <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>

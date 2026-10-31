@@ -67,3 +67,23 @@ h2 {
   letter-spacing: -0.07rem;
   color: var(--foreground) !important;
 }
+/* ---- Website build timeline (SiteTimeline). Motion only when the visitor has not asked for less. ---- */
+.tl-line {
+  background: repeating-linear-gradient(to bottom, currentColor 0 3px, transparent 3px 8px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes tl-march { to { background-position-y: 8px; } }
+  @keyframes tl-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+  @keyframes tl-tap { 0%, 100% { transform: rotate(0deg); } 45% { transform: rotate(-24deg); } }
+  @keyframes tl-sweep { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(3px); } }
+  @keyframes tl-scan { 0%, 100% { transform: translate(-2px, 0); } 50% { transform: translate(3px, 1px); } }
+  @keyframes tl-lift { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }
+  @keyframes tl-pop { 0% { transform: scale(0.6); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  .tl-line-active { animation: tl-march 0.9s linear infinite; }
+  .tl-anim-ready { animation: tl-pulse 1.4s ease-in-out infinite; }
+  .tl-anim-build { animation: tl-tap 0.9s ease-in-out infinite; transform-origin: 85% 85%; }
+  .tl-anim-look { animation: tl-sweep 1.1s ease-in-out infinite; }
+  .tl-anim-test { animation: tl-scan 1.3s ease-in-out infinite; }
+  .tl-anim-online { animation: tl-lift 1.2s ease-in-out infinite; }
+  .tl-anim-done { animation: tl-pop 0.5s ease-out 1; }
+}

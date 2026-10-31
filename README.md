@@ -57,3 +57,25 @@ Tokens stay server side and never go into an agent's context.
 - Live GitHub, Vercel and Neon calls; the real preview deployment.
 - Completion email (a build shows as ready in Your projects).
 - Recording interventions from the UI (the table exists).
+
+## How builds run
+
+The web app and the worker are two separate programs that share one Postgres database.
+
+- **Web app** (Next.js, on Vercel). Handles the chat, the interview and the pages. Each request lasts seconds, so it cannot run a 30-minute build.
+- **Worker** (`npm run worker`). A long-running process that checks the `jobs` table every second, claims a queued job, does the slow work and writes progress back to the project's record.
+
+Pressing **Build my site** works like this:
+
+1. `POST /api/projects/:id/build` inserts a `site_build` job and sets the project to the build phase.
+2. The worker claims the job and moves it through six stages: Getting ready, Building the pages, Polishing the look, Testing, Putting it online, Ready.
+3. At each stage the worker writes `state.site.build` (stage, start time, files written, and later the live address). The right-hand pane polls the project and draws the timeline.
+4. Closing the browser does not affect the build. The job is a row in the database.
+
+The stage names live in `src/lib/builder/site-stages.ts`. The worker maps the runner's own stage markers (`1/4` to `4/4`, `3b/4`, and deploy's `1/7` to `7/7`) to those six stages.
+
+**Status:** the worker currently runs a practice build that steps through the stages and builds nothing. The real build, where the worker runs the runner's `create` and `deploy`, is the next piece.
+
+**Where the worker runs.** It cannot run on Vercel, because it is a long-lived process. Locally it runs next to `npm run dev`. If the local app and the deployed app share a database, a worker on your machine will also claim jobs queued from the deployed app, so only run one worker at a time. The plan for hosting is the web app on Vercel and the worker together with the runner on Fly (Node, git, Chromium and a Postgres for the per-build databases), moving to a separate Fly Machine per build.
+
+Settings: `WORKER_FAKE_STAGE_MS` sets how long each stage of the practice build lasts (default 4000).

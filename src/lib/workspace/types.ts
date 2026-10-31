@@ -30,5 +30,26 @@ export type WorkspaceState = {
   published: boolean;
   jobId: string | null;
   /** Website projects: the brief the interview saved (the runner's brief.json). */
-  site?: { brief: Record<string, unknown> };
+  site?: { brief: Record<string, unknown>; build?: SiteBuild };
+};
+
+/** Progress of a website build, written by the worker and read by the right-hand pane. */
+export type SiteBuild = {
+  /** Index into SITE_STAGES. The last index means finished. */
+  stage: number;
+  startedAt: string;
+  finishedAt?: string;
+  /** Files the agent has written so far: a sign of life during the long stage. */
+  files: number;
+  /** Set when a stage failed. The stage index it stopped at, and a plain message. */
+  failedStage?: number;
+  error?: string;
+  /** The live address and the owner sign-in, once deployed. */
+  url?: string;
+  adminUrl?: string;
+  ownerEmail?: string;
+  /** True when this run only simulates the stages (no model calls, nothing is built). */
+  fake?: boolean;
+  /** Set when an email will be sent at the end; the address it goes to. */
+  notifyEmail?: string;
 };
