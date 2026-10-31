@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
@@ -26,6 +26,20 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     .where(and(eq(schema.jobs.projectId, p.id), eq(schema.jobs.type, "site_build"), inArray(schema.jobs.status, ["queued", "running"])))
     .limit(1);
   if (running.length) return NextResponse.json({ error: "A build is already queued." }, { status: 409 });
+
+  // Optional cap on builds per person (SITE_BUILD_LIMIT; 0 or unset means no cap). Failed builds do not count.
+  const limit = Number(process.env.SITE_BUILD_LIMIT ?? 0);
+  const exempt = (process.env.SITE_BUILD_LIMIT_EXEMPT ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (limit > 0 && !exempt.includes((user.email ?? "").toLowerCase())) {
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.jobs)
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.jobs.projectId))
+      .where(and(eq(schema.projects.ownerId, user.id), eq(schema.jobs.type, "site_build"), ne(schema.jobs.status, "failed")));
+    if (n >= limit) {
+      return NextResponse.json({ error: `You have used your ${limit} site builds for now.` }, { status: 429 });
+    }
+  }
 
   const [job] = await db.insert(schema.jobs).values({ projectId: p.id, type: "site_build" }).returning({ id: schema.jobs.id });
   const build: SiteBuild = {

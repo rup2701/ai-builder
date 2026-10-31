@@ -5,7 +5,7 @@ import SiteTimeline from "./SiteTimeline";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
-/** The side panel for a website project: the brief as the interview saved it, until the site is built. */
+/** The right-hand side for a website project: the brief as the interview saved it, until the site is built. */
 export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: () => void; starting: boolean }) {
   const brief = st.site?.brief;
   const c = brief ? briefCard(brief) : null;

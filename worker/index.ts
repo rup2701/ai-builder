@@ -8,7 +8,8 @@
 import { Pool } from "pg";
 import { finishBuild, BUILD_STEPS } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
-import { DONE_STAGE, SITE_STAGES } from "../src/lib/builder/site-stages";
+import { DONE_STAGE } from "../src/lib/builder/site-stages";
+import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, stageLabel } from "./site-build";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const STEP_MS = Number(process.env.WORKER_STEP_MS ?? 700);
@@ -29,15 +30,7 @@ async function setBuildStep(projectId: string, step: number) {
 }
 
 /** Merge a few fields into projects.state.site.build. The pane polls this. */
-async function patchSiteBuild(projectId: string, patch: Partial<SiteBuild>) {
-  await pool.query(
-    `UPDATE projects
-        SET state = jsonb_set(state, '{site,build}', COALESCE(state #> '{site,build}', '{}'::jsonb) || $2::jsonb),
-            updated_at = now()
-      WHERE id = $1`,
-    [projectId, JSON.stringify(patch)],
-  );
-}
+const patchSiteBuild = (projectId: string, patch: Partial<SiteBuild>) => patchSiteBuildDb(pool, projectId, patch);
 
 /**
  * Piece 1 of "build from the chat": walks the six stages with short waits and writes nothing real.
@@ -93,15 +86,15 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
   const { rows } = await pool.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
   const s = rows[0]?.state as WorkspaceState | undefined;
   if (s?.site?.build) {
-    const stage = s.site.build.stage;
-    const label = SITE_STAGES[Math.min(stage, DONE_STAGE)].label;
+    const stage = s.site.build.failedStage ?? s.site.build.stage;
+    const label = stageLabel(s.site.build.failedStage ?? stage);
     const back: WorkspaceState = {
       ...s,
       phase: "summary",
       jobId: null,
       msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: `The build stopped at "${label}". Nothing was lost. Press Build my site to try again.` }],
       nextId: s.nextId + 1,
-      site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: message.slice(0, 300) } },
+      site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: s.site.build.error ?? message.slice(0, 300) } },
     };
     await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(back)]);
   } else if (s) {
@@ -117,7 +110,14 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
 }
 
 async function main() {
-  console.log("worker: waiting for jobs");
+  // A job still marked running when the worker starts was cut off by a restart or a crash.
+  const stuck = await pool.query(`SELECT id, project_id FROM jobs WHERE status = 'running'`);
+  for (const j of stuck.rows as { id: string; project_id: string }[]) {
+    console.log(`worker: job ${j.id} was running when the worker stopped; marking it failed`);
+    await fail(j, new Error("The builder restarted while this build was running."));
+    await pool.query(`UPDATE jobs SET finished_at = now() WHERE id = $1`, [j.id]);
+  }
+  console.log(`worker: waiting for jobs (site builds: ${process.env.WORKER_SITE_MODE === "real" ? "REAL" : "practice"})`);
   for (;;) {
     const job = await claim();
     if (!job) {
@@ -127,7 +127,11 @@ async function main() {
     console.log(`worker: ${job.type} job ${job.id}`);
     try {
       if (job.type === "build") await runBuild(job);
-      else if (job.type === "site_build") await runSiteBuildFake(job);
+      else if (job.type === "site_build") {
+        // Real builds spend money, so they only run when WORKER_SITE_MODE=real. The default is the practice run.
+        if (process.env.WORKER_SITE_MODE === "real") await runSiteBuild(pool, job);
+        else await runSiteBuildFake(job);
+      }
       else throw new Error(`Unknown job type: ${job.type}`);
       await pool.query(`UPDATE jobs SET status = 'done', finished_at = now() WHERE id = $1`, [job.id]);
     } catch (e) {

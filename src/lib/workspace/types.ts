@@ -33,7 +33,7 @@ export type WorkspaceState = {
   site?: { brief: Record<string, unknown>; build?: SiteBuild };
 };
 
-/** Progress of a website build, written by the worker and read by the side pane. */
+/** Progress of a website build, written by the worker and read by the right-hand pane. */
 export type SiteBuild = {
   /** Index into SITE_STAGES. The last index means finished. */
   stage: number;
