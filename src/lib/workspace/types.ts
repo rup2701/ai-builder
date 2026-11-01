@@ -11,7 +11,9 @@ type MsgBody =
   | { kind: "recap"; items: { label: string; value: string }[] }
   | { kind: "summary"; data: BriefSummary }
   | { kind: "checks"; results: Check[] }
-  | { kind: "change"; lines: string[]; version: number; results: Check[] };
+  | { kind: "change"; lines: string[]; version: number; results: Check[] }
+  /** A finished website build. The password is kept only until the person says they have saved it. */
+  | { kind: "site_ready"; name: string; url: string; adminUrl: string; ownerEmail: string; password?: string; checks: string[] };
 
 export type Msg = { id: number } & MsgBody;
 export type MsgInput = MsgBody;
@@ -33,7 +35,7 @@ export type WorkspaceState = {
   site?: { brief: Record<string, unknown>; build?: SiteBuild };
 };
 
-/** Progress of a website build, written by the worker and read by the right-hand pane. */
+/** Progress of a website build, written by the worker and read by the side pane. */
 export type SiteBuild = {
   /** Index into SITE_STAGES. The last index means finished. */
   stage: number;

@@ -1,4 +1,4 @@
-import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder/site-stages";
+import { DONE_STAGE, SITE_STAGES, isBuildFailedText, stageFromRunnerLine } from "../src/lib/builder/site-stages";
 
 let failed = 0;
 function check(name: string, ok: boolean) {
@@ -17,6 +17,12 @@ check("a tool line is not a stage", stageFromRunnerLine("[12] run_command git st
 check("indented text is not a stage", stageFromRunnerLine("    database run_2026") === null);
 check("a date is not a stage", stageFromRunnerLine("2026/10/30 12:00") === null);
 check("six stages, last is Ready", SITE_STAGES.length === 6 && SITE_STAGES[DONE_STAGE].id === "done");
+
+// The failure line a new build removes, and nothing else.
+check("a stopped-build line is a failure line", isBuildFailedText('The build stopped at "Putting it online". Nothing was lost. Press Build my site to try again.'));
+check("a problem line is a failure line", isBuildFailedText("The build hit a problem. Nothing was lost. Say “build it” to try again."));
+check("a normal message is not", !isBuildFailedText("Your brief is saved. When it looks right, press Build my site."));
+check("a message that only mentions the build is not", !isBuildFailedText("Tell me if the build stopped at the wrong place."));
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

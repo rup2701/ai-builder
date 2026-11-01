@@ -39,3 +39,6 @@ export function stageFromRunnerLine(line: string): number | null {
       return null;
   }
 }
+
+/** The chat line the worker writes when a build fails. A new build removes it so the chat does not show a failure above a success. */
+export const isBuildFailedText = (text: string) => /^The build (stopped at|hit a problem)\b/.test(text);

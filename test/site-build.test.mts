@@ -118,7 +118,7 @@ await test("a good build ends Ready with the address, the password and the check
   assert.equal(rec.state.phase, "summary");
   assert.equal(rec.state.jobId, null);
   const last = rec.state.msgs[rec.state.msgs.length - 1];
-  assert.ok(last.kind === "bot" && last.text.includes("owner@example.com") && last.text.includes("Check these before you share it"));
+  assert.ok(last.kind === "site_ready" && last.ownerEmail === "owner@example.com" && last.checks.length > 0 && /\S{10,}/.test(last.password ?? ""), "the ready card has the sign-in, the password and the checklist");
   assert.ok(b.heartbeatAt, "the heartbeat was written");
   assert.equal(rec.usage.length, 1);
   assert.ok(b.files >= 2, `files counted: ${b.files}`);

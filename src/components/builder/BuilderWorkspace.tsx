@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
 import SitePane from "./SitePane";
+import SiteReadyCard from "./SiteReadyCard";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
@@ -512,6 +513,16 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
     }
   }
 
+  /** "I've saved it": the server removes the password from the saved message. */
+  async function ackPassword() {
+    try {
+      const r = await fetch(`/api/projects/${projectId}/ack-password`, { method: "POST" });
+      if (r.ok) setSt(((await r.json()) as { state: WorkspaceState }).state);
+    } catch {
+      /* the button stays; try again */
+    }
+  }
+
   const closePublish = useCallback(() => {
     setPublishOpen(false);
     publishBtn.current?.focus();
@@ -730,6 +741,21 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, publish
                           ))}
                         </div>
                       )}
+                    </div>
+                  );
+                case "site_ready":
+                  return (
+                    <div key={m.id}>
+                      <AgentLabel />
+                      <SiteReadyCard
+                        name={m.name}
+                        url={m.url}
+                        adminUrl={m.adminUrl}
+                        ownerEmail={m.ownerEmail}
+                        password={m.password}
+                        checks={m.checks}
+                        onSaved={ackPassword}
+                      />
                     </div>
                   );
                 case "recap":

@@ -89,7 +89,7 @@ export default function SiteTimeline({ build, siteName }: { build: SiteBuild; si
   return (
     <div data-testid="site-timeline">
       <p className="text-lg text-foreground">{build.stage >= DONE_STAGE ? `${siteName} is ready` : build.failedStage !== undefined ? "The build stopped" : `Building ${siteName}`}</p>
-      {running && <p className="mt-0.5 text-sm text-foreground/60">Usually takes about half an hour.</p>}
+      {running && <p className="mt-0.5 text-sm text-foreground/60">Usually takes about 45 minutes.</p>}
       {waiting && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="waiting">Waiting for a free builder. If someone else is building, yours starts when they finish.</p>}
       {silent && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="silent">No update for a while. The builder may have stopped. If nothing changes in a few minutes, check back later.</p>}
 

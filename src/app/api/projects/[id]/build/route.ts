@@ -4,6 +4,7 @@ import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import type { SiteBuild, WorkspaceState } from "@/lib/workspace/types";
+import { isBuildFailedText } from "@/lib/builder/site-stages";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     // Only promise an email when email sending is actually set up.
     ...(process.env.RESEND_API_KEY && user.email ? { notifyEmail: user.email } : {}),
   };
-  const next: WorkspaceState = { ...state, phase: "build", jobId: job.id, site: { ...state.site, build } };
+  // A new build clears the old failure line, so the chat never shows a failure above the result.
+  const msgs = state.msgs.filter((m) => !(m.kind === "bot" && isBuildFailedText(m.text)));
+  const next: WorkspaceState = { ...state, msgs, phase: "build", jobId: job.id, site: { ...state.site, build } };
   await db.update(schema.projects).set({ state: next, status: "building", updatedAt: new Date() }).where(eq(schema.projects.id, p.id));
   return NextResponse.json({ state: next });
 }

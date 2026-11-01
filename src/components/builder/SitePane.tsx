@@ -5,7 +5,7 @@ import SiteTimeline from "./SiteTimeline";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
-/** The right-hand side for a website project: the brief as the interview saved it, until the site is built. */
+/** The side panel for a website project: the brief as the interview saved it, until the site is built. */
 export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: () => void; starting: boolean }) {
   const brief = st.site?.brief;
   const c = brief ? briefCard(brief) : null;
@@ -57,7 +57,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
           <div className="space-y-5" data-testid="brief-card">
             {briefBody(c)}
             <div className="rounded-xl bg-foreground/[0.04] p-4">
-              <p className="text-foreground/70">When the brief looks right, build the site. It takes about half an hour, and you can close this window while it runs.</p>
+              <p className="text-foreground/70">When the brief looks right, build the site. It takes about 45 minutes, and you can close this window while it runs.</p>
               <div className="mt-3">{buildButton(buildLabel)}</div>
             </div>
           </div>

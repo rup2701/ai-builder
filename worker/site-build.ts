@@ -220,20 +220,11 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
     const s = now[0].state as WorkspaceState;
     const build: SiteBuild = { ...(s.site?.build ?? start.site!.build!), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, adminUrl: `${url}/admin/sign-in`, ownerEmail };
-    const text = [
-      `${siteName} is live: ${url}`,
-      "",
-      `Owner area: ${build.adminUrl}`,
-      `Sign in with ${ownerEmail} and this password. It is shown once, so save it now: ${password}`,
-      "",
-      "Check these before you share it:",
-      ...checklist(brief).map((c) => `- ${c}`),
-    ].join("\n");
     const done: WorkspaceState = {
       ...s,
       phase: "summary",
       jobId: null,
-      msgs: [...s.msgs, { id: s.nextId, kind: "bot", text }],
+      msgs: [...s.msgs, { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) }],
       nextId: s.nextId + 1,
       site: { brief: s.site!.brief, build },
     };
