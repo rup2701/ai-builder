@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { devLoginEnabled, signIn } from "@/auth";
+import { REQUEST_ACCESS_HREF } from "@/lib/brand";
 import { getUser } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +101,12 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
                 <GoogleMark />
                 Continue with Google
               </Button>
+              <p className="text-center text-sm text-foreground/60">
+                No code?{" "}
+                <a href={REQUEST_ACCESS_HREF} className="text-foreground underline underline-offset-4 hover:no-underline">
+                  Request access
+                </a>
+              </p>
             </form>
           )}
           {dev && (
