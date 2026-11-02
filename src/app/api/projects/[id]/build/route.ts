@@ -5,6 +5,7 @@ import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import type { SiteBuild, WorkspaceState } from "@/lib/workspace/types";
 import { isBuildFailedText } from "@/lib/builder/site-stages";
+import { buildLimitFor } from "@/lib/access-code";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   if (running.length) return NextResponse.json({ error: "A build is already queued." }, { status: 409 });
 
   // Optional cap on builds per person (SITE_BUILD_LIMIT; 0 or unset means no cap). Failed builds do not count.
-  const limit = Number(process.env.SITE_BUILD_LIMIT ?? 0);
+  // A person's access code can carry its own limit, which replaces the global one.
+  const limit = (await buildLimitFor(user.id)) ?? Number(process.env.SITE_BUILD_LIMIT ?? 0);
   const exempt = (process.env.SITE_BUILD_LIMIT_EXEMPT ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
   if (limit > 0 && !exempt.includes((user.email ?? "").toLowerCase())) {
     const [{ n }] = await db

@@ -1,10 +1,27 @@
 import { sql } from "drizzle-orm";
 import { boolean, integer, jsonb, numeric, pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
 
+/** Access codes for the beta. The code itself is never stored, only its hash and the last four characters. */
+export const accessCodes = pgTable("access_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  codeHash: text("code_hash").notNull().unique(),
+  hint: text("hint").notNull(),
+  label: text("label").notNull(),
+  maxUses: integer("max_uses").notNull().default(1),
+  uses: integer("uses").notNull().default(0),
+  /** Site builds each person who joined with this code may start. Null means the global SITE_BUILD_LIMIT applies. */
+  buildLimit: integer("build_limit"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name"),
+  /** The code this person joined with. Null for people on ALLOWED_EMAILS. */
+  accessCodeId: uuid("access_code_id").references(() => accessCodes.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
