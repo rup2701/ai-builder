@@ -394,11 +394,14 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   }, []);
 
   /** Website projects: queue the build for the worker, then watch it in the side pane. */
-  const startBuild = useCallback(async () => {
+  const startBuild = useCallback(async (mode?: "publish") => {
     if (starting) return;
     setStarting(true);
     try {
-      const r = await fetch(`/api/projects/${projectId}/build`, { method: "POST" });
+      const r = await fetch(`/api/projects/${projectId}/build`, {
+        method: "POST",
+        ...(mode ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ mode }) } : {}),
+      });
       const j = (await r.json().catch(() => ({}))) as { state?: WorkspaceState; error?: string };
       if (r.ok && j.state) {
         setSt(j.state);

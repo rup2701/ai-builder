@@ -9,7 +9,7 @@ import { Pool } from "pg";
 import { finishBuild, BUILD_STEPS } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
-import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, stageLabel } from "./site-build";
+import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const STEP_MS = Number(process.env.WORKER_STEP_MS ?? 700);
@@ -92,7 +92,7 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
       ...s,
       phase: "summary",
       jobId: null,
-      msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: `The build stopped at "${label}". Nothing was lost. Press Build my site to try again.` }],
+      msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: `The build stopped at "${label}". Nothing was lost. ${stage === 4 && s.site.build.runDir ? "The site itself is built, so only publishing runs again. Press Retry publishing." : "Press Build my site to try again."}` }],
       nextId: s.nextId + 1,
       site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: s.site.build.error ?? message.slice(0, 300) } },
     };
@@ -131,6 +131,10 @@ async function main() {
         // Real builds spend money, so they only run when WORKER_SITE_MODE=real. The default is the practice run.
         if (process.env.WORKER_SITE_MODE === "real") await runSiteBuild(pool, job);
         else await runSiteBuildFake(job);
+      }
+      else if (job.type === "site_publish") {
+        if (process.env.WORKER_SITE_MODE !== "real") throw new Error("Publish retries only run in real mode.");
+        await runSitePublish(pool, job);
       }
       else throw new Error(`Unknown job type: ${job.type}`);
       await pool.query(`UPDATE jobs SET status = 'done', finished_at = now() WHERE id = $1`, [job.id]);

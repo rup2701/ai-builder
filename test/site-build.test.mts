@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { checklist, nameCandidates, parseLiveUrl, parseSummary, runSiteBuild, type Db } from "../worker/site-build";
+import { checklist, nameCandidates, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
@@ -139,6 +139,37 @@ await test("failing checks stop the build at Testing and nothing is deployed", a
   await assert.rejects(() => runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }));
   assert.equal(rec.state.site!.build!.failedStage, 3);
   assert.equal(rec.state.site!.build!.url, undefined);
+});
+
+await test("the build records its folder, so a failed publish can be retried", async () => {
+  const dir = await makeRunner({ takenBase: "" });
+  const { db, rec } = fakeDb();
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  assert.ok(rec.state.site!.build!.runDir?.endsWith("runs/r1"), String(rec.state.site!.build!.runDir));
+});
+
+await test("retrying a failed publish deploys the saved site without building again", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  rec.state.site!.build = { stage: 4, startedAt: new Date().toISOString(), files: 12, failedStage: 4, error: "boom", runDir: path.join(dir, "runs", "r1") };
+  // Poison create: a retry must not call it.
+  await writeFile(path.join(dir, "create.mjs"), "process.exit(9)");
+  await runSitePublish(db, { id: "job-aaaa1111", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  const b = rec.state.site!.build!;
+  assert.equal(b.stage, DONE_STAGE);
+  assert.match(b.url!, /^https:\/\/mealwise\.appnomics\.live$/);
+  assert.equal(rec.usage.length, 0, "no build cost is logged for a retry");
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "site_ready");
+});
+
+await test("a retry whose folder is gone stops and clears the saved folder", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  rec.state.site!.build = { stage: 4, startedAt: new Date().toISOString(), files: 12, failedStage: 4, runDir: path.join(dir, "runs", "nope") };
+  await assert.rejects(() => runSitePublish(db, { id: "job-bbbb2222", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }), /built again/);
+  assert.equal(rec.state.site!.build!.runDir, "");
+  assert.equal(rec.state.site!.build!.failedStage, 1);
 });
 
 await test("no RUNNER_DIR is a clear error", async () => {

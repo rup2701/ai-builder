@@ -9,6 +9,7 @@
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { briefCard, siteSlug } from "../src/lib/builder/site-brief";
@@ -180,6 +181,8 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     if (summary!.stopReason !== "finished") await stop(1, `The build stopped early (${summary!.stopReason}). It may have hit its time or cost limit.`);
     if (!summary!.checks?.typecheck || !summary!.checks?.build) await stop(3, "The site was written, but it did not pass the final checks.");
     if (!runDir) await stop(1, "The build finished but I could not find its folder.");
+    // Kept so a failed publish can be retried without building the site again.
+    await patchSiteBuild(db, job.project_id, { runDir: runDir! }).catch(() => {});
 
     const t = summary!.tokens ?? {};
     await db
@@ -193,45 +196,100 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       ])
       .catch(() => {});
 
-    // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
-    setStage(4);
-    const password = randomBytes(12).toString("base64url");
-    let url: string | null = null;
-    let lastOut = "";
-    for (const name of nameCandidates(siteName)) {
-      const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir!), "--name", name, "--email", ownerEmail], {
-        cwd: runner,
-        env: { ...env, ADMIN_PASSWORD: password },
-        onLine: (line) => {
-          const st = stageFromRunnerLine(line);
-          if (st !== null) setStage(st);
-        },
-      });
-      lastOut = deployed.out;
-      if (deployed.code === 0) {
-        url = parseLiveUrl(deployed.out) ?? `https://${name}.${env.APP_DOMAIN ?? "appnomics.live"}`;
-        break;
-      }
-      if (!/already exists/i.test(deployed.out)) break;
-    }
-    if (!url) await stop(4, `Publishing did not work. ${tail(lastOut.split(password).join("***"))}`);
-
-    // 4. Done: write the result and tell the person in the chat.
-    const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
-    const s = now[0].state as WorkspaceState;
-    const build: SiteBuild = { ...(s.site?.build ?? start.site!.build!), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, adminUrl: `${url}/admin/sign-in`, ownerEmail };
-    const done: WorkspaceState = {
-      ...s,
-      phase: "summary",
-      jobId: null,
-      msgs: [...s.msgs, { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) }],
-      nextId: s.nextId + 1,
-      site: { brief: s.site!.brief, build },
-    };
-    await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+    await publishSite(db, job, { runner, runDir: runDir!, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild: start.site!.build! });
   } finally {
     clearInterval(heartbeat);
     if (filesTimer) clearInterval(filesTimer);
+  }
+}
+
+type PublishCtx = {
+  runner: string;
+  runDir: string;
+  siteName: string;
+  ownerEmail: string;
+  brief: Record<string, unknown>;
+  env: NodeJS.ProcessEnv;
+  setStage: (n: number) => void;
+  stop: (at: number, message: string) => Promise<never>;
+  fallbackBuild: SiteBuild;
+};
+
+/** Steps 3 and 4: put the finished site online, then write the result and the ready card. Shared by a full build and a publish retry. */
+async function publishSite(db: Db, job: Job, c: PublishCtx) {
+  const { runner, runDir, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild } = c;
+  // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
+  setStage(4);
+  const password = randomBytes(12).toString("base64url");
+  let url: string | null = null;
+  let lastOut = "";
+  for (const name of nameCandidates(siteName)) {
+    const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, "--email", ownerEmail], {
+      cwd: runner,
+      env: { ...env, ADMIN_PASSWORD: password },
+      onLine: (line) => {
+        const st = stageFromRunnerLine(line);
+        if (st !== null) setStage(st);
+      },
+    });
+    lastOut = deployed.out;
+    if (deployed.code === 0) {
+      url = parseLiveUrl(deployed.out) ?? `https://${name}.${env.APP_DOMAIN ?? "appnomics.live"}`;
+      break;
+    }
+    if (!/already exists/i.test(deployed.out)) break;
+  }
+  if (!url) await stop(4, `Publishing did not work. ${tail(lastOut.split(password).join("***"))}`);
+
+  // 4. Done: write the result and tell the person in the chat.
+  const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
+  const s = now[0].state as WorkspaceState;
+  const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, adminUrl: `${url}/admin/sign-in`, ownerEmail };
+  const done: WorkspaceState = {
+    ...s,
+    phase: "summary",
+    jobId: null,
+    msgs: [...s.msgs, { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) }],
+    nextId: s.nextId + 1,
+    site: { brief: s.site!.brief, build },
+  };
+  await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+}
+
+/**
+ * Retry a publish that failed: the site is already built (its folder is saved in site.build.runDir), so only
+ * the deploy runs again. No model calls, no cost cap needed.
+ */
+export async function runSitePublish(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env) {
+  const runner = env.RUNNER_DIR;
+  if (!runner) throw new Error("RUNNER_DIR is not set on the worker, so it cannot find the runner.");
+  const { rows } = await db.query(
+    `SELECT p.state AS state, u.email AS email FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1`,
+    [job.project_id],
+  );
+  const start = rows[0]?.state as WorkspaceState | undefined;
+  const ownerEmail = String(rows[0]?.email ?? "");
+  const brief = start?.site?.brief;
+  const runDir = start?.site?.build?.runDir;
+  if (!start || !brief || !ownerEmail) throw new Error("The project has no saved brief or no owner.");
+  const siteName = briefCard(brief).name || "site";
+
+  const heartbeat = setInterval(() => void patchSiteBuild(db, job.project_id, { heartbeatAt: new Date().toISOString() }).catch(() => {}), Number(env.WORKER_HEARTBEAT_MS ?? 10000));
+  const setStage = (n: number) => void patchSiteBuild(db, job.project_id, { stage: n }).catch(() => {});
+  const stop = async (at: number, message: string): Promise<never> => {
+    await patchSiteBuild(db, job.project_id, { failedStage: at, error: message.slice(0, 300) }).catch(() => {});
+    throw new BuildStop(message);
+  };
+  try {
+    await patchSiteBuild(db, job.project_id, { stage: 4, heartbeatAt: new Date().toISOString() });
+    if (!runDir || !existsSync(path.join(runDir, "app"))) {
+      // The built site is gone (a fresh worker disk, say). Forget it, so the button goes back to a full rebuild.
+      await patchSiteBuild(db, job.project_id, { runDir: "" }).catch(() => {});
+      await stop(1, "The finished site is no longer on the worker, so it has to be built again.");
+    }
+    await publishSite(db, job, { runner, runDir: runDir!, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild: start.site!.build! });
+  } finally {
+    clearInterval(heartbeat);
   }
 }
 

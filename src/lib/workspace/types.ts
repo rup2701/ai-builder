@@ -48,6 +48,8 @@ export type SiteBuild = {
   /** Set when a stage failed. The stage index it stopped at, and a plain message. */
   failedStage?: number;
   error?: string;
+  /** The finished site's folder on the worker. With it, a failed publish can be retried without rebuilding. Empty when the folder is gone. */
+  runDir?: string;
   /** The live address and the owner sign-in, once deployed. */
   url?: string;
   adminUrl?: string;
