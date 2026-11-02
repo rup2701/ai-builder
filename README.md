@@ -79,3 +79,7 @@ The stage names live in `src/lib/builder/site-stages.ts`. The worker maps the ru
 **Where the worker runs.** It cannot run on Vercel, because it is a long-lived process. Locally it runs next to `npm run dev`. If the local app and the deployed app share a database, a worker on your machine will also claim jobs queued from the deployed app, so only run one worker at a time. The plan for hosting is the web app on Vercel and the worker together with the runner on Fly (Node, git, Chromium and a Postgres for the per-build databases), moving to a separate Fly Machine per build.
 
 Settings: `WORKER_FAKE_STAGE_MS` sets how long each stage of the practice build lasts (default 4000).
+
+## Generates access codes
+DATABASE_URL='<DATABASE_URL_REPLACE>'  npm run code -- create --label aashita --builds 2
+DATABASE_URL='<DATABASE_URL_REPLACE>' npm run code -- list
