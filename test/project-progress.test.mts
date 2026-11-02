@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { siteProgress, modelLabel } from "../src/lib/builder/project-progress";
+import { DONE_STAGE } from "../src/lib/builder/site-stages";
+const st = (phase: string, build?: object) => ({ phase, site: build ? { brief: {}, build } : undefined }) as never;
+const t = new Date().toISOString();
+assert.deepEqual(siteProgress(st("intake")), { active: 0, live: false, failed: false });
+assert.deepEqual(siteProgress(st("build")), { active: 1, live: false, failed: false });
+assert.equal(siteProgress(st("build", { stage: 2, startedAt: t, files: 3 })).active, 1);
+assert.equal(siteProgress(st("build", { stage: 4, startedAt: t, files: 3 })).active, 2);
+assert.deepEqual(siteProgress(st("build", { stage: DONE_STAGE, startedAt: t, files: 3 })), { active: 3, live: true, failed: false });
+assert.equal(siteProgress(st("build", { stage: 1, startedAt: t, files: 3, failedStage: 1, error: "x" })).failed, true);
+assert.equal(modelLabel("claude-sonnet-5-5"), "Claude Sonnet 5.5");
+assert.equal(modelLabel("claude-opus-5"), "Claude Opus 5");
+assert.equal(modelLabel("other"), "other");
+console.log("PASS project-progress");
