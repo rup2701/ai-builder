@@ -53,79 +53,89 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
 
 
   return (
-    <main className="mx-auto flex min-h-[100dvh] w-full max-w-[26rem] flex-col justify-center px-4 py-12">
-      <div className="flex items-center justify-between">
-        <p className="text-base font-medium tracking-tight">Appnomics</p>
-        <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/70">Private beta</span>
-      </div>
-
-      <div className="mt-6 rounded-3xl border border-border bg-card p-6 sm:p-8">
-        <h1 className="text-3xl leading-tight">Sign in to start building</h1>
-        {error && (
-          <div role="alert" data-testid="signin-error" className="mt-5 flex gap-2.5 rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3 text-sm leading-relaxed text-destructive">
-            <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 8v5M12 16.5v.01" />
-            </svg>
-            <p>
-              {error === "BadCode"
-                ? "That access code isn't valid, or it has already been used. Check it and try again."
-                : "That email isn't on the list yet. Enter your access code and try again."}
-            </p>
-          </div>
-        )}
-
-        <div className="mt-6 space-y-4">
-          {google && (
-            <form action={googleAction} className="space-y-4">
-              <div>
-                <label htmlFor="code" className="text-sm font-medium">
-                  Access code
-                </label>
-                <Input
-                  id="code"
-                  name="code"
-                  type="text"
-                  autoComplete="off"
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                  aria-describedby="code-hint"
-                  placeholder="NAME-XXXX-XXXX-XXXX"
-                  className="mt-1.5 h-11 uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal"
-                />
-                <p id="code-hint" className="mt-1.5 text-xs text-foreground/60">
-                  First time here? Enter the code you were sent. Signing in again? Leave it empty.
-                </p>
-              </div>
-              <Button type="submit" variant="outline" className="h-11 w-full gap-3 border-[#dadce0] bg-white text-[#1f1f1f] hover:bg-[#f8f9fa] hover:text-[#1f1f1f]">
-                <GoogleMark />
-                Continue with Google
-              </Button>
-              <p className="text-center text-sm text-foreground/60">
-                No code?{" "}
-                <a href={REQUEST_ACCESS_HREF} className="text-foreground underline underline-offset-4 hover:no-underline">
-                  Request access
-                </a>
-              </p>
-            </form>
-          )}
-          {dev && (
-            <form action={devAction} className="space-y-2 border-t border-border pt-4">
-              <label htmlFor="email" className="text-sm">
-                Email (development sign-in)
-              </label>
-              <Input id="email" name="email" type="email" required placeholder="you@example.com" />
-              <Input name="code" type="text" autoComplete="off" placeholder="Access code (first time only)" aria-label="Access code" />
-              <Button type="submit" variant="outline" className="w-full">
-                Sign in
-              </Button>
-            </form>
-          )}
-          {!google && !dev && <p className="text-sm text-foreground/70">No sign-in method is configured. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET.</p>}
+    <main className="grid min-h-[100dvh] lg:grid-cols-2">
+      <section className="relative flex min-h-[100dvh] flex-col justify-center px-6 py-24 sm:px-10">
+        <div className="absolute inset-x-6 top-6 flex items-center justify-between sm:inset-x-10 sm:top-8 lg:top-8">
+          <p className="text-base font-medium tracking-tight">Appnomics</p>
+          <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/70">Private beta</span>
         </div>
-      </div>
 
-      <p className="mt-4 text-center text-xs text-foreground/55">Google is only used to sign you in.</p>
+        <div className="mx-auto w-full max-w-[24rem]">
+          <h1 className="text-3xl leading-tight">Sign in to start building</h1>
+          {error && (
+            <div role="alert" data-testid="signin-error" className="mt-5 flex gap-2.5 rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3 text-sm leading-relaxed text-destructive">
+              <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8v5M12 16.5v.01" />
+              </svg>
+              <p>
+                {error === "BadCode"
+                  ? "That access code isn't valid, or it has already been used. Check it and try again."
+                  : "That email isn't on the list yet. Enter your access code and try again."}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-8 space-y-4">
+            {google && (
+              <form action={googleAction} className="space-y-4">
+                <div>
+                  <label htmlFor="code" className="text-sm font-medium">
+                    Access code
+                  </label>
+                  <Input
+                    id="code"
+                    name="code"
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    aria-describedby="code-hint"
+                    placeholder="NAME-XXXX-XXXX-XXXX"
+                    className="mt-1.5 h-11 uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal"
+                  />
+                  <p id="code-hint" className="mt-1.5 text-xs text-foreground/60">
+                    First time here? Enter the code you were sent. Signing in again? Leave it empty.
+                  </p>
+                </div>
+                <Button type="submit" variant="outline" className="h-11 w-full gap-3 border-[#dadce0] bg-white text-[#1f1f1f] hover:bg-[#f8f9fa] hover:text-[#1f1f1f]">
+                  <GoogleMark />
+                  Continue with Google
+                </Button>
+                <p className="text-center text-sm text-foreground/60">
+                  No code?{" "}
+                  <a href={REQUEST_ACCESS_HREF} className="text-foreground underline underline-offset-4 hover:no-underline">
+                    Request access
+                  </a>
+                </p>
+              </form>
+            )}
+            {dev && (
+              <form action={devAction} className="space-y-2 border-t border-border pt-4">
+                <label htmlFor="email" className="text-sm">
+                  Email (development sign-in)
+                </label>
+                <Input id="email" name="email" type="email" required placeholder="you@example.com" />
+                <Input name="code" type="text" autoComplete="off" placeholder="Access code (first time only)" aria-label="Access code" />
+                <Button type="submit" variant="outline" className="w-full">
+                  Sign in
+                </Button>
+              </form>
+            )}
+            {!google && !dev && <p className="text-sm text-foreground/70">No sign-in method is configured. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET.</p>}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-foreground/55">Google is only used to sign you in.</p>
+        </div>
+      </section>
+
+      {/* Just the picture: one of our own builds, running off the right edge. Hidden on phones and tablets. */}
+      <aside aria-hidden="true" data-testid="signin-art" className="hidden items-center bg-white lg:flex lg:pl-24">
+        <div
+          className="h-[min(62vh,40rem)] w-full rounded-l-[32px] bg-cover bg-left-top bg-no-repeat"
+          style={{ backgroundImage: "url(/images/signin-hero.webp)" }}
+        />
+      </aside>
     </main>
   );
 }
