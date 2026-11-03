@@ -27,7 +27,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
   const { idea, kind, error } = await searchParams;
   // Your idea travels with the sign-in, so it is still there when you arrive.
   const newParams = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}) }).toString();
-  const target = newParams ? `/new?${newParams}` : "/projects";
+  const target = newParams ? `/new?${newParams}` : "/";
   // Decide by whether this person may still use the builder, not by whether a session cookie exists:
   // after a code is revoked the cookie is still there, and sending them on would loop back here.
   if (await getUser()) redirect(target);

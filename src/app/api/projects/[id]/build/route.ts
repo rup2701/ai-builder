@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import type { SiteBuild, WorkspaceState } from "@/lib/workspace/types";
 import { isBuildFailedText } from "@/lib/builder/site-stages";
-import { buildLimitFor } from "@/lib/access-code";
+import { buildAllowance } from "@/lib/builds";
 
 export const dynamic = "force-dynamic";
 
@@ -35,17 +35,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     .limit(1);
   if (running.length) return NextResponse.json({ error: "A build is already queued." }, { status: 409 });
 
-  // Optional cap on builds per person (SITE_BUILD_LIMIT; 0 or unset means no cap). Failed builds do not count.
+  // Optional cap on builds per person (SITE_BUILD_LIMIT; 0 or unset means no cap). Failed builds and publish retries do not count.
   // A person's access code can carry its own limit, which replaces the global one.
-  const limit = (await buildLimitFor(user.id)) ?? Number(process.env.SITE_BUILD_LIMIT ?? 0);
-  const exempt = (process.env.SITE_BUILD_LIMIT_EXEMPT ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
-  if (!publishOnly && limit > 0 && !exempt.includes((user.email ?? "").toLowerCase())) {
-    const [{ n }] = await db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(schema.jobs)
-      .innerJoin(schema.projects, eq(schema.projects.id, schema.jobs.projectId))
-      .where(and(eq(schema.projects.ownerId, user.id), eq(schema.jobs.type, "site_build"), ne(schema.jobs.status, "failed")));
-    if (n >= limit) {
+  if (!publishOnly) {
+    const { limit, used } = await buildAllowance(user.id, user.email ?? null);
+    if (limit > 0 && used >= limit) {
       return NextResponse.json({ error: `You have used your ${limit} site builds for now.` }, { status: 429 });
     }
   }
