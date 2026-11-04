@@ -154,15 +154,12 @@ export default function NewProject() {
                 </span>
                 <span className="mt-3 block truncate pl-2 text-sm text-foreground">{t.caption}</span>
               </button>
-              {t.soon ? (
-                <span className="block pl-2 text-left text-xs text-foreground/50">Coming soon</span>
-              ) : (
-                t.demos?.map((d) => (
-                  <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs underline-offset-4 hover:underline">
-                    {d.label} ↗
-                  </a>
-                ))
-              )}
+              {t.soon && <span className="block pl-2 text-left text-xs text-foreground/50">Coming soon</span>}
+              {t.demos?.map((d) => (
+                <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs underline-offset-4 hover:underline">
+                  {d.label} ↗
+                </a>
+              ))}
             </li>
           );
         })}

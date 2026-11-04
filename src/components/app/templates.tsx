@@ -67,7 +67,7 @@ export type Template = {
 export const STORE_TEMPLATES: Template[] = [
   { id: "fernhollow", caption: "Handmade goods", text: "A handmade ceramics store with mugs, bowls and custom engraving", image: "/images/fernhollow-store-template.png", art: <CeramicsArt />, demos: [{ label: "Fernhollow", url: "https://fernhollow.store" }] },
   { id: "boutique", caption: "Designer fashion", text: "A boutique clothing shop with seasonal drops and local pickup", image: "/images/aldervale-template.png", art: <BoutiqueArt />, demos: [{ label: "Alder & Vale", url: "https://aldervale.appnomics.live" }] },
-  { id: "art", caption: "Art and portfolio", text: "A portfolio and shop for a painter", image: "/images/avant-store-template.png", art: <PortfolioArt />, demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }] },
+  { id: "art", caption: "Art and prints", text: "A shop for a painter selling original work and prints", art: <PortfolioArt />, soon: true },
 ];
 
 export const SITE_TEMPLATES: Template[] = [
@@ -93,6 +93,8 @@ export const SITE_TEMPLATES: Template[] = [
     id: "website-portfolio",
     caption: "Portfolio site",
     text: "A personal portfolio website with selected projects, an about section and a contact form",
+    image: "/images/avant-store-template.png",
+    demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }],
     soon: true,
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-sky-50 p-5 text-sky-950 sm:p-8">
