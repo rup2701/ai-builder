@@ -14,6 +14,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { briefCard, siteSlug } from "../src/lib/builder/site-brief";
 import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder/site-stages";
+import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
@@ -72,8 +73,13 @@ export function nameCandidates(siteName: string, rand: () => string = () => rand
 export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
   const items = c.unconfirmed.map((u) => `Make sure this is true before you publish it: "${u}"`);
-  items.push("The headline, benefits and thank-you wording were drafted for you. Read them and change anything that isn't right.");
-  items.push("Images are designed placeholders. Image uploads need a Blob store connected to the site's Vercel project; until then the owner area says uploads are not available.");
+  if ((brief.site as { kind?: string } | undefined)?.kind === "saas") {
+    items.push("The headline, pills, steps and success message were drafted for you. Read them and change anything that isn't right.");
+    items.push("Images are designed placeholders. To change any wording or add an image later, ask the builder in the chat.");
+  } else {
+    items.push("The headline, benefits and thank-you wording were drafted for you. Read them and change anything that isn't right.");
+    items.push("Images are designed placeholders. Image uploads need a Blob store connected to the site's Vercel project; until then the owner area says uploads are not available.");
+  }
   items.push("The site starts with sample sign-ups, labelled as samples. Delete them in the owner area before real use.");
   return items;
 }
@@ -161,9 +167,10 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       }
     }, Number(env.WORKER_FILES_MS ?? 6000));
 
+    const saasPack = (brief.site as { kind?: string } | undefined)?.kind === "saas";
     const created = await runProcess(
       "npm",
-      ["run", "create", "--", `A waitlist website for ${siteName}`, "--specs", "vertical-packs/site/specs", "--brief", path.relative(runner, briefFile)],
+      ["run", "create", "--", `A ${saasPack ? "product" : "waitlist"} website for ${siteName}`, "--specs", `vertical-packs/${saasPack ? "saas" : "site"}/specs`, "--brief", path.relative(runner, briefFile)],
       {
         cwd: runner,
         env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_BUILD_MAX_USD ?? "8" },
@@ -254,6 +261,8 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     site: { brief: s.site!.brief, build },
   };
   await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+  // The email is a courtesy, sent after everything is saved. It must never fail the build.
+  await notifyBuildEnd(env, build.notifyEmail, { kind: "done", siteName, projectUrl: projectLink(env, job.project_id), siteUrl: url! }).catch(() => {});
 }
 
 /**

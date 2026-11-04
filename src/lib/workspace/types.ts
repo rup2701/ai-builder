@@ -33,6 +33,8 @@ export type WorkspaceState = {
   jobId: string | null;
   /** Website projects: the brief the interview saved (the runner's brief.json). */
   site?: { brief: Record<string, unknown>; build?: SiteBuild };
+  /** Which website pack the interview and build use. Missing means the waitlist pack. */
+  sitePack?: "waitlist" | "saas";
 };
 
 /** Progress of a website build, written by the worker and read by the side pane. */

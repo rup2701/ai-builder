@@ -90,10 +90,23 @@ export const SITE_TEMPLATES: Template[] = [
     ),
   },
   {
+    id: "website-saas",
+    caption: "SaaS site",
+    text: "A product website for ___, with pricing, how it works and a sign-up box.",
+    soon: true,
+    art: (
+      <div className="flex h-full flex-col justify-center gap-3 bg-indigo-50 p-5 text-indigo-950 sm:p-8">
+        <span className="font-mono text-[10px]">YOUR PRODUCT</span>
+        <span className="text-lg leading-tight sm:text-2xl">Get started<br />in minutes.</span>
+        <span className="h-6 w-3/4 rounded-full bg-white" />
+      </div>
+    ),
+  },
+  {
     id: "website-portfolio",
     caption: "Portfolio site",
     text: "A personal portfolio website with selected projects, an about section and a contact form",
-    // image: "/images/avant-store-template.png",
+    image: "/images/avant-store-template.png",
     demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }],
     soon: true,
     art: (

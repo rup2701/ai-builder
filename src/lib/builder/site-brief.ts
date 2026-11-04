@@ -24,10 +24,35 @@ export const SiteBrief = z
     }
   });
 
-export type SiteBriefT = z.infer<typeof SiteBrief>;
+/** The SaaS product site brief: same envelope, different blocks, and a single-email signup instead of a waitlist form. */
+export const SaasBrief = z
+  .object({
+    site: z.object({ name: z.string().trim().min(1).max(60), kind: z.literal("saas") }).passthrough(),
+    audience: z.object({ icp: z.string().trim().min(5) }).passthrough(),
+    blocks: z.array(Block).min(4),
+    signup: z.object({ fields: z.array(z.object({ key: z.string(), type: z.string() }).passthrough()).min(1) }).passthrough(),
+    claims: z.array(z.object({ text: z.string().min(1), confirmed: z.boolean() }).passthrough()).default([]),
+    look: z.object({}).passthrough(),
+  })
+  .passthrough()
+  .superRefine((b, ctx) => {
+    const types = b.blocks.map((x) => x.type);
+    for (const need of ["hero", "cta", "footer"]) {
+      if (!types.includes(need)) ctx.addIssue({ code: "custom", message: `blocks must include a "${need}" block` });
+    }
+    if (!b.signup.fields.some((f) => f.key === "email")) ctx.addIssue({ code: "custom", path: ["signup", "fields"], message: 'signup must have an "email" field' });
+    // Content only from the owner: a block that needs content must have it.
+    for (const blk of b.blocks as Record<string, any>[]) {
+      if (blk.type === "pricing" && !(blk.contact_only || (Array.isArray(blk.plans) && blk.plans.length))) ctx.addIssue({ code: "custom", message: "a pricing block needs plans or contact_only; leave it out if the owner gave no pricing" });
+      if (blk.type === "testimonials" && !(Array.isArray(blk.items) && blk.items.length)) ctx.addIssue({ code: "custom", message: "a testimonials block needs quotes the owner gave; leave it out otherwise" });
+    }
+  });
 
-export function validateSiteBrief(input: unknown): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
-  const r = SiteBrief.safeParse(input);
+export type SiteBriefT = z.infer<typeof SiteBrief>;
+export type SitePack = "waitlist" | "saas";
+
+export function validateSiteBrief(input: unknown, pack: SitePack = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
+  const r = (pack === "saas" ? SaasBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };
   const lines = r.error.issues.slice(0, 6).map((i) => `${i.path.join(".") || "brief"}: ${i.message}`);
   return { ok: false, error: `The brief is not valid. Fix these and call save_brief again:\n${lines.join("\n")}` };
@@ -40,7 +65,11 @@ export const siteSlug = (name: string) =>
 export function briefCard(b: Record<string, unknown>) {
   const blocks = ((b.blocks as Record<string, unknown>[] | undefined) ?? []);
   const get = (t: string) => blocks.find((x) => x.type === t) as Record<string, any> | undefined;
-  const hero = get("hero"), preview = get("preview"), benefits = get("benefits"), tools = get("integrations"), wl = get("waitlist");
+  const hero = get("hero"), preview = get("preview") ?? get("visual"), tools = get("integrations");
+  const pills = get("pills");
+  // The SaaS pack shows its pills where the waitlist pack shows benefits, and its signup where the waitlist has a form.
+  const benefits = get("benefits") ?? (pills ? { items: ((pills.items as { text: string }[] | undefined) ?? []).map((i) => ({ title: i.text, text: "" })) } : undefined);
+  const wl = get("waitlist") ?? ((b.signup as Record<string, any> | undefined) ? { form: b.signup } : undefined);
   const site = (b.site ?? {}) as Record<string, any>;
   const aud = (b.audience ?? {}) as Record<string, any>;
   const claims = ((b.claims as { text: string; confirmed: boolean }[] | undefined) ?? []);
