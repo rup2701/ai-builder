@@ -93,7 +93,7 @@ export const SITE_TEMPLATES: Template[] = [
     id: "website-portfolio",
     caption: "Portfolio site",
     text: "A personal portfolio website with selected projects, an about section and a contact form",
-    image: "/images/avant-store-template.png",
+    // image: "/images/avant-store-template.png",
     demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }],
     soon: true,
     art: (

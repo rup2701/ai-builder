@@ -62,7 +62,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
         </div>
 
         <div className="mx-auto w-full max-w-[24rem]">
-          <h1 className="text-3xl leading-tight">Sign in to start building</h1>
+          <h1 className="text-3xl leading-tight">Sign in</h1>
           {error && (
             <div role="alert" data-testid="signin-error" className="mt-5 flex gap-2.5 rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3 text-sm leading-relaxed text-destructive">
               <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
