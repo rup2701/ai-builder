@@ -9,6 +9,7 @@ import { Pool } from "pg";
 import { finishBuild, BUILD_STEPS } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
+import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
@@ -97,6 +98,8 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
       site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: s.site.build.error ?? message.slice(0, 300) } },
     };
     await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(back)]);
+    const name = (s.site.brief?.site as { name?: string } | undefined)?.name ?? "Your site";
+    await notifyBuildEnd(process.env, s.site.build.notifyEmail, { kind: "failed", siteName: name, projectUrl: projectLink(process.env, job.project_id), stageLabel: label, retryPublish: stage === 4 && Boolean(s.site.build.runDir) }).catch(() => {});
   } else if (s) {
     const back: WorkspaceState = {
       ...s,
