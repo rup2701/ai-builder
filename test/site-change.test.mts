@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { changeLimit, changesUsed, cleanInstruction, isOpen, siteIsLive, changeMsgs } from "../src/lib/builder/site-change";
-import { lastFinal, parseFinal, patchChangeMsg } from "../worker/site-change";
+import { changeLimit, changesUsed, cleanInstruction, isOpen, needsAnswer, siteIsLive, changeMsgs, MAX_REVISIONS } from "../src/lib/builder/site-change";
+import { instructionFor, lastFinal, parseFinal, patchChangeMsg } from "../worker/site-change";
 import { initialState } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
 
@@ -63,12 +63,20 @@ test("patchChangeMsg updates only the message for that job", () => {
   assert.equal(a.summary, "ok");
   assert.equal(b.status, "proposed");
 });
-test("changesUsed counts running and done changes, not failed or cancelled", () => {
+test("changesUsed counts running, previewed and published changes, not failed, cancelled or removed ones", () => {
   const s = live();
-  s.msgs = ["queued", "working", "done", "failed", "cancelled", "proposed"].map((status, i) => ({ id: i + 1, kind: "site_change", instruction: "x", status } as never));
-  assert.equal(changesUsed(s), 3);
-  assert.equal(changeMsgs(s).filter(isOpen).length, 2);
+  s.msgs = ["queued", "working", "review", "publishing", "done", "failed", "cancelled", "removed", "proposed"].map((status, i) => ({ id: i + 1, kind: "site_change", instruction: "x", status } as never));
+  assert.equal(changesUsed(s), 5);
+  assert.deepEqual(changeMsgs(s).filter(isOpen).map((m) => m.status), ["queued", "working", "publishing"]);
+  assert.deepEqual(changeMsgs(s).filter(needsAnswer).map((m) => m.status), ["review"]);
 });
+test("instructionFor adds the owner's feedback to a revision", () => {
+  assert.equal(instructionFor({ instruction: "make step 3 bigger" }), "make step 3 bigger");
+  const t = instructionFor({ instruction: "make step 3 bigger", feedback: "also keep the chips" });
+  assert.ok(t.startsWith("make step 3 bigger. You already made this change"));
+  assert.ok(t.endsWith("also keep the chips"));
+});
+test("revisions are capped at three rounds", () => assert.equal(MAX_REVISIONS, 3));
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log("\nall passed");

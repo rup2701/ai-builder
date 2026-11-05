@@ -26,8 +26,14 @@ export function changeMsgs(s: WorkspaceState): ChangeMsg[] {
   return s.msgs.filter((m): m is ChangeMsg => m.kind === "site_change");
 }
 
-export const isOpen = (m: ChangeMsg) => m.status === "queued" || m.status === "working";
+/** The worker is busy with this change. */
+export const isOpen = (m: ChangeMsg) => m.status === "queued" || m.status === "working" || m.status === "publishing";
+
+/** The change is made and waiting for the owner: approve, ask for changes, or remove. */
+export const needsAnswer = (m: ChangeMsg) => m.status === "review";
+
+export const MAX_REVISIONS = 3;
 
 export function changesUsed(s: WorkspaceState): number {
-  return changeMsgs(s).filter((m) => m.status === "queued" || m.status === "working" || m.status === "done").length;
+  return changeMsgs(s).filter((m) => m.status === "queued" || m.status === "working" || m.status === "review" || m.status === "publishing" || m.status === "done").length;
 }

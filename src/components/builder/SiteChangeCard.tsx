@@ -1,50 +1,72 @@
 "use client";
 
+import { useState } from "react";
 import type { Msg } from "@/lib/workspace/types";
+import { MAX_REVISIONS } from "@/lib/builder/site-change";
 
 type ChangeMsg = Extract<Msg, { kind: "site_change" }>;
+
+export type ChangeAction = { text: string } | { confirm: number } | { cancel: number } | { approve: number } | { revise: number; text: string } | { remove: number };
 
 type Props = {
   msg: ChangeMsg;
   projectId: string;
   siteUrl?: string;
   busy: boolean;
-  onConfirm: (id: number) => void;
-  onCancel: (id: number) => void;
+  onAction: (body: ChangeAction) => void;
 };
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
+const primary = `rounded-xl bg-foreground px-4 py-2 text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
+const secondary = `rounded-xl border border-foreground/20 px-4 py-2 text-sm text-foreground transition-colors hover:bg-foreground/[0.05] disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
 
-/** One change to the live site, as it moves from proposed to done. Shows the picture from before and after when the worker took them. */
-export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onConfirm, onCancel }: Props) {
+/** One change to the live site, from the request to the preview to "live". Shows the pictures from before and after when the worker took them. */
+export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction }: Props) {
+  const [asking, setAsking] = useState(false);
+  const [feedback, setFeedback] = useState("");
   const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}`;
 
-  if (msg.status === "cancelled") {
-    return <p className="text-sm text-foreground/50">Cancelled: “{msg.instruction}”</p>;
-  }
+  if (msg.status === "cancelled") return <p className="text-sm text-foreground/50">Cancelled: “{msg.instruction}”</p>;
+  if (msg.status === "removed") return <p className="text-sm text-foreground/60">Removed: “{msg.instruction}”. Your site is as it was.</p>;
+
+  const live = msg.status === "done";
+  const pictures =
+    msg.snaps && (msg.snaps.before || msg.snaps.after) ? (
+      <div className="mt-3 space-y-3">
+        {msg.snaps.before && (
+          <figure>
+            <figcaption className="mb-1 text-xs text-foreground/60">{live ? "Before" : "Before (your live site)"}</figcaption>
+            <a href={pic("before")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pic("before")} alt="The section before the change" className="block w-full" loading="lazy" />
+            </a>
+          </figure>
+        )}
+        {msg.snaps.after && (
+          <figure>
+            <figcaption className="mb-1 text-xs text-foreground/60">{live ? "After" : "After (preview, not live yet)"}</figcaption>
+            <a href={pic("after")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={pic("after")} alt="The section after the change" className="block w-full" loading="lazy" />
+            </a>
+          </figure>
+        )}
+        <p className="text-xs text-foreground/50">Click a picture to see it full size.</p>
+      </div>
+    ) : null;
 
   return (
     <div data-testid="site-change" data-status={msg.status} className="max-w-[92%] rounded-2xl border border-foreground/10 bg-white p-4">
       {msg.status === "proposed" && (
         <>
-          <p className="text-sm font-medium text-foreground">I’ll change your live site</p>
+          <p className="text-sm font-medium text-foreground">I’ll change your site</p>
           <p className="mt-1.5 rounded-xl bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">{msg.instruction}</p>
-          <p className="mt-2 text-xs leading-relaxed text-foreground/60">It goes live when it’s done and takes a few minutes. If it doesn’t pass its checks I undo it, and your site stays as it is.</p>
+          <p className="mt-2 text-xs leading-relaxed text-foreground/60">I’ll make the change and show you a preview. Nothing goes live until you approve it.</p>
           <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onConfirm(msg.id)}
-              className={`rounded-xl bg-foreground px-4 py-2 text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
-            >
+            <button type="button" disabled={busy} onClick={() => onAction({ confirm: msg.id })} className={primary}>
               Make this change
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onCancel(msg.id)}
-              className={`rounded-xl border border-foreground/20 px-4 py-2 text-sm text-foreground transition-colors hover:bg-foreground/[0.05] disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`}
-            >
+            <button type="button" disabled={busy} onClick={() => onAction({ cancel: msg.id })} className={secondary}>
               Cancel
             </button>
           </div>
@@ -53,9 +75,18 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onConfir
 
       {(msg.status === "queued" || msg.status === "working") && (
         <div role="status" aria-live="polite">
-          <p className="text-sm font-medium text-foreground">{msg.status === "queued" ? "Waiting to start…" : "Making the change…"}</p>
-          <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.instruction}</p>
-          <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>
+          <p className="text-sm font-medium text-foreground">
+            {msg.action === "discard" ? "Removing the change…" : msg.status === "queued" ? "Waiting to start…" : msg.feedback ? "Revising the change…" : "Making the change…"}
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.feedback ?? msg.instruction}</p>
+          {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
+        </div>
+      )}
+
+      {msg.status === "publishing" && (
+        <div role="status" aria-live="polite">
+          <p className="text-sm font-medium text-foreground">Publishing to your live site…</p>
+          <p className="mt-2 text-xs text-foreground/60">This takes a couple of minutes. You can close this tab; I’ll keep going.</p>
         </div>
       )}
 
@@ -67,33 +98,68 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onConfir
         </div>
       )}
 
+      {msg.status === "review" && (
+        <>
+          <p className="text-sm font-medium text-foreground">Here’s the change. It isn’t live yet.</p>
+          {msg.note && (
+            <p role="status" className="mt-2 rounded-xl bg-foreground/[0.05] px-3 py-2 text-xs leading-relaxed text-foreground/80">
+              {msg.note}
+            </p>
+          )}
+          {pictures}
+          {!asking ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button type="button" disabled={busy} onClick={() => onAction({ approve: msg.id })} className={primary}>
+                Approve and publish
+              </button>
+              <button type="button" disabled={busy || (msg.revisions ?? 0) >= MAX_REVISIONS} onClick={() => setAsking(true)} className={secondary}>
+                Ask for changes
+              </button>
+              <button type="button" disabled={busy} onClick={() => onAction({ remove: msg.id })} className={secondary}>
+                Remove this change
+              </button>
+            </div>
+          ) : (
+            <form
+              className="mt-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const text = feedback.trim();
+                if (text.length < 5) return;
+                setAsking(false);
+                setFeedback("");
+                onAction({ revise: msg.id, text });
+              }}
+            >
+              <label htmlFor={`feedback-${msg.id}`} className="text-xs text-foreground/60">
+                What should be different? (Round {(msg.revisions ?? 0) + 1} of {MAX_REVISIONS})
+              </label>
+              <textarea
+                id={`feedback-${msg.id}`}
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+                maxLength={500}
+                autoFocus
+                className="mt-1.5 block w-full resize-none rounded-xl border border-foreground/20 bg-transparent px-3 py-2 text-base leading-snug outline-none focus:border-foreground"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button type="submit" disabled={busy || feedback.trim().length < 5} className={primary}>
+                  Send
+                </button>
+                <button type="button" onClick={() => setAsking(false)} className={secondary}>
+                  Back
+                </button>
+              </div>
+            </form>
+          )}
+        </>
+      )}
+
       {msg.status === "done" && (
         <>
-          <p className="text-sm font-medium text-foreground">Your site is updated</p>
-          {msg.summary && <p className="mt-1.5 text-sm leading-relaxed text-foreground/80">{msg.summary}</p>}
-          {msg.snaps && (msg.snaps.before || msg.snaps.after) && (
-            <div className="mt-3 space-y-3">
-              {msg.snaps.before && (
-                <figure>
-                  <figcaption className="mb-1 text-xs text-foreground/60">Before</figcaption>
-                  <a href={pic("before")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={pic("before")} alt="The section before the change" className="block w-full" loading="lazy" />
-                  </a>
-                </figure>
-              )}
-              {msg.snaps.after && (
-                <figure>
-                  <figcaption className="mb-1 text-xs text-foreground/60">After</figcaption>
-                  <a href={pic("after")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={pic("after")} alt="The section after the change" className="block w-full" loading="lazy" />
-                  </a>
-                </figure>
-              )}
-              <p className="text-xs text-foreground/50">Click a picture to see it full size.</p>
-            </div>
-          )}
+          <p className="text-sm font-medium text-foreground">Published</p>
+          {pictures}
           {siteUrl && (
             <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-block text-sm underline underline-offset-4 hover:no-underline ${focusRing}`}>
               Open your live site ↗

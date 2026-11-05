@@ -1,11 +1,15 @@
 /**
- * "Change my site": the owner asks for a change in the chat, and this job makes it on the live site.
+ * "Change my site": the owner asks for a change in the chat; this job makes it, shows a preview, and publishes only when the owner approves.
  *
- * Order: photograph the live page, run the runner's `change --site`, check it, put it live with `deploy --redeploy`,
- * photograph the changed section, and write the result into the chat message that asked for it.
- * A change that fails its checks, or does not publish, is rolled back, so the live site stays as it was.
- * This job never throws for a failed change: it records the failure on the message and returns { ok: false }.
+ * One chat message (kind "site_change") carries the whole story, and its `action` says what a job does next:
+ *   make     photograph the live page, run the runner's `change --site`, require typecheck and build to pass, start the changed
+ *            site locally, photograph the section that changed, and stop at "review". Nothing is live yet.
+ *   publish  `deploy --redeploy`. If it does not publish, the message goes back to "review" and the live site is untouched.
+ *   discard  put the code back to how it was before the change ("remove this change").
+ * A revision ("ask for changes") is another `make` on top of the earlier change, with the owner's feedback added.
+ * These jobs never throw for a failed change: they record it on the message and return { ok: false }.
  */
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -21,7 +25,7 @@ export type ChangeResult = { ok: boolean; error?: string };
 /** The agent ends its last reply with "VIEW: #section-id" or "VIEW: top". Returns the plain sentence(s) and the anchor (no #). */
 export function parseFinal(text: string): { summary: string; anchor: string } {
   const m = /^\s*VIEW:\s*#?([A-Za-z][\w-]*|top)\s*$/im.exec(text);
-  const anchor = m ? m[1].toLowerCase() === "top" ? "top" : m[1] : "top";
+  const anchor = m ? (m[1].toLowerCase() === "top" ? "top" : m[1]) : "top";
   const summary = text.replace(/^\s*VIEW:.*$/gim, "").replace(/\s+/g, " ").trim().slice(0, 500);
   return { summary, anchor };
 }
@@ -41,6 +45,12 @@ export function lastFinal(transcript: string): string {
   return "";
 }
 
+/** What the agent is told. A first change is the owner's request. A revision adds the owner's feedback on the change already made. */
+export function instructionFor(m: Pick<SiteChangeMsg, "instruction" | "feedback">): string {
+  if (!m.feedback) return m.instruction;
+  return `${m.instruction}. You already made this change and committed it; it is not live yet. The owner looked at the preview and asks for this revision: ${m.feedback}`;
+}
+
 /** Replace one chat message in a saved state. Returns the same state when the message is not there. */
 export function patchChangeMsg(s: WorkspaceState, jobId: string, patch: Partial<SiteChangeMsg>): WorkspaceState {
   return { ...s, msgs: s.msgs.map((m) => (m.kind === "site_change" && m.jobId === jobId ? ({ ...m, ...patch } as Msg) : m)) };
@@ -53,9 +63,13 @@ async function setMsg(db: Db, projectId: string, jobId: string, patch: Partial<S
   await db.query(`UPDATE projects SET state = $2, updated_at = now() WHERE id = $1`, [projectId, JSON.stringify(next)]);
 }
 
-/** For a change cut off by a restart: say so on the message, without the build-failure wording `fail` uses. */
+/** For a job cut off by a restart or a crash: say so on the message, without the build-failure wording `fail` uses. */
 export async function failSiteChangeMsg(db: Db, job: Job, message: string) {
-  await setMsg(db, job.project_id, job.id, { status: "failed", error: message.slice(0, 300) }).catch(() => {});
+  const { rows } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]).catch(() => ({ rows: [] as { state: WorkspaceState }[] }));
+  const m = (rows[0]?.state as WorkspaceState | undefined)?.msgs.find((x): x is SiteChangeMsg => x.kind === "site_change" && x.jobId === job.id);
+  // A change that was already shown in a preview goes back to the preview; its code is still on the worker.
+  const back = m && (m.action === "publish" || (m.action === "make" && m.feedback)) ? { status: "review" as const, note: message.slice(0, 300) } : { status: "failed" as const, error: message.slice(0, 300) };
+  await setMsg(db, job.project_id, job.id, { ...back, action: undefined }).catch(() => {});
 }
 
 const run = (cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) => runProcess(cmd, args, { cwd, env });
@@ -67,14 +81,52 @@ async function snap(appDir: string, url: string, outDir: string, anchor: string 
   return r.code === 0;
 }
 
+/**
+ * The changed site, before it is live: start the built site on a spare port with a clean environment (no tokens, no keys),
+ * photograph the section, and stop it. The site was just built by the runner's checks, so `next start` has what it needs.
+ */
+async function previewSnap(appDir: string, outDir: string, anchor: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+  const next = path.join(appDir, "node_modules", "next", "dist", "bin", "next");
+  if (!existsSync(next)) return false;
+  const port = 3200 + Math.floor(Math.random() * 600);
+  const clean: NodeJS.ProcessEnv = { NODE_ENV: "production", PORT: String(port) };
+  for (const k of ["PATH", "HOME", "USER", "LANG", "TMPDIR", "NODE_PATH"]) if (env[k]) clean[k] = env[k];
+  const child = spawn("node", [next, "start", "-p", String(port)], { cwd: appDir, env: clean, stdio: "ignore", detached: true });
+  try {
+    const url = `http://127.0.0.1:${port}`;
+    let up = false;
+    for (let i = 0; i < 60 && !up; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      up = await fetch(url).then((r) => r.ok, () => false);
+    }
+    return up ? await snap(appDir, url, outDir, anchor, env) : false;
+  } finally {
+    try {
+      if (child.pid) process.kill(-child.pid, "SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
+  }
+}
+
 const b64 = async (file: string) => (existsSync(file) ? (await readFile(file)).toString("base64") : null);
+
+const SAFE_SHA = /^[0-9a-f]{7,40}$/;
 
 export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env): Promise<ChangeResult> {
   const runner = env.RUNNER_DIR;
   const tmp = path.join(os.tmpdir(), `site-change-${job.id}`);
+  let action: "make" | "publish" | "discard" = "make";
+  let isRevision = false;
+  let beforeShot: Promise<boolean> = Promise.resolve(false);
   // The owner sees the plain message; the job record also keeps the technical detail.
   const bad = async (message: string, detail = ""): Promise<ChangeResult> => {
-    await failSiteChangeMsg(db, job, message);
+    await setMsg(db, job.project_id, job.id, { status: "failed", error: message.slice(0, 300), action: undefined });
+    return { ok: false, error: detail ? `${message} [${detail.slice(0, 400)}]` : message };
+  };
+  // A failure after the owner has already seen a preview puts them back at the preview, with a line saying what happened.
+  const backToReview = async (message: string, detail = ""): Promise<ChangeResult> => {
+    await setMsg(db, job.project_id, job.id, { status: "review", note: message.slice(0, 300), action: undefined });
     return { ok: false, error: detail ? `${message} [${detail.slice(0, 400)}]` : message };
   };
   try {
@@ -87,42 +139,64 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     if (!msg || !runDir || !url) return await bad("This site has no saved build to change.");
     const appDir = path.join(runDir, "app");
     if (!existsSync(appDir)) return await bad("The finished site is no longer on the worker, so it cannot be changed. It has to be built again.");
-
-    await setMsg(db, job.project_id, job.id, { status: "working" });
-    await mkdir(tmp, { recursive: true });
+    action = msg.action ?? "make";
+    isRevision = Boolean(msg.feedback);
+    const rel = path.relative(runner, runDir);
     const cleanEnv = { ...env };
 
-    // 1. Before: one picture per section of the live page. Best effort; a change never waits on a picture.
-    const beforeDir = path.join(tmp, "before");
-    await snap(appDir, url, beforeDir, undefined, cleanEnv).catch(() => false);
-
-    // 2. Remember where the code is, so a bad change can be rolled back.
-    const head = (await run("git", ["-C", appDir, "rev-parse", "HEAD"], appDir, cleanEnv)).out.trim();
-    const rollback = async () => {
-      if (!/^[0-9a-f]{7,40}$/.test(head)) return;
-      await run("git", ["-C", appDir, "reset", "--hard", head], appDir, cleanEnv);
-      await run("git", ["-C", appDir, "clean", "-fd"], appDir, cleanEnv);
+    const gitHead = async () => (await run("git", ["-C", appDir, "rev-parse", "HEAD"], appDir, cleanEnv)).out.trim();
+    const rollbackTo = async (sha: string | undefined) => {
+      if (!sha || !SAFE_SHA.test(sha)) return false;
+      await run("git", ["-C", appDir, "reset", "--hard", sha], appDir, cleanEnv);
+      await run("git", ["-C", appDir, "clean", "-fd"], appDir, cleanEnv); // ignored files (node_modules, .env, .next) stay
+      return true;
     };
 
-    // 3. The change itself. The instruction goes before --site: the runner reads the word after a flag as that flag's value.
-    const rel = path.relative(runner, runDir);
-    const changed = await runProcess("npm", ["run", "change", "--", rel, msg.instruction, "--site"], {
+    // ---- remove this change ----
+    if (action === "discard") {
+      if (!(await rollbackTo(msg.baseHead))) return await backToReview("I could not find the code from before this change, so I left it as it is.");
+      await setMsg(db, job.project_id, job.id, { status: "removed", action: undefined, note: undefined });
+      return { ok: true };
+    }
+
+    // ---- publish the change the owner approved ----
+    if (action === "publish") {
+      await setMsg(db, job.project_id, job.id, { status: "publishing" });
+      // Publish what the owner saw: the last commit, without leftovers from a revision that was cut off.
+      await run("git", ["-C", appDir, "reset", "--hard", "HEAD"], appDir, cleanEnv);
+      await run("git", ["-C", appDir, "clean", "-fd"], appDir, cleanEnv);
+      const deployed = await runProcess("npm", ["run", "deploy", "--", rel, "--redeploy"], { cwd: runner, env });
+      if (deployed.code !== 0) return await backToReview("It did not publish. Your live site is unchanged. You can try again, or remove the change.", tail(deployed.out, 300));
+      await setMsg(db, job.project_id, job.id, { status: "done", action: undefined, note: undefined });
+      return { ok: true };
+    }
+
+    // ---- make the change (or revise it) ----
+    await setMsg(db, job.project_id, job.id, { status: "working" });
+    await mkdir(tmp, { recursive: true });
+
+    // 1. Before: one picture per section of the live page (which is still the old version). Best effort, and it runs
+    // alongside the agent's first minutes of reading, so it adds no waiting time. It is awaited before the pictures are read.
+    const beforeDir = path.join(tmp, "before");
+    beforeShot = snap(appDir, url, beforeDir, undefined, cleanEnv).catch(() => false);
+
+    // 2. Remember where the code is: the start of this job (a failed revision returns here) and the start of the whole change.
+    const startHead = await gitHead();
+    const baseHead = msg.baseHead && SAFE_SHA.test(msg.baseHead) ? msg.baseHead : startHead;
+
+    // 3. The change. The instruction goes before --site: the runner reads the word after a flag as that flag's value.
+    const changed = await runProcess("npm", ["run", "change", "--", rel, instructionFor(msg), "--site"], {
       cwd: runner,
       env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_CHANGE_MAX_USD ?? "3", RUNNER_MAX_TURNS: env.WORKER_CHANGE_MAX_TURNS ?? "90" },
     });
+    const undoAndFail = async (message: string, detail = "") => {
+      await rollbackTo(startHead);
+      return isRevision ? await backToReview(`${message} The earlier version of the change is still in the preview.`, detail) : await bad(`${message} Your site is unchanged.`, detail);
+    };
     const summary = parseSummary(changed.out);
-    if (changed.code !== 0 || !summary) {
-      await rollback();
-      return await bad("The change did not finish, so I undid it. Your site is unchanged.", tail(changed.out, 300));
-    }
-    if (summary.stopReason !== "finished") {
-      await rollback();
-      return await bad(`The change stopped early (${summary.stopReason}), so I undid it. Your site is unchanged.`);
-    }
-    if (!summary.checks?.typecheck || !summary.checks?.build) {
-      await rollback();
-      return await bad("The change did not pass the checks, so I undid it. Your site is unchanged.");
-    }
+    if (changed.code !== 0 || !summary) return await undoAndFail("The change did not finish, so I undid it.", tail(changed.out, 300));
+    if (summary.stopReason !== "finished") return await undoAndFail(`The change stopped early (${summary.stopReason}), so I undid it.`);
+    if (!summary.checks?.typecheck || !summary.checks?.build) return await undoAndFail("The change did not pass the checks, so I undid it.");
     const t = summary.tokens ?? {};
     await db
       .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'site_change', $3, $4, $5, $6)`, [
@@ -135,19 +209,12 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       ])
       .catch(() => {});
 
-    // 4. Put it live. If publishing fails, the old site is still what visitors see; put the code back to match.
-    const deployed = await runProcess("npm", ["run", "deploy", "--", rel, "--redeploy"], { cwd: runner, env });
-    if (deployed.code !== 0) {
-      await rollback();
-      return await bad("The change was made but did not publish, so I undid it. Your site is unchanged.", tail(deployed.out, 300));
-    }
-
-    // 5. After: the section that changed, and the matching "before".
+    // 4. Preview: the changed section, from the site started locally. Nothing is live.
     const transcript = await readFile(path.join(runDir, "transcript.jsonl"), "utf8").catch(() => "");
     const { summary: said, anchor } = parseFinal(lastFinal(transcript));
-    await new Promise((r) => setTimeout(r, 4000)); // let the new version reach visitors
     const afterDir = path.join(tmp, "after");
-    const okAfter = await snap(appDir, url, afterDir, anchor, cleanEnv).catch(() => false);
+    const okAfter = await previewSnap(appDir, afterDir, anchor, cleanEnv).catch(() => false);
+    await beforeShot;
     const before = (await b64(path.join(beforeDir, `${anchor}.jpg`))) ?? (anchor === "top" ? await b64(path.join(beforeDir, "top.jpg")) : null);
     const after = okAfter ? await b64(path.join(afterDir, "after.jpg")) : null;
     const log = [
@@ -157,15 +224,22 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     if (log.length) await db.query(`UPDATE jobs SET log = log || $2::jsonb WHERE id = $1`, [job.id, JSON.stringify(log)]);
 
     await setMsg(db, job.project_id, job.id, {
-      status: "done",
-      summary: said || "The change is live.",
+      status: "review",
+      action: undefined,
+      baseHead,
+      feedback: undefined,
+      note: after ? undefined : "I could not make a preview picture, but the change passed its checks.",
+      summary: said || "The change is ready.",
       snaps: { before: Boolean(before), after: Boolean(after) },
+      snapJobId: log.length ? job.id : undefined,
       anchor,
     });
     return { ok: true };
   } catch (e) {
-    return await bad(e instanceof Error ? e.message : String(e));
+    const message = e instanceof Error ? e.message : String(e);
+    return action === "publish" || (action === "make" && isRevision) ? await backToReview(message) : await bad(message);
   } finally {
+    await beforeShot.catch(() => false); // never delete the folder while the picture is still being taken
     await rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -23,7 +23,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!Number.isInteger(msgId) || (which !== "before" && which !== "after")) return new NextResponse("Bad request.", { status: 400 });
 
   const m = (p.state as WorkspaceState).msgs.find((x) => x.id === msgId && x.kind === "site_change");
-  const jobId = m && m.kind === "site_change" ? m.jobId : undefined;
+  const jobId = m && m.kind === "site_change" ? (m.snapJobId ?? m.jobId) : undefined;
   if (!jobId) return new NextResponse("Not found.", { status: 404 });
 
   const [job] = await db

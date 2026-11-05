@@ -6,7 +6,7 @@ import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import { pushMsg } from "@/lib/workspace/state";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
-import { changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MIN_INSTRUCTION, siteIsLive } from "@/lib/builder/site-change";
+import { changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +14,21 @@ const Body = z.union([
   z.object({ text: z.string().min(1).max(2000) }),
   z.object({ confirm: z.number().int() }),
   z.object({ cancel: z.number().int() }),
+  z.object({ approve: z.number().int() }),
+  z.object({ revise: z.number().int(), text: z.string().min(1).max(2000) }),
+  z.object({ remove: z.number().int() }),
 ]);
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
 /**
- * Changes to a live website, asked for in the chat.
- *   { text }     proposes a change: the chat shows it with a "Make this change" button. Nothing runs yet.
- *   { confirm }  queues it for the worker.
- *   { cancel }   drops a proposal.
+ * Changes to a live website, asked for in the chat. One change moves through these steps:
+ *   { text }             proposes a change: the chat shows it with a "Make this change" button. Nothing runs yet.
+ *   { confirm } / { cancel }   start it, or drop the proposal.
+ *   (the worker makes the change, checks it and shows a preview. Nothing is live yet.)
+ *   { approve }          publish it.
+ *   { revise, text }     ask for changes; the agent revises it (up to MAX_REVISIONS rounds) and shows a new preview.
+ *   { remove }           put the code back as it was. Nothing is published.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getUser();
@@ -43,25 +49,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     await db.update(schema.projects).set({ state: next, updatedAt: new Date() }).where(eq(schema.projects.id, p.id));
     return NextResponse.json({ state: next });
   };
-  const setStatus = (s: WorkspaceState, msgId: number, patch: Partial<Extract<Msg, { kind: "site_change" }>>): WorkspaceState => ({
+  const patch = (s: WorkspaceState, msgId: number, change: Partial<ChangeMsg>): WorkspaceState => ({
     ...s,
-    msgs: s.msgs.map((m) => (m.id === msgId && m.kind === "site_change" ? ({ ...m, ...patch } as Msg) : m)),
+    msgs: s.msgs.map((m) => (m.id === msgId && m.kind === "site_change" ? ({ ...m, ...change } as Msg) : m)),
   });
-
-  const data = body.data;
-  if ("cancel" in data) {
-    const cancelId = data.cancel;
-    const m = changeMsgs(state).find((c) => c.id === cancelId && c.status === "proposed");
-    if (!m) return fail("That change is not waiting any more.", 409);
-    return save(setStatus(state, m.id, { status: "cancelled" }));
-  }
-
-  if ("confirm" in data) {
-    const confirmId = data.confirm;
-    const m = changeMsgs(state).find((c) => c.id === confirmId && c.status === "proposed");
-    if (!m) return fail("That change is not waiting any more.", 409);
-    const limit = changeLimit();
-    if (limit > 0 && changesUsed(state) >= limit) return fail(`This site has used its ${limit} changes for now.`, 429);
+  const find = (msgId: number, status: ChangeMsg["status"]) => changeMsgs(state).find((c) => c.id === msgId && c.status === status);
+  /** Queue one worker job for this change and move the message to its next status. */
+  const queue = async (m: ChangeMsg, change: Partial<ChangeMsg>) => {
     const running = await db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
@@ -69,10 +63,46 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       .limit(1);
     if (running.length) return fail("Something is already running on this site. Try again in a few minutes.", 409);
     const [job] = await db.insert(schema.jobs).values({ projectId: p.id, type: "site_change" }).returning({ id: schema.jobs.id });
-    return save(setStatus(state, m.id, { status: "queued", jobId: job.id }));
+    return save(patch(state, m.id, { ...change, jobId: job.id }));
+  };
+
+  const data = body.data;
+  const gone = () => fail("That change is not waiting any more.", 409);
+
+  if ("cancel" in data) {
+    const m = find(data.cancel, "proposed");
+    return m ? save(patch(state, m.id, { status: "cancelled" })) : gone();
   }
 
-  // A new proposal replaces an older one that nobody confirmed.
+  if ("confirm" in data) {
+    const m = find(data.confirm, "proposed");
+    if (!m) return gone();
+    const limit = changeLimit();
+    if (limit > 0 && changesUsed(state) >= limit) return fail(`This site has used its ${limit} changes for now.`, 429);
+    return queue(m, { status: "queued", action: "make", note: undefined, error: undefined });
+  }
+
+  if ("approve" in data) {
+    const m = find(data.approve, "review");
+    return m ? queue(m, { status: "publishing", action: "publish", note: undefined }) : gone();
+  }
+
+  if ("remove" in data) {
+    const m = find(data.remove, "review");
+    return m ? queue(m, { status: "working", action: "discard", note: undefined }) : gone();
+  }
+
+  if ("revise" in data) {
+    const m = find(data.revise, "review");
+    if (!m) return gone();
+    if ((m.revisions ?? 0) >= MAX_REVISIONS) return fail(`That's ${MAX_REVISIONS} rounds of changes. Approve it, or remove it and start again with a new request.`, 409);
+    const feedback = cleanInstruction(data.text);
+    if (feedback.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
+    return queue(m, { status: "queued", action: "make", feedback, revisions: (m.revisions ?? 0) + 1, note: undefined });
+  }
+
+  // A new request. The one above has to be answered first, because the next change would build on top of it.
+  if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
   const text = cleanInstruction(data.text);
   if (text.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
   let next: WorkspaceState = {

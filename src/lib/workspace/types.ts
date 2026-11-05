@@ -18,8 +18,20 @@ type MsgBody =
   | {
       kind: "site_change";
       instruction: string;
-      status: "proposed" | "queued" | "working" | "done" | "failed" | "cancelled";
+      /** review: the change is made and checked, shown in a preview, and not live yet. */
+      status: "proposed" | "queued" | "working" | "review" | "publishing" | "done" | "failed" | "cancelled" | "removed";
       jobId?: string;
+      /** What the next worker job does for this change. */
+      action?: "make" | "publish" | "discard";
+      /** The code before this change, so "remove" and a failed change can put it back. */
+      baseHead?: string;
+      /** The owner's request for a revision, and how many rounds there have been (up to 3). */
+      feedback?: string;
+      revisions?: number;
+      /** A short line shown on the card, for example why a revision or a publish did not work. */
+      note?: string;
+      /** The job whose record holds the pictures (they are not live pictures until the change is published). */
+      snapJobId?: string;
       /** What changed, in the agent's own plain words (done). */
       summary?: string;
       error?: string;

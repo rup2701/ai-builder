@@ -17,7 +17,7 @@ import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
 import SitePane from "./SitePane";
 import SiteReadyCard from "./SiteReadyCard";
-import SiteChangeCard from "./SiteChangeCard";
+import SiteChangeCard, { type ChangeAction } from "./SiteChangeCard";
 import { changeMsgs, isOpen, siteIsLive } from "@/lib/builder/site-change";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
@@ -499,7 +499,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   }
 
   /** Changes to the live site: propose (text), then confirm or cancel with the buttons on the card. */
-  async function changeAction(body: { text: string } | { confirm: number } | { cancel: number }) {
+  async function changeAction(body: ChangeAction) {
     setPending(true);
     try {
       const r = await fetch(`/api/projects/${projectId}/change`, {
@@ -761,14 +761,14 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 case "user":
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-sm leading-relaxed text-background">{m.text}</p>
+                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-md text-background">{m.text}</p>
                     </div>
                   );
                 case "bot":
                   return (
                     <div key={m.id} className="max-w-[92%]">
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{boldText(m.text)}</p>
+                      <p className="whitespace-pre-wrap text-md text-foreground">{boldText(m.text)}</p>
                       {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
                         <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
@@ -811,8 +811,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                         projectId={projectId}
                         siteUrl={st.site?.build?.url}
                         busy={busy}
-                        onConfirm={(id) => void changeAction({ confirm: id })}
-                        onCancel={(id) => void changeAction({ cancel: id })}
+                        onAction={(body) => void changeAction(body)}
                       />
                     </div>
                   );
