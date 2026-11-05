@@ -21,7 +21,7 @@ export function anthropicComplete(opts: { apiKey: string; model: string; timeout
       signal: AbortSignal.timeout(opts.timeoutMs ?? 25_000),
       body: JSON.stringify({
         model: opts.model,
-        max_tokens: 700,
+        max_tokens: 1200,
         system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: user }],
         tools: [tool],

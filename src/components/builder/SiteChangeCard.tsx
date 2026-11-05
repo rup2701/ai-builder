@@ -172,7 +172,13 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         <>
           <p className="text-sm font-medium text-foreground">Published</p>
           {msg.note && <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.note}</p>}
-          {pictures}
+          {msg.changes?.length ? (
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground/70">
+              {msg.changes.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          ) : null}
           {siteUrl && (
             <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-block text-sm underline underline-offset-4 hover:no-underline ${focusRing}`}>
               Open your live site ↗

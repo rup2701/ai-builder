@@ -9,15 +9,15 @@ import type { Complete, Tool } from "./model-interviewer";
 
 export const ChangePlan = z.object({
   /** Up to eight plain words: what this change is. */
-  title: z.string().trim().min(3).max(80).optional(),
+  title: z.string().trim().min(3).max(120).optional(),
   /** One to four concrete results, in the owner's words, with every choice made visible. */
-  changes: z.array(z.string().trim().min(5).max(240)).min(1).max(4).optional(),
+  changes: z.array(z.string().trim().min(5).max(500)).min(1).max(6).optional(),
   /** "small" only for a change to wording (a headline, label, price text) with no change to layout, look or sections. */
   size: z.enum(["small", "substantial"]).optional(),
   /** The full instruction for the agent. Missing when the request cannot be done as a change to the public page. */
-  instruction: z.string().trim().min(10).max(800).optional(),
+  instruction: z.string().trim().min(10).max(3000).optional(),
   /** A plain sentence for the owner when the request is not something this can do. */
-  decline: z.string().trim().min(5).max(300).optional(),
+  decline: z.string().trim().min(5).max(500).optional(),
 });
 export type ChangePlanT = z.infer<typeof ChangePlan>;
 

@@ -22,7 +22,13 @@ try {
   await page.goto(url, { waitUntil: "networkidle", timeout: 45_000 });
   await page.waitForTimeout(600);
 
-  const top = async (file) => page.screenshot({ ...shot, path: path.join(outDir, file), clip: { x: 0, y: 0, width: 1280, height: 900 } });
+  // Photographing a section scrolls the page, and the clip below is measured from the top of the window, so go back to the top first.
+  const top = async (file) => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(150);
+    return topShot(file);
+  };
+  const topShot = async (file) => page.screenshot({ ...shot, path: path.join(outDir, file), clip: { x: 0, y: 0, width: 1280, height: 900 } });
   const clean = (a) => String(a ?? "").replace(/^#/, "").replace(/[^\w-]/g, "");
 
   if (anchorArg) {

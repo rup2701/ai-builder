@@ -199,7 +199,9 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     // 1. Before: one picture per section of the live page (which is still the old version). Best effort, and it runs
     // alongside the agent's first minutes of reading, so it adds no waiting time. It is awaited before the pictures are read.
     const beforeDir = path.join(tmp, "before");
-    beforeShot = snap(appDir, url, beforeDir, undefined, cleanEnv).catch(() => false);
+    // A small wording change gets no pictures at all, which also saves the time they take.
+    const wantPictures = msg.size !== "small";
+    if (wantPictures) beforeShot = snap(appDir, url, beforeDir, undefined, cleanEnv).catch(() => false);
 
     // 2. Remember where the code is: the start of this job (a failed revision returns here) and the start of the whole change.
     const startHead = await gitHead();
@@ -234,7 +236,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     const transcript = await readFile(path.join(runDir, "transcript.jsonl"), "utf8").catch(() => "");
     const { summary: said, anchor } = parseFinal(lastFinal(transcript));
     const afterDir = path.join(tmp, "after");
-    const okAfter = await previewSnap(appDir, afterDir, anchor, cleanEnv).catch(() => false);
+    const okAfter = wantPictures ? await previewSnap(appDir, afterDir, anchor, cleanEnv).catch(() => false) : false;
     await beforeShot;
     const before = (await b64(path.join(beforeDir, `${anchor}.jpg`))) ?? (anchor === "top" ? await b64(path.join(beforeDir, "top.jpg")) : null);
     const after = okAfter ? await b64(path.join(afterDir, "after.jpg")) : null;
@@ -248,7 +250,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       action: undefined,
       baseHead,
       feedback: undefined,
-      note: after ? undefined : "I could not make a preview picture, but the change passed its checks.",
+      note: after || !wantPictures ? undefined : "I could not make a preview picture, but the change passed its checks.",
       summary: said || "The change is ready.",
       snaps: { before: Boolean(before), after: Boolean(after) },
       snapJobId: log.length ? job.id : undefined,
