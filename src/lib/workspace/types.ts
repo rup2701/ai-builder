@@ -13,7 +13,20 @@ type MsgBody =
   | { kind: "checks"; results: Check[] }
   | { kind: "change"; lines: string[]; version: number; results: Check[] }
   /** A finished website build. The password is kept only until the person says they have saved it. */
-  | { kind: "site_ready"; name: string; url: string; adminUrl: string; ownerEmail: string; password?: string; checks: string[] };
+  | { kind: "site_ready"; name: string; url: string; adminUrl: string; ownerEmail: string; password?: string; checks: string[] }
+  /** One change to a live website, asked for in the chat. "proposed" waits for the person to press the button. */
+  | {
+      kind: "site_change";
+      instruction: string;
+      status: "proposed" | "queued" | "working" | "done" | "failed" | "cancelled";
+      jobId?: string;
+      /** What changed, in the agent's own plain words (done). */
+      summary?: string;
+      error?: string;
+      /** The section the picture shows, and which pictures exist. */
+      anchor?: string;
+      snaps?: { before: boolean; after: boolean };
+    };
 
 export type Msg = { id: number } & MsgBody;
 export type MsgInput = MsgBody;

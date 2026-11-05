@@ -19,7 +19,7 @@ import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
 export type Db = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> };
-type Job = { id: string; project_id: string };
+export type Job = { id: string; project_id: string };
 
 export async function patchSiteBuild(db: Db, projectId: string, patch: Partial<SiteBuild>) {
   await db.query(
@@ -88,7 +88,7 @@ export function checklist(brief: Record<string, unknown>): string[] {
 
 type RunResult = { code: number; out: string };
 
-function runProcess(cmd: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine?: (line: string) => void }): Promise<RunResult> {
+export function runProcess(cmd: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv; onLine?: (line: string) => void }): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
@@ -113,7 +113,7 @@ function runProcess(cmd: string, args: string[], opts: { cwd: string; env: NodeJ
   });
 }
 
-const tail = (s: string, n = 400) => s.trim().split("\n").slice(-6).join("\n").slice(-n);
+export const tail = (s: string, n = 400) => s.trim().split("\n").slice(-6).join("\n").slice(-n);
 
 /** A stage-level failure. runSiteBuild records which stage it stopped at, then throws. */
 class BuildStop extends Error {}
@@ -256,8 +256,12 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     ...s,
     phase: "summary",
     jobId: null,
-    msgs: [...s.msgs, { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) }],
-    nextId: s.nextId + 1,
+    msgs: [
+      ...s.msgs,
+      { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) },
+      { id: s.nextId + 1, kind: "bot", text: "Your site is live. To change anything on the page, tell me here, for example “make the closing headline shorter”. I'll show you before and after." },
+    ],
+    nextId: s.nextId + 2,
     site: { brief: s.site!.brief, build },
   };
   await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);

@@ -11,6 +11,7 @@ import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
+import { failSiteChangeMsg, runSiteChange } from "./site-change";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const STEP_MS = Number(process.env.WORKER_STEP_MS ?? 700);
@@ -114,9 +115,14 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
 
 async function main() {
   // A job still marked running when the worker starts was cut off by a restart or a crash.
-  const stuck = await pool.query(`SELECT id, project_id FROM jobs WHERE status = 'running'`);
-  for (const j of stuck.rows as { id: string; project_id: string }[]) {
+  const stuck = await pool.query(`SELECT id, project_id, type FROM jobs WHERE status = 'running'`);
+  for (const j of stuck.rows as { id: string; project_id: string; type: string }[]) {
     console.log(`worker: job ${j.id} was running when the worker stopped; marking it failed`);
+    if (j.type === "site_change") {
+      await failSiteChangeMsg(pool, j, "The builder restarted while this change was running. Check your site, then ask again.");
+      await pool.query(`UPDATE jobs SET status = 'failed', error = 'restarted', finished_at = now() WHERE id = $1`, [j.id]);
+      continue;
+    }
     await fail(j, new Error("The builder restarted while this build was running."));
     await pool.query(`UPDATE jobs SET finished_at = now() WHERE id = $1`, [j.id]);
   }
@@ -139,11 +145,22 @@ async function main() {
         if (process.env.WORKER_SITE_MODE !== "real") throw new Error("Publish retries only run in real mode.");
         await runSitePublish(pool, job);
       }
+      else if (job.type === "site_change") {
+        if (process.env.WORKER_SITE_MODE !== "real") throw new Error("Site changes only run in real mode.");
+        const r = await runSiteChange(pool, job);
+        if (!r.ok) {
+          await pool.query(`UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, [job.id, r.error ?? "failed"]);
+          continue;
+        }
+      }
       else throw new Error(`Unknown job type: ${job.type}`);
       await pool.query(`UPDATE jobs SET status = 'done', finished_at = now() WHERE id = $1`, [job.id]);
     } catch (e) {
       console.error("worker: job failed", e);
-      await fail(job, e);
+      if (job.type === "site_change") {
+        await failSiteChangeMsg(pool, job, e instanceof Error ? e.message : String(e));
+        await pool.query(`UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, [job.id, e instanceof Error ? e.message : String(e)]);
+      } else await fail(job, e);
     }
   }
 }

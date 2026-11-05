@@ -17,6 +17,8 @@ import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
 import SitePane from "./SitePane";
 import SiteReadyCard from "./SiteReadyCard";
+import SiteChangeCard from "./SiteChangeCard";
+import { changeMsgs, isOpen, siteIsLive } from "@/lib/builder/site-change";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
@@ -382,7 +384,11 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   const cur: StoreConfig | undefined = history[history.length - 1];
   const results = useMemo(() => (cur ? verify(cur) : []), [cur]);
   const sum = summarize(results);
-  const busy = phase === "build" || phase === "verify" || pending;
+  /** A change to the live site is queued or running on the worker. */
+  const changeRunning = site && changeMsgs(st).some(isOpen);
+  /** Once the site is live, the chat asks what to change instead of interviewing. */
+  const editing = site && siteIsLive(st) && !changeRunning;
+  const busy = phase === "build" || phase === "verify" || pending || changeRunning;
   const canPublish = phase === "iterate" && Boolean(cur) && sum.fail === 0;
 
   /** Change the state in the browser and mark it for saving (iterate phase only). */
@@ -416,7 +422,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
 
   // While a build runs on the worker, follow it. This also resumes after the tab was closed.
   useEffect(() => {
-    if (phase !== "build" && phase !== "verify") return;
+    if (phase !== "build" && phase !== "verify" && !changeRunning) return;
     const t = setInterval(async () => {
       try {
         const r = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
@@ -426,7 +432,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, projectId]);
+  }, [phase, projectId, changeRunning]);
 
   // Save iterate-phase changes shortly after they happen.
   useEffect(() => {
@@ -492,10 +498,34 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     }
   }
 
+  /** Changes to the live site: propose (text), then confirm or cancel with the buttons on the card. */
+  async function changeAction(body: { text: string } | { confirm: number } | { cancel: number }) {
+    setPending(true);
+    try {
+      const r = await fetch(`/api/projects/${projectId}/change`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (r.ok) setSt(j.state as WorkspaceState);
+      else setSt((s) => pushMsg(s, { kind: "bot", text: j.error ?? "I couldn't start that change. Try again in a moment." }));
+      setPane("chat");
+    } catch {
+      setSt((s) => pushMsg(s, { kind: "bot", text: "I couldn't reach the server just now. Try sending that again." }));
+    } finally {
+      setPending(false);
+    }
+  }
+
   function send(raw: string) {
     const text = raw.trim();
     if (!text || busy) return;
     setInput("");
+    if (site && siteIsLive(st)) {
+      void changeAction({ text });
+      return;
+    }
     if (phase === "iterate" && !/^\s*(start over|reset)\b/i.test(text)) {
       edit((s) => iterateTurn(s, text));
       setPane("chat");
@@ -772,6 +802,20 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       />
                     </div>
                   );
+                case "site_change":
+                  return (
+                    <div key={m.id}>
+                      <AgentLabel />
+                      <SiteChangeCard
+                        msg={m}
+                        projectId={projectId}
+                        siteUrl={st.site?.build?.url}
+                        busy={busy}
+                        onConfirm={(id) => void changeAction({ confirm: id })}
+                        onCancel={(id) => void changeAction({ cancel: id })}
+                      />
+                    </div>
+                  );
                 case "recap":
                   // Only the latest recap is shown, so the chat does not repeat itself.
                   if (m.id !== lastRecapId || phase !== "intake") return null;
@@ -898,7 +942,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 disabled={busy}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
-                placeholder={busy ? "Working on it…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
+                placeholder={busy ? (changeRunning ? "Making your change…" : "Working on it…") : editing ? "Tell me what to change on your site…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
                 className="field-sizing-content block max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base leading-snug outline-none placeholder:text-foreground/40 disabled:opacity-60"
               />
               <div className="flex items-center justify-between px-2 pb-2">

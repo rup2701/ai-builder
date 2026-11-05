@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import { changeLimit, changesUsed, cleanInstruction, isOpen, siteIsLive, changeMsgs } from "../src/lib/builder/site-change";
+import { lastFinal, parseFinal, patchChangeMsg } from "../worker/site-change";
+import { initialState } from "../src/lib/workspace/state";
+import type { WorkspaceState } from "../src/lib/workspace/types";
+
+let failed = 0;
+function test(name: string, fn: () => void) {
+  try { fn(); console.log(`PASS ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n  ${e instanceof Error ? e.message : e}`); }
+}
+
+const live = (): WorkspaceState => ({
+  ...initialState(),
+  phase: "summary",
+  site: { brief: {}, build: { stage: 6, startedAt: "t", files: 3, finishedAt: "t2", url: "https://x.appnomics.live", runDir: "/data/runs/x" } },
+} as WorkspaceState);
+
+test("parseFinal splits the sentence from the VIEW line", () => {
+  const r = parseFinal("Step 3 is now a wide panel with the full JSON.\nVIEW: #how-it-works");
+  assert.equal(r.summary, "Step 3 is now a wide panel with the full JSON.");
+  assert.equal(r.anchor, "how-it-works");
+});
+test("parseFinal accepts VIEW: top and a missing line", () => {
+  assert.equal(parseFinal("Changed the headline.\nVIEW: top").anchor, "top");
+  assert.equal(parseFinal("Changed the headline.").anchor, "top");
+});
+test("parseFinal drops an anchor that is not a plain id", () => {
+  assert.equal(parseFinal("Done.\nVIEW: #a b; rm -rf").anchor, "top");
+});
+test("lastFinal takes the last final line and skips broken lines", () => {
+  const t = [JSON.stringify({ turn: 1, final: "first" }), JSON.stringify({ turn: 2, tool: "x" }), JSON.stringify({ turn: 3, final: "last one" }), '{"turn":4,"final":"cut'].join("\n");
+  assert.equal(lastFinal(t), "last one");
+  assert.equal(lastFinal(""), "");
+});
+test("cleanInstruction trims, flattens and removes leading dashes", () => {
+  assert.equal(cleanInstruction("  --site   make the\n\n headline   shorter "), "site make the headline shorter");
+  assert.equal(cleanInstruction("x".repeat(900)).length, 500);
+});
+test("changeLimit reads SITE_CHANGE_LIMIT and defaults to 5", () => {
+  assert.equal(changeLimit({}), 5);
+  assert.equal(changeLimit({ SITE_CHANGE_LIMIT: "0" }), 0);
+  assert.equal(changeLimit({ SITE_CHANGE_LIMIT: "abc" }), 5);
+});
+test("siteIsLive needs a finished, published build with a folder", () => {
+  assert.equal(siteIsLive(live()), true);
+  const s = live();
+  s.site!.build!.runDir = "";
+  assert.equal(siteIsLive(s), false);
+  assert.equal(siteIsLive({ ...live(), phase: "build" }), false);
+  const f = live();
+  f.site!.build!.failedStage = 4;
+  assert.equal(siteIsLive(f), false);
+});
+test("patchChangeMsg updates only the message for that job", () => {
+  const s = live();
+  s.msgs = [
+    { id: 1, kind: "site_change", instruction: "a", status: "queued", jobId: "j1" },
+    { id: 2, kind: "site_change", instruction: "b", status: "proposed" },
+  ];
+  const n = patchChangeMsg(s, "j1", { status: "done", summary: "ok" });
+  const [a, b] = changeMsgs(n);
+  assert.equal(a.status, "done");
+  assert.equal(a.summary, "ok");
+  assert.equal(b.status, "proposed");
+});
+test("changesUsed counts running and done changes, not failed or cancelled", () => {
+  const s = live();
+  s.msgs = ["queued", "working", "done", "failed", "cancelled", "proposed"].map((status, i) => ({ id: i + 1, kind: "site_change", instruction: "x", status } as never));
+  assert.equal(changesUsed(s), 3);
+  assert.equal(changeMsgs(s).filter(isOpen).length, 2);
+});
+
+if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
+console.log("\nall passed");
