@@ -32,8 +32,6 @@ type Props = {
   homeHref: string;
   /** The project's saved title, shown at the top until the brief names the site. */
   title?: string;
-  /** The model behind the assistant's replies, for display only. */
-  model?: string;
   publishNote?: string;
   /** "site" runs the website interview; the default is the store builder. */
   kind?: "store" | "site";
@@ -345,7 +343,7 @@ function boldText(text: string) {
 
 /* ---------- Workspace ---------- */
 
-export default function BuilderWorkspace({ projectId, initial, homeHref, title, model, publishNote, kind = "store" }: Props) {
+export default function BuilderWorkspace({ projectId, initial, homeHref, title, publishNote, kind = "store" }: Props) {
   const site = kind === "site";
   const [st, setSt] = useState<WorkspaceState>(initial);
   const [input, setInput] = useState("");
@@ -590,7 +588,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     <div className="flex h-[100dvh] min-h-[40rem] flex-col bg-background text-foreground">
       <h1 className="sr-only">{site ? "Website builder" : "Store builder"}</h1>
 
-      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b border-foreground/10 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
+      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
         <a href={homeHref} className={`justify-self-start rounded-lg ${focusRing}`}>
           {back}
         </a>
@@ -626,7 +624,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             type="button"
             aria-selected={pane === p}
             onClick={() => setPane(p)}
-            className={`rounded-full px-4 py-1.5 text-sm capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/60"}`}
+            className={`rounded-full px-4 py-1.5 text-md capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/60"}`}
           >
             {p}
           </button>
@@ -905,11 +903,6 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
               />
               <div className="flex items-center justify-between px-2 pb-2">
                 <div className="flex items-center gap-0.5">
-                  {model && (
-                    <span title={`The model behind ${AGENT_NAME}'s replies. It can't be changed.`} className="mr-1 inline-flex h-8 items-center rounded-lg bg-foreground/[0.05] px-2.5 text-xs text-foreground/60">
-                      {model}
-                    </span>
-                  )}
                   {/* Not built yet: shown dimmed so the layout is final. Remove these two when you would rather not show them. */}
                   <button type="button" disabled title="Attach a file (coming soon)" aria-label="Attach a file (coming soon)" className="grid h-8 w-8 place-items-center rounded-lg text-foreground/30">
                     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
