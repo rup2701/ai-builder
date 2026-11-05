@@ -26,7 +26,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
   const [feedback, setFeedback] = useState("");
   const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}`;
 
-  if (msg.status === "cancelled") return <p className="text-sm text-foreground/50">Cancelled: “{msg.title ?? msg.instruction}”</p>;
+  if (msg.status === "cancelled") return <p className="text-sm text-foreground/50">Cancelled. Nothing was changed on your site.</p>;
   if (msg.status === "removed") return <p className="text-sm text-foreground/60">Removed: “{msg.title ?? msg.instruction}”. Your site is as it was.</p>;
 
   const live = msg.status === "done";

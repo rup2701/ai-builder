@@ -34,6 +34,14 @@ export const needsAnswer = (m: ChangeMsg) => m.status === "review";
 
 export const MAX_REVISIONS = 3;
 
+/** What has already been made live through the chat, newest last, for Scout to compare a new request with. Undone and removed changes are not in it. */
+export function appliedChanges(s: WorkspaceState, max = 10): string[] {
+  return changeMsgs(s)
+    .filter((m) => m.status === "done")
+    .slice(-max)
+    .map((m) => (m.title ? `${m.title}: ${(m.changes ?? []).join("; ")}` : m.instruction).slice(0, 400));
+}
+
 export function changesUsed(s: WorkspaceState): number {
   return changeMsgs(s).filter((m) => m.status === "queued" || m.status === "working" || m.status === "review" || m.status === "publishing" || m.status === "done").length;
 }

@@ -36,11 +36,14 @@ const TOOL: Tool = {
   },
 };
 
-const SYSTEM = (siteName: string, sections: string[]) => `You help the owner of a website called "${siteName}" ask for changes to its public page. You rewrite their request so they can check it at a glance, and so the developer who makes the change gets a clear instruction. Always call the plan_change tool.
+const SYSTEM = (siteName: string, sections: string[], applied: string[]) => `You help the owner of a website called "${siteName}" ask for changes to its public page. You rewrite their request so they can check it at a glance, and so the developer who makes the change gets a clear instruction. Always call the plan_change tool.
 
 The page has these sections, top to bottom: ${sections.join("; ")}.
 
+${applied.length ? `Changes already made and live on this site, newest last:\n${applied.map((a) => `- ${a}`).join("\n")}\n` : "No changes have been made through this chat yet.\n"}
 Rules:
+- If everything the owner asks for is already in the list of live changes, set "decline" to one plain sentence that says so and names the change, for example "That is already live: <title>. Nothing to change." and leave the rest out.
+- If only part of it is already live, plan only the new part, and add one line to "changes" that starts with "Already live:" naming what you are leaving as it is.
 - Say what the owner asked, in their words and with their numbers, no more. Do not add changes they did not ask for.
 - Where their wording leaves a choice open ("light gray or a bit lighter or darker"), choose one sensible option yourself, give the value, and say it in the matching line of "changes" (for example "light gray, a little darker than the card background"). Never ask the owner a question.
 - Name the section each change is in, using the section names above.
@@ -77,10 +80,10 @@ export function sectionsOf(brief: Record<string, unknown> | null | undefined): s
 export async function planChange(
   complete: Complete,
   text: string,
-  ctx: { siteName: string; sections: string[] },
+  ctx: { siteName: string; sections: string[]; applied?: string[] },
 ): Promise<{ plan: ChangePlanT | null; usage: { inputTokens: number; outputTokens: number; costUsd: number } | null }> {
   try {
-    const ask = () => complete({ system: SYSTEM(ctx.siteName, ctx.sections), user: `The owner wrote:\n"""\n${text}\n"""\n\nCall plan_change.`, tool: TOOL });
+    const ask = () => complete({ system: SYSTEM(ctx.siteName, ctx.sections, ctx.applied ?? []), user: `The owner wrote:\n"""\n${text}\n"""\n\nCall plan_change.`, tool: TOOL });
     // One retry: the model sometimes answers without calling the tool, or the call times out.
     const r = await ask().catch((e) => {
       console.error("change planner: first try failed, retrying:", e instanceof Error ? e.message : e);

@@ -9,7 +9,7 @@ import { anthropicComplete } from "@/lib/agents/anthropic";
 import { planChange, sectionsOf } from "@/lib/agents/change-planner";
 import { logUsage } from "@/lib/usage";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
-import { changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
+import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
 // Scout rewrites the request with one or two model calls before the card appears.
@@ -129,7 +129,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
     const brief = state.site?.brief ?? {};
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
-    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief) });
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief), applied: appliedChanges(state) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     if (plan?.decline) {
       return fail(plan.decline, 400);

@@ -17,3 +17,9 @@ assert.equal(sm.plan?.size, "small");
 const noSize = await planChange(async () => ({ input: { title: "New headline text", changes: ["Hero headline now reads Stop writing parsers"], instruction: "Change the hero headline text to Stop writing parsers." }, usage: u }), "x", ctx);
 assert.equal(noSize.plan?.size, undefined); // missing size is treated as substantial by the caller
 console.log("size ok");
+let seen = "";
+await planChange(async (req) => { seen = req.system; return { input: { decline: "That is already live: Tighter JSON. Nothing to change." }, usage: u }; }, "x", { ...ctx, applied: ["Tighter JSON and gray step numbers: line height 1.2"] });
+assert.ok(seen.includes("already made and live") && seen.includes("Tighter JSON and gray step numbers"));
+await planChange(async (req) => { seen = req.system; return { input: { decline: "That is already live: x." }, usage: u }; }, "x", ctx);
+assert.ok(seen.includes("No changes have been made"));
+console.log("applied ok");
