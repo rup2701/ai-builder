@@ -17,7 +17,11 @@ type MsgBody =
   /** One change to a live website, asked for in the chat. "proposed" waits for the person to press the button. */
   | {
       kind: "site_change";
+      /** What the agent is told: Scout's clear version of the request (or the owner's own words when Scout could not rewrite it). */
       instruction: string;
+      /** What the card shows the owner: a short title and the concrete results, written by Scout. */
+      title?: string;
+      changes?: string[];
       /** review: the change is made and checked, shown in a preview, and not live yet. */
       status: "proposed" | "queued" | "working" | "review" | "publishing" | "done" | "failed" | "cancelled" | "removed";
       jobId?: string;

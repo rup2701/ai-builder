@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import { planChange, sectionsOf } from "../src/lib/agents/change-planner";
+const ctx = { siteName: "Ledgerline", sections: sectionsOf({ blocks: [{ type: "hero" }, { type: "steps" }] }) };
+assert.equal(ctx.sections.length, 2);
+const u = { inputTokens: 1, outputTokens: 1, costUsd: 0 };
+const good = await planChange(async () => ({ input: { title: "Tighter code and lighter step numbers", changes: ["Code lines closer together (line height 1.2)", "Step number circles light gray, dark text"], instruction: "In How it works, set the JSON line-height to 1.2. Make the step circles light gray with dark text, contrast at least 4.5 to 1." }, usage: u }), "x", ctx);
+assert.equal(good.plan?.changes?.length, 2);
+const bad = await planChange(async () => ({ input: { title: "t" }, usage: u }), "x", ctx);
+assert.equal(bad.plan, null);
+const err = await planChange(async () => { throw new Error("down"); }, "x", ctx);
+assert.equal(err.plan, null); assert.equal(err.usage, null);
+const dec = await planChange(async () => ({ input: { decline: "Sign-in cannot be changed here." }, usage: u }), "x", ctx);
+assert.equal(dec.plan?.decline, "Sign-in cannot be changed here.");
+console.log("change-planner ok");

@@ -9,9 +9,9 @@ export function changeLimit(env: NodeJS.ProcessEnv = process.env): number {
 }
 
 /** Clean what the owner typed. It is passed to the runner as one argument, never through a shell, but a leading dash would read as a flag. */
-export function cleanInstruction(raw: string): string {
+export function cleanInstruction(raw: string, max = 500): string {
   // eslint-disable-next-line no-control-regex
-  return raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/\s+/g, " ").trim().replace(/^-+\s*/, "").slice(0, 500);
+  return raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/\s+/g, " ").trim().replace(/^-+\s*/, "").slice(0, max);
 }
 
 export const MIN_INSTRUCTION = 5;

@@ -59,8 +59,16 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
     <div data-testid="site-change" data-status={msg.status} className="max-w-[92%] rounded-2xl border border-foreground/10 bg-white p-4">
       {msg.status === "proposed" && (
         <>
-          <p className="text-sm font-medium text-foreground">I’ll change your site</p>
-          <p className="mt-1.5 rounded-xl bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">{msg.instruction}</p>
+          <p className="text-sm font-medium text-foreground">{msg.title ?? "I’ll change your site"}</p>
+          {msg.changes?.length ? (
+            <ul className="mt-1.5 list-disc space-y-1 rounded-xl bg-foreground/[0.04] py-2 pl-7 pr-3 text-sm leading-relaxed text-foreground">
+              {msg.changes.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 rounded-xl bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">{msg.instruction}</p>
+          )}
           <p className="mt-2 text-xs leading-relaxed text-foreground/60">I’ll make the change and show you a preview. Nothing goes live until you approve it.</p>
           <div className="mt-3 flex items-center gap-2">
             <button type="button" disabled={busy} onClick={() => onAction({ confirm: msg.id })} className={primary}>
@@ -78,7 +86,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
           <p className="text-sm font-medium text-foreground">
             {msg.action === "discard" ? "Removing the change…" : msg.status === "queued" ? "Waiting to start…" : msg.feedback ? "Revising the change…" : "Making the change…"}
           </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.feedback ?? msg.instruction}</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.feedback ?? (msg.changes?.length ? msg.changes.join(" · ") : msg.instruction)}</p>
           {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
         </div>
       )}

@@ -5,6 +5,9 @@ import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import { pushMsg } from "@/lib/workspace/state";
+import { anthropicComplete } from "@/lib/agents/anthropic";
+import { planChange, sectionsOf } from "@/lib/agents/change-planner";
+import { logUsage } from "@/lib/usage";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
 import { changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
@@ -105,11 +108,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
   const text = cleanInstruction(data.text);
   if (text.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
+  // Scout rewrites the request as a short plan the owner can check. If that fails, the owner's own words are used.
+  let title: string | undefined;
+  let changes: string[] | undefined;
+  let instruction = text;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (apiKey) {
+    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+    const brief = state.site?.brief ?? {};
+    const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 30000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief) });
+    if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
+    if (plan?.decline) {
+      return fail(plan.decline, 400);
+    }
+    if (plan?.title && plan.changes && plan.instruction) {
+      title = plan.title;
+      changes = plan.changes;
+      instruction = plan.instruction;
+    }
+  }
   let next: WorkspaceState = {
     ...state,
     msgs: state.msgs.map((m) => (m.kind === "site_change" && m.status === "proposed" ? ({ ...m, status: "cancelled" } as Msg) : m)),
   };
   next = pushMsg(next, { kind: "user", text });
-  next = pushMsg(next, { kind: "site_change", instruction: text, status: "proposed" });
+  next = pushMsg(next, { kind: "site_change", instruction, ...(title ? { title, changes } : {}), status: "proposed" });
   return save(next);
 }
