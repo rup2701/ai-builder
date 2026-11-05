@@ -12,3 +12,8 @@ assert.equal(err.plan, null); assert.equal(err.usage, null);
 const dec = await planChange(async () => ({ input: { decline: "Sign-in cannot be changed here." }, usage: u }), "x", ctx);
 assert.equal(dec.plan?.decline, "Sign-in cannot be changed here.");
 console.log("change-planner ok");
+const sm = await planChange(async () => ({ input: { title: "New headline text", changes: ["Hero headline now reads Stop writing parsers"], instruction: "Change the hero headline text to Stop writing parsers.", size: "small" }, usage: u }), "x", ctx);
+assert.equal(sm.plan?.size, "small");
+const noSize = await planChange(async () => ({ input: { title: "New headline text", changes: ["Hero headline now reads Stop writing parsers"], instruction: "Change the hero headline text to Stop writing parsers." }, usage: u }), "x", ctx);
+assert.equal(noSize.plan?.size, undefined); // missing size is treated as substantial by the caller
+console.log("size ok");

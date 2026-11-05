@@ -6,7 +6,7 @@ import { MAX_REVISIONS } from "@/lib/builder/site-change";
 
 type ChangeMsg = Extract<Msg, { kind: "site_change" }>;
 
-export type ChangeAction = { text: string } | { confirm: number } | { cancel: number } | { approve: number } | { revise: number; text: string } | { remove: number };
+export type ChangeAction = { text: string } | { confirm: number } | { cancel: number } | { approve: number } | { revise: number; text: string } | { remove: number } | { undo: number };
 
 type Props = {
   msg: ChangeMsg;
@@ -69,7 +69,11 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
           ) : (
             <p className="mt-1.5 rounded-xl bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">{msg.instruction}</p>
           )}
-          <p className="mt-2 text-xs leading-relaxed text-foreground/60">I’ll make the change and show you a preview. Nothing goes live until you approve it.</p>
+          <p className="mt-2 text-xs leading-relaxed text-foreground/60">
+            {msg.size === "small"
+              ? "This is a small wording change, so it goes live as soon as it is made. You can undo it afterwards."
+              : "I’ll make the change and show you a preview. Nothing goes live until you approve it."}
+          </p>
           <div className="mt-3 flex items-center gap-2">
             <button type="button" disabled={busy} onClick={() => onAction({ confirm: msg.id })} className={primary}>
               Make this change
@@ -84,7 +88,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
       {(msg.status === "queued" || msg.status === "working") && (
         <div role="status" aria-live="polite">
           <p className="text-sm font-medium text-foreground">
-            {msg.action === "discard" ? "Removing the change…" : msg.status === "queued" ? "Waiting to start…" : msg.feedback ? "Revising the change…" : "Making the change…"}
+            {msg.action === "discard" ? (msg.published ? "Undoing the change…" : "Removing the change…") : msg.status === "queued" ? "Waiting to start…" : msg.feedback ? "Revising the change…" : "Making the change…"}
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.feedback ?? (msg.changes?.length ? msg.changes.join(" · ") : msg.instruction)}</p>
           {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
@@ -167,11 +171,19 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
       {msg.status === "done" && (
         <>
           <p className="text-sm font-medium text-foreground">Published</p>
+          {msg.note && <p className="mt-1.5 text-sm leading-relaxed text-foreground/70">{msg.note}</p>}
           {pictures}
           {siteUrl && (
             <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-block text-sm underline underline-offset-4 hover:no-underline ${focusRing}`}>
               Open your live site ↗
             </a>
+          )}
+          {msg.published && (
+            <div className="mt-3">
+              <button type="button" disabled={busy} onClick={() => onAction({ undo: msg.id })} className={secondary}>
+                Undo this change
+              </button>
+            </div>
           )}
         </>
       )}

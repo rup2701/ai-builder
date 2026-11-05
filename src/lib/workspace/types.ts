@@ -22,6 +22,10 @@ type MsgBody =
       /** What the card shows the owner: a short title and the concrete results, written by Scout. */
       title?: string;
       changes?: string[];
+      /** Small (wording only) changes publish straight away. Anything else is shown as a preview first. Missing means substantial. */
+      size?: "small" | "substantial";
+      /** The change is live. It can be undone while it is the latest one. */
+      published?: boolean;
       /** review: the change is made and checked, shown in a preview, and not live yet. */
       status: "proposed" | "queued" | "working" | "review" | "publishing" | "done" | "failed" | "cancelled" | "removed";
       jobId?: string;

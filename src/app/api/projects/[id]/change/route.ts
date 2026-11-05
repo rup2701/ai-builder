@@ -12,6 +12,8 @@ import type { Msg, WorkspaceState } from "@/lib/workspace/types";
 import { changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
+// Scout rewrites the request with one or two model calls before the card appears.
+export const maxDuration = 60;
 
 const Body = z.union([
   z.object({ text: z.string().min(1).max(2000) }),
@@ -20,6 +22,7 @@ const Body = z.union([
   z.object({ approve: z.number().int() }),
   z.object({ revise: z.number().int(), text: z.string().min(1).max(2000) }),
   z.object({ remove: z.number().int() }),
+  z.object({ undo: z.number().int() }),
 ]);
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
@@ -90,6 +93,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return m ? queue(m, { status: "publishing", action: "publish", note: undefined }) : gone();
   }
 
+  if ("undo" in data) {
+    const m = find(data.undo, "done");
+    if (!m || !m.published) return gone();
+    const latest = Math.max(...changeMsgs(state).filter((c) => c.status === "done").map((c) => c.id));
+    if (m.id !== latest) return fail("Only the latest change can be undone.", 409);
+    return queue(m, { status: "working", action: "discard", note: undefined });
+  }
+
   if ("remove" in data) {
     const m = find(data.remove, "review");
     return m ? queue(m, { status: "working", action: "discard", note: undefined }) : gone();
@@ -112,12 +123,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   let title: string | undefined;
   let changes: string[] | undefined;
   let instruction = text;
+  let size: "small" | "substantial" | undefined;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey) {
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
     const brief = state.site?.brief ?? {};
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
-    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 30000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief) });
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     if (plan?.decline) {
       return fail(plan.decline, 400);
@@ -126,6 +138,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       title = plan.title;
       changes = plan.changes;
       instruction = plan.instruction;
+      size = plan.size;
     }
   }
   let next: WorkspaceState = {
@@ -133,6 +146,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     msgs: state.msgs.map((m) => (m.kind === "site_change" && m.status === "proposed" ? ({ ...m, status: "cancelled" } as Msg) : m)),
   };
   next = pushMsg(next, { kind: "user", text });
-  next = pushMsg(next, { kind: "site_change", instruction, ...(title ? { title, changes } : {}), status: "proposed" });
+  next = pushMsg(next, { kind: "site_change", instruction, ...(title ? { title, changes, size } : {}), status: "proposed" });
   return save(next);
 }

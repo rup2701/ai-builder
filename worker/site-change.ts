@@ -152,10 +152,33 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       return true;
     };
 
-    // ---- remove this change ----
+    /** Put the committed code live. Returns null when it worked, or what went wrong. */
+    const deployNow = async (): Promise<string | null> => {
+      await run("git", ["-C", appDir, "reset", "--hard", "HEAD"], appDir, cleanEnv);
+      await run("git", ["-C", appDir, "clean", "-fd"], appDir, cleanEnv);
+      const deployed = await runProcess("npm", ["run", "deploy", "--", rel, "--redeploy"], { cwd: runner, env });
+      return deployed.code === 0 ? null : tail(deployed.out, 300);
+    };
+
+    // ---- remove this change (or undo it, when it is already live) ----
     if (action === "discard") {
-      if (!(await rollbackTo(msg.baseHead))) return await backToReview("I could not find the code from before this change, so I left it as it is.");
-      await setMsg(db, job.project_id, job.id, { status: "removed", action: undefined, note: undefined });
+      const wasLive = msg.published === true;
+      const kept = wasLive ? await gitHead() : "";
+      if (!(await rollbackTo(msg.baseHead))) {
+        const note = "I could not find the code from before this change, so I left it as it is.";
+        if (wasLive) { await setMsg(db, job.project_id, job.id, { status: "done", note, action: undefined }); return { ok: false, error: note }; }
+        return await backToReview(note);
+      }
+      if (wasLive) {
+        const failed = await deployNow();
+        if (failed !== null) {
+          await rollbackTo(kept); // the live site still has the change, so keep the code that matches it
+          const note = "I could not undo it, so your live site is unchanged. You can try again.";
+          await setMsg(db, job.project_id, job.id, { status: "done", note, action: undefined });
+          return { ok: false, error: `${note} [${failed}]` };
+        }
+      }
+      await setMsg(db, job.project_id, job.id, { status: "removed", action: undefined, note: undefined, published: undefined });
       return { ok: true };
     }
 
@@ -163,11 +186,9 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     if (action === "publish") {
       await setMsg(db, job.project_id, job.id, { status: "publishing" });
       // Publish what the owner saw: the last commit, without leftovers from a revision that was cut off.
-      await run("git", ["-C", appDir, "reset", "--hard", "HEAD"], appDir, cleanEnv);
-      await run("git", ["-C", appDir, "clean", "-fd"], appDir, cleanEnv);
-      const deployed = await runProcess("npm", ["run", "deploy", "--", rel, "--redeploy"], { cwd: runner, env });
-      if (deployed.code !== 0) return await backToReview("It did not publish. Your live site is unchanged. You can try again, or remove the change.", tail(deployed.out, 300));
-      await setMsg(db, job.project_id, job.id, { status: "done", action: undefined, note: undefined });
+      const failed = await deployNow();
+      if (failed !== null) return await backToReview("It did not publish. Your live site is unchanged. You can try again, or remove the change.", failed);
+      await setMsg(db, job.project_id, job.id, { status: "done", published: true, action: undefined, note: undefined });
       return { ok: true };
     }
 
@@ -223,8 +244,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     ];
     if (log.length) await db.query(`UPDATE jobs SET log = log || $2::jsonb WHERE id = $1`, [job.id, JSON.stringify(log)]);
 
-    await setMsg(db, job.project_id, job.id, {
-      status: "review",
+    const fields = {
       action: undefined,
       baseHead,
       feedback: undefined,
@@ -233,7 +253,19 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       snaps: { before: Boolean(before), after: Boolean(after) },
       snapJobId: log.length ? job.id : undefined,
       anchor,
-    });
+    };
+    // A small wording change goes live as soon as it is made. If publishing fails, it waits in the preview instead.
+    if (msg.size === "small" && !isRevision) {
+      await setMsg(db, job.project_id, job.id, { ...fields, status: "publishing" });
+      const failed = await deployNow();
+      if (failed === null) {
+        await setMsg(db, job.project_id, job.id, { status: "done", published: true, note: undefined });
+        return { ok: true };
+      }
+      await setMsg(db, job.project_id, job.id, { status: "review", note: "It did not publish, so your live site is unchanged. You can approve it to try again, or remove it." });
+      return { ok: false, error: `It did not publish. [${failed}]` };
+    }
+    await setMsg(db, job.project_id, job.id, { ...fields, status: "review" });
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
