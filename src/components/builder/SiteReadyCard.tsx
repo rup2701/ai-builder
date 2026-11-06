@@ -5,8 +5,8 @@ import { useState } from "react";
 type Props = {
   name: string;
   url: string;
-  adminUrl: string;
-  ownerEmail: string;
+  adminUrl?: string;
+  ownerEmail?: string;
   password?: string;
   checks: string[];
   onSaved: () => Promise<void>;
@@ -86,6 +86,8 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
             </a>
           </dd>
         </div>
+        {adminUrl && ownerEmail ? (
+          <>
         <div className={row}>
           <dt className="font-semibold text-foreground">Owner area</dt>
           <dd className="min-w-0 break-all">
@@ -128,9 +130,11 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
             )}
           </dd>
         </div>
+          </>
+        ) : null}
       </dl>
 
-      {password ? (
+      {!adminUrl || !ownerEmail ? null : password ? (
         <div className="mt-1 rounded-xl bg-foreground/[0.04] p-3 text-sm">
           <p className="font-semibold text-foreground">Save the password now.</p>
           <p className="mt-0.5 text-foreground/70">A password manager is best. When you have saved it, I'll remove it from this page.</p>

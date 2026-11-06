@@ -73,7 +73,15 @@ export function nameCandidates(siteName: string, rand: () => string = () => rand
 export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
   const items = c.unconfirmed.map((u) => `Make sure this is true before you publish it: "${u}"`);
-  if ((brief.site as { kind?: string } | undefined)?.kind === "saas") {
+  const kind = (brief.site as { kind?: string } | undefined)?.kind;
+  if (kind === "saas-showcase") {
+    // A showcase has no sign-ups and no owner area: the list is its placeholders and drafted wording.
+    const ph = (brief.placeholders as { what?: string; fix?: string }[] | undefined) ?? [];
+    for (const p of ph) if (p?.what) items.push(`${p.what}${p.fix ? `. ${p.fix}.` : "."}`);
+    items.push("The headline, benefits, steps and FAQ were drafted from your answers. Read them and change anything that isn't right. To change anything, ask me in the chat.");
+    return items;
+  }
+  if (kind === "saas") {
     items.push("The headline, pills, steps and success message were drafted for you. Read them and change anything that isn't right.");
     items.push("Images are designed placeholders. To change any wording or add an image later, ask the builder in the chat.");
   } else {
@@ -167,7 +175,8 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       }
     }, Number(env.WORKER_FILES_MS ?? 6000));
 
-    const saasPack = (brief.site as { kind?: string } | undefined)?.kind === "saas";
+    const siteKind = (brief.site as { kind?: string } | undefined)?.kind;
+    const saasPack = siteKind === "saas" || siteKind === "saas-showcase";
     const created = await runProcess(
       "npm",
       ["run", "create", "--", `A ${saasPack ? "product" : "waitlist"} website for ${siteName}`, "--specs", `vertical-packs/${saasPack ? "saas" : "site"}/specs`, "--brief", path.relative(runner, briefFile)],
@@ -227,13 +236,15 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   const { runner, runDir, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild } = c;
   // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
   setStage(4);
-  const password = randomBytes(12).toString("base64url");
+  const staticSite = (brief.site as { kind?: string } | undefined)?.kind === "saas-showcase";
+  // A showcase has no owner area, so no sign-in email and no password.
+  const password = staticSite ? "" : randomBytes(12).toString("base64url");
   let url: string | null = null;
   let lastOut = "";
   for (const name of nameCandidates(siteName)) {
-    const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, "--email", ownerEmail], {
+    const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, ...(staticSite ? [] : ["--email", ownerEmail])], {
       cwd: runner,
-      env: { ...env, ADMIN_PASSWORD: password },
+      env: staticSite ? env : { ...env, ADMIN_PASSWORD: password },
       onLine: (line) => {
         const st = stageFromRunnerLine(line);
         if (st !== null) setStage(st);
@@ -246,19 +257,19 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     }
     if (!/already exists/i.test(deployed.out)) break;
   }
-  if (!url) await stop(4, `Publishing did not work. ${tail(lastOut.split(password).join("***"))}`);
+  if (!url) await stop(4, `Publishing did not work. ${tail(password ? lastOut.split(password).join("***") : lastOut)}`);
 
   // 4. Done: write the result and tell the person in the chat.
   const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
   const s = now[0].state as WorkspaceState;
-  const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, adminUrl: `${url}/admin/sign-in`, ownerEmail };
+  const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, ...(staticSite ? {} : { adminUrl: `${url}/admin/sign-in`, ownerEmail }) };
   const done: WorkspaceState = {
     ...s,
     phase: "summary",
     jobId: null,
     msgs: [
       ...s.msgs,
-      { id: s.nextId, kind: "site_ready", name: siteName, url: url!, adminUrl: build.adminUrl!, ownerEmail, password, checks: checklist(brief) },
+      { id: s.nextId, kind: "site_ready", name: siteName, url: url!, ...(staticSite ? {} : { adminUrl: build.adminUrl!, ownerEmail, password }), checks: checklist(brief) },
       { id: s.nextId + 1, kind: "bot", text: "Your site is live. To change anything on the page, tell me here, for example “make the closing headline shorter”. I'll show you before and after." },
     ],
     nextId: s.nextId + 2,

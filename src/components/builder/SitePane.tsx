@@ -104,6 +104,11 @@ function briefBody(c: ReturnType<typeof briefCard>) {
       {c.fields.length > 0 && <Part label="Sign-up form">{c.fields.join(", ")}</Part>}
       {c.perks.length > 0 && <Part label="Perks">{c.perks.join(" · ")}</Part>}
       {c.look && <Part label="Look">{c.look}</Part>}
+      {c.placeholders.length > 0 && (
+        <Part label="Placeholders to fix">
+          <ul className="list-disc space-y-0.5 pl-5">{c.placeholders.map((u) => <li key={u}>{u}</li>)}</ul>
+        </Part>
+      )}
       {c.unconfirmed.length > 0 && (
         <Part label="Check before you share it">
           <ul className="list-disc space-y-0.5 pl-5">{c.unconfirmed.map((u) => <li key={u}>{u}</li>)}</ul>

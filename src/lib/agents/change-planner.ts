@@ -57,7 +57,7 @@ Rules:
 - "title" is at most eight plain words. Each line of "changes" is one result in plain words, at most 25 words. No code terms the owner did not use.`;
 
 const SECTION_NAMES: Record<string, string> = {
-  hero: "the hero at the top (headline, email box and button)",
+  hero: "the hero at the top (headline, button and product image)",
   visual: "the product preview below the hero",
   pills: "the feature pills",
   steps: "How it works (the numbered steps)",
@@ -70,6 +70,13 @@ const SECTION_NAMES: Record<string, string> = {
   benefits: "the benefits",
   integrations: "the tools strip",
   waitlist: "the sign-up box",
+  benefits_bento: "the benefits grid",
+  how_it_works: "How it works (the numbered steps)",
+  faq: "the FAQ",
+  closing_cta: "the closing call to action (headline and button)",
+  examples_gallery: "the examples gallery",
+  comparison_table: "the comparison table",
+  use_case_cards: "the use-case cards",
 };
 
 /** The page's sections, in the brief's order, in plain words. */
