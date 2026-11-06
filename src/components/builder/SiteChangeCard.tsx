@@ -180,7 +180,9 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         <>
           <p className="text-md font-medium text-foreground">Published</p>
           {msg.note && <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.note}</p>}
-          {msg.changes?.length ? (
+          {msg.summary && msg.summary !== "The change is ready." ? (
+            <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.summary}</p>
+          ) : msg.changes?.length ? (
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-md leading-relaxed text-foreground/70">
               {msg.changes.map((c, i) => (
                 <li key={i}>{c}</li>

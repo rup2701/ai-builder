@@ -23,3 +23,11 @@ assert.ok(seen.includes("already made and live") && seen.includes("Tighter JSON 
 await planChange(async (req) => { seen = req.system; return { input: { decline: "That is already live: x." }, usage: u }; }, "x", ctx);
 assert.ok(seen.includes("No changes have been made"));
 console.log("applied ok");
+import { pageContentOf } from "../src/lib/agents/change-planner";
+assert.equal(pageContentOf(null), "");
+assert.ok(pageContentOf({ blocks: [{ type: "pricing", plans: [{ name: "Starter", price: "$49" }] }] }).includes("Starter"));
+assert.ok(pageContentOf({ blocks: [{ x: "y".repeat(5000) }] }, 100).length < 110);
+let sys = "";
+await planChange(async (req) => { sys = req.system; return { input: { decline: "x ok" }, usage: u }; }, "x", { ...ctx, content: '{"type":"pricing","plans":[{"name":"Starter","price":"$49"}]}' });
+assert.ok(sys.includes('"price":"$49"') && sys.includes("may be a little behind"));
+console.log("content ok");
