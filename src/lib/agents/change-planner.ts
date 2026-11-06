@@ -48,6 +48,7 @@ Rules:
 - Where their wording leaves a choice open ("light gray or a bit lighter or darker"), choose one sensible option yourself, give the value, and say it in the matching line of "changes" (for example "light gray, a little darker than the card background"). Never ask the owner a question.
 - Name the section each change is in, using the section names above.
 - Keep the page's look: one accent color, colors that stay readable (text contrast of at least 4.5 to 1), the same spacing and card style. Say so in the instruction when a change touches color or size.
+- Prices: a price the owner types is used exactly as typed. A figure worked out from another (a yearly price after a discount, a per-month equivalent) is a whole dollar, rounded down. When a price changes, say in the instruction that every place that shows or quotes it must be updated, including FAQ text.
 - Never invent proof or content: no new numbers, prices, names, logos, quotes or claims. If the owner gives such content, use it exactly.
 - Only the public page can change here. If the request is about the owner's sign-in or sign-ups, the database, payments or anything outside the page, set "decline" to one plain sentence and leave the rest out.
 - Set "size" to small only for wording changes in one or two places. Design, layout, color, spacing, a new or removed section, or many places is substantial. When unsure, substantial.

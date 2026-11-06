@@ -13,6 +13,13 @@ import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
 import { failSiteChangeMsg, runSiteChange } from "./site-change";
 
+// The agent saves its work with git commits. The worker image has no git identity of its own, and without one the
+// commit fails ("Author identity unknown"). Environment variables work for every child process and cannot be lost on a redeploy.
+process.env.GIT_AUTHOR_NAME ??= "Appnomics";
+process.env.GIT_AUTHOR_EMAIL ??= "builder@appnomics.dev";
+process.env.GIT_COMMITTER_NAME ??= process.env.GIT_AUTHOR_NAME;
+process.env.GIT_COMMITTER_EMAIL ??= process.env.GIT_AUTHOR_EMAIL;
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 const STEP_MS = Number(process.env.WORKER_STEP_MS ?? 700);
 const POLL_MS = 1000;

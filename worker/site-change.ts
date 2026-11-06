@@ -220,6 +220,15 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     if (changed.code !== 0 || !summary) return await undoAndFail("The change did not finish, so I undid it.", tail(changed.out, 300));
     if (summary.stopReason !== "finished") return await undoAndFail(`The change stopped early (${summary.stopReason}), so I undid it.`);
     if (!summary.checks?.typecheck || !summary.checks?.build) return await undoAndFail("The change did not pass the checks, so I undid it.");
+    // The agent must have changed the page. Edits it left uncommitted are saved as a commit (publishing would otherwise discard them);
+    // a run that changed nothing is reported as such, never as a change.
+    const leftover = (await run("git", ["-C", appDir, "status", "--porcelain", "--", "src", "public"], appDir, cleanEnv)).out.trim();
+    if (leftover) {
+      // One folder at a time: git stops on a folder that does not exist.
+      for (const dir of ["src", "public"]) if (existsSync(path.join(appDir, dir))) await run("git", ["-C", appDir, "add", "-A", "--", dir], appDir, cleanEnv);
+      await run("git", ["-C", appDir, "-c", "user.email=builder@appnomics.dev", "-c", "user.name=Appnomics", "commit", "-qm", "Change: save edits left uncommitted"], appDir, cleanEnv);
+    }
+    if ((await gitHead()) === startHead) return await undoAndFail("I could not find a way to make that change, so nothing was changed on your site.");
     const t = summary.tokens ?? {};
     await db
       .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'site_change', $3, $4, $5, $6)`, [
