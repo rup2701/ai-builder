@@ -523,6 +523,10 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     if (!text || busy) return;
     setInput("");
     if (site && siteIsLive(st)) {
+      // Show the message at once. The server's state replaces this when the reply (or the change card) comes back,
+      // and it holds the same message, so it is never shown twice.
+      setSt((s) => pushMsg(s, { kind: "user", text }));
+      setPane("chat");
       void changeAction({ text });
       return;
     }
@@ -618,7 +622,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     <div className="flex h-[100dvh] min-h-[40rem] flex-col bg-background text-foreground">
       <h1 className="sr-only">{site ? "Website builder" : "Store builder"}</h1>
 
-      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
+      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b border-foreground/10 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
         <a href={homeHref} className={`justify-self-start rounded-lg ${focusRing}`}>
           {back}
         </a>
@@ -654,7 +658,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             type="button"
             aria-selected={pane === p}
             onClick={() => setPane(p)}
-            className={`rounded-full px-4 py-1.5 text-md capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/60"}`}
+            className={`rounded-full px-4 py-1.5 text-sm capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/60"}`}
           >
             {p}
           </button>
