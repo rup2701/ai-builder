@@ -72,9 +72,18 @@ export const projectLink = (env: Env, projectId: string) => `${(env.APP_URL || "
 
 /** Builds and sends the end-of-build email, and logs (never throws) the outcome. */
 export async function notifyBuildEnd(env: Env, to: string | undefined, m: BuildMail, fetchImpl?: typeof fetch) {
-  if (!to) return;
-  const r = await sendEmail(env, to, buildEmail(m), fetchImpl);
-  console.log(r.ok ? `worker: emailed ${m.kind} notice` : `worker: email not sent (${r.error})`);
+  const msg = buildEmail(m);
+  if (to) {
+    const r = await sendEmail(env, to, msg, fetchImpl);
+    console.log(r.ok ? `worker: emailed ${m.kind} notice` : `worker: email not sent (${r.error})`);
+  }
+  // A copy for whoever runs the builder (ADMIN_NOTIFY_EMAIL), so every build start and end lands in one inbox.
+  // Sent even when the person has no email on the build, and skipped when it would be the same address.
+  const admin = env.ADMIN_NOTIFY_EMAIL?.trim();
+  if (admin && admin.toLowerCase() !== (to ?? "").toLowerCase()) {
+    const r = await sendEmail(env, admin, { ...msg, subject: `[copy] ${msg.subject}` }, fetchImpl);
+    console.log(r.ok ? `worker: emailed admin copy of ${m.kind} notice` : `worker: admin copy not sent (${r.error})`);
+  }
 }
 
 /**

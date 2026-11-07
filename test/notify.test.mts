@@ -64,6 +64,24 @@ await test("notifyBuildEnd does nothing without a recipient", async () => {
   await notifyBuildEnd({ RESEND_API_KEY: "k" }, undefined, done, f);
   assert.equal(called, false);
 });
+await test("the admin gets a copy of the end email, even when the person has no email, and never twice", async () => {
+  const sent: { to: string[]; subject: string }[] = [];
+  const f = (async (_u: string, init: { body: string }) => { sent.push(JSON.parse(init.body)); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
+  const env = { RESEND_API_KEY: "k", ADMIN_NOTIFY_EMAIL: "admin@x.dev" };
+  await notifyBuildEnd(env, "person@x.dev", done, f);
+  assert.deepEqual(sent.map((x) => x.to), [["person@x.dev"], ["admin@x.dev"]]);
+  assert.equal(sent[0].subject, "Tide<well> is live");
+  assert.equal(sent[1].subject, "[copy] Tide<well> is live");
+  sent.length = 0;
+  await notifyBuildEnd(env, undefined, done, f); // no person email: the admin still hears about it
+  assert.deepEqual(sent.map((x) => x.to), [["admin@x.dev"]]);
+  sent.length = 0;
+  await notifyBuildEnd(env, "ADMIN@x.dev", done, f); // the person is the admin: one email only
+  assert.equal(sent.length, 1);
+  sent.length = 0;
+  await notifyBuildEnd({ RESEND_API_KEY: "k" }, "person@x.dev", done, f); // no admin address set
+  assert.deepEqual(sent.map((x) => x.to), [["person@x.dev"]]);
+});
 await test("projectLink defaults to the builder address", () => {
   assert.equal(projectLink({}, "p1"), "https://builder.appnomics.dev/projects/p1");
   assert.equal(projectLink({ APP_URL: "http://x.test/" }, "p1"), "http://x.test/projects/p1");
