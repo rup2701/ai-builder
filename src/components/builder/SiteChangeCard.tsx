@@ -67,7 +67,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               ))}
             </ul>
           ) : (
-            <p className="mt-1.5 rounded-xl bg-foreground/[0.04] px-3 py-2 text-md leading-relaxed text-foreground">{msg.instruction}</p>
+            <p className="mt-1.5 line-clamp-6 whitespace-pre-line rounded-xl bg-foreground/[0.04] px-3 py-2 text-md leading-relaxed text-foreground">{msg.instruction}</p>
           )}
           <p className="mt-2 text-xs leading-relaxed text-foreground/60">
             {msg.size === "small"
@@ -97,7 +97,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               ))}
             </ul>
           ) : (
-            <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.feedback ?? msg.instruction}</p>
+            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-md leading-relaxed text-foreground/70">{msg.feedback ?? msg.instruction}</p>
           )}
           {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
         </div>

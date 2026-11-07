@@ -32,7 +32,7 @@ const TOOL: Tool = {
       title: { type: "string", description: "At most eight plain words. No jargon." },
       changes: { type: "array", items: { type: "string" }, description: "One to four concrete results the owner will see, in plain words. State every choice you made for them, with the value." },
       size: { type: "string", enum: ["small", "substantial"], description: "small = only the text and figures shown on the page change (words, numbers, prices, labels, sentences), in as many places as they appear, including rounding or recalculating figures and updating every place that quotes them. substantial = anything that changes design, layout, spacing, color or behavior, or adds or removes a section. Only when you cannot tell which, substantial." },
-      instruction: { type: "string", description: "One paragraph for the developer who makes the change: what to change, where, and every value." },
+      instruction: { type: "string", description: "One paragraph for the developer who makes the change: what to change, where, and the key values. At most 120 words. A long request is attached to it word for word, so do not copy it out in full." },
       answer: { type: "string", description: "Only when the owner asked a question and did not ask for a change. One to four plain sentences that answer it. Nothing is changed." },
       decline: { type: "string", description: "Only when the request cannot be done as a change to the public page. One plain sentence." },
     },
@@ -50,7 +50,8 @@ Rules:
 - The list comes from this chat and can be wrong. If the owner says it is not on the page, or asks to do it again or to redo it, plan the change as new and do not decline.
 - If only part of it is already live, plan only the new part, and add one line to "changes" that starts with "Already live:" naming what you are leaving as it is.
 - Say what the owner asked, in their words and with their numbers, no more. Do not add changes they did not ask for.
-- Where their wording leaves a choice open ("light gray or a bit lighter or darker"), choose one sensible option yourself, give the value, and say it in the matching line of "changes" (for example "light gray, a little darker than the card background"). Never ask the owner a question.
+- Where their wording leaves a choice open ("light gray or a bit lighter or darker"), choose one sensible option yourself, give the value (for words, numbers and prices; for look in everyday words see the rule below), and say it in the matching line of "changes" (for example "light gray, a little darker than the card background"). Never ask the owner a question.
+- When the owner asks for a look in everyday words ("more premium", "more modern", "less flat", "add depth", "bolder", "calmer", "cleaner"), keep their words. Do not turn them into color codes, pixel sizes or letter-spacing values, in "changes" or in the title. In "changes" say the visible result in plain words, for example "The page background gets a soft dotted texture and a gentle glow" or "Cards get a glass look with a clear edge". In the instruction say that the developer must apply the depth and polish rules in specs/look.md for this site's tone, quote the owner's words, and make the result clearly visible on a normal screen. If the owner does give a number or a color, use it. Such a change is substantial.
 - Name the section each change is in, using the section names above.
 - Keep the page's look: one accent color, colors that stay readable (text contrast of at least 4.5 to 1), the same spacing and card style. Say so in the instruction when a change touches color or size.
 - Prices: a price the owner types is used exactly as typed. A figure worked out from another (a yearly price after a discount, a per-month equivalent) is a whole dollar, rounded down. When a price changes, say in the instruction that every place that shows or quotes it must be updated, including FAQ text.
@@ -107,7 +108,9 @@ export async function planChange(
     const ask = () => complete({ system: SYSTEM(ctx.siteName, ctx.sections, ctx.applied ?? [], ctx.content ?? ""), user: `The owner wrote:\n"""\n${text}\n"""\n\nCall plan_change.`, tool: TOOL });
     // One retry: the model sometimes answers without calling the tool, or the call times out.
     const r = await ask().catch((e) => {
-      console.error("change planner: first try failed, retrying:", e instanceof Error ? e.message : e);
+      console.error("change planner: first try failed:", e instanceof Error ? e.message : e);
+      // A timeout is not retried: a second wait of the same length would run past the route's 60 second limit.
+      if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) throw e;
       return ask();
     });
     const parsed = ChangePlan.safeParse(r.input);

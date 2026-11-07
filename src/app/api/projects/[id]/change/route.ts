@@ -129,7 +129,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
     const brief = state.site?.brief ?? {};
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
-    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), text, { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 30000, maxTokens: 3000 }), text, { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     // A question, or something that cannot be done: the chat keeps what the owner wrote and the reply, and nothing is queued.
     const reply = plan?.answer ?? plan?.decline;
