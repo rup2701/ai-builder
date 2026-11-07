@@ -14,7 +14,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { briefCard, siteSlug } from "../src/lib/builder/site-brief";
 import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder/site-stages";
-import { notifyBuildEnd, projectLink } from "../src/lib/notify";
+import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
@@ -152,6 +152,8 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
 
   try {
     await patchSiteBuild(db, job.project_id, { stage: 0, files: 0, heartbeatAt: new Date().toISOString() });
+    // A note to the person running the builder. Not awaited: it must never slow a build down or break one.
+    void notifyBuildStart(env, { kind: "started", siteName, projectUrl: projectLink(env, job.project_id), by: ownerEmail }).catch(() => {});
 
     // 1. The brief goes where the runner looks for briefs.
     const briefFile = path.join(runner, "briefs", `${siteSlug(siteName)}-${job.id.slice(0, 8)}.json`);
@@ -273,7 +275,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   };
   await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
   // The email is a courtesy, sent after everything is saved. It must never fail the build.
-  await notifyBuildEnd(env, build.notifyEmail, { kind: "done", siteName, projectUrl: projectLink(env, job.project_id), siteUrl: url! }).catch(() => {});
+  await notifyBuildEnd(env, build.notifyEmail, { kind: "done", siteName, projectUrl: projectLink(env, job.project_id), siteUrl: url!, showcase: staticSite }).catch(() => {});
 }
 
 /**

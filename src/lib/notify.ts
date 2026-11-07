@@ -5,7 +5,8 @@
  */
 
 export type BuildMail =
-  | { kind: "done"; siteName: string; projectUrl: string; siteUrl: string }
+  | { kind: "started"; siteName: string; projectUrl: string; by: string }
+  | { kind: "done"; siteName: string; projectUrl: string; siteUrl: string; showcase?: boolean }
   | { kind: "failed"; siteName: string; projectUrl: string; stageLabel: string; retryPublish: boolean };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -15,9 +16,19 @@ export function buildEmail(m: BuildMail): { subject: string; text: string; html:
   let subject: string;
   let lines: string[];
   let cta: string;
-  if (m.kind === "done") {
+  if (m.kind === "started") {
+    // For the person running the builder, not for the customer.
+    subject = `Build started: ${name}`;
+    lines = [`${m.by} started building ${name}.`];
+    cta = "Open the project";
+  } else if (m.kind === "done") {
     subject = `${name} is live`;
-    lines = [`${name} is live at ${m.siteUrl}.`, "Your owner sign-in and the checklist to read before you share it are waiting in your project."];
+    lines = [
+      `${name} is live at ${m.siteUrl}.`,
+      m.showcase
+        ? "A short list of things to check before you share it is waiting in your project."
+        : "Your owner sign-in and the checklist to read before you share it are waiting in your project.",
+    ];
     cta = "Open your project";
   } else {
     subject = `${name}: the build stopped`;
@@ -64,4 +75,15 @@ export async function notifyBuildEnd(env: Env, to: string | undefined, m: BuildM
   if (!to) return;
   const r = await sendEmail(env, to, buildEmail(m), fetchImpl);
   console.log(r.ok ? `worker: emailed ${m.kind} notice` : `worker: email not sent (${r.error})`);
+}
+
+/**
+ * Tells the person running the builder that someone started a build (ADMIN_NOTIFY_EMAIL). Skipped when it is not set,
+ * or when the admin started the build themselves. Best effort, like the other emails.
+ */
+export async function notifyBuildStart(env: Env, m: Extract<BuildMail, { kind: "started" }>, fetchImpl?: typeof fetch) {
+  const to = env.ADMIN_NOTIFY_EMAIL?.trim();
+  if (!to || to.toLowerCase() === m.by.toLowerCase()) return;
+  const r = await sendEmail(env, to, buildEmail(m), fetchImpl);
+  console.log(r.ok ? "worker: emailed build-started notice" : `worker: build-started email not sent (${r.error})`);
 }

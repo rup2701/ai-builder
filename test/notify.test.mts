@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildEmail, notifyBuildEnd, projectLink, sendEmail } from "../src/lib/notify";
+import { buildEmail, notifyBuildEnd, notifyBuildStart, projectLink, sendEmail } from "../src/lib/notify";
 
 let failed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -13,6 +13,25 @@ await test("the done email names the site, links the project, escapes html and c
   assert.ok(m.text.includes("https://b.example/projects/p1") && m.text.includes("https://tidewell.appnomics.live"));
   assert.ok(m.html.includes("Tide&lt;well&gt;") && !m.html.includes("<well>"));
   assert.ok(!/password/i.test(m.text), "no password in the email");
+});
+await test("the showcase done email does not mention an owner sign-in", () => {
+  const m = buildEmail({ ...done, showcase: true });
+  assert.ok(!/owner|sign-in/i.test(m.text), m.text);
+  assert.ok(/check before you share/i.test(m.text));
+  assert.ok(/owner sign-in/i.test(buildEmail(done).text), "other sites still get the owner line");
+});
+await test("the started email goes to the admin only, names who started it, and skips the admin's own builds", async () => {
+  const sent: { to: string[]; subject: string }[] = [];
+  const f = (async (_u: string, init: { body: string }) => { sent.push(JSON.parse(init.body)); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
+  const m = { kind: "started" as const, siteName: "Tidewell", projectUrl: "https://b.example/projects/p1", by: "guest@x.dev" };
+  assert.ok(/guest@x.dev started building Tidewell/.test(buildEmail(m).text));
+  await notifyBuildStart({ RESEND_API_KEY: "k" }, m, f); // no ADMIN_NOTIFY_EMAIL: nothing is sent
+  assert.equal(sent.length, 0);
+  await notifyBuildStart({ RESEND_API_KEY: "k", ADMIN_NOTIFY_EMAIL: "me@x.dev" }, m, f);
+  assert.deepEqual(sent.map((x) => x.to), [["me@x.dev"]]);
+  assert.equal(sent[0].subject, "Build started: Tidewell");
+  await notifyBuildStart({ RESEND_API_KEY: "k", ADMIN_NOTIFY_EMAIL: "ME@x.dev" }, { ...m, by: "me@x.dev" }, f); // the admin's own build: skipped
+  assert.equal(sent.length, 1);
 });
 await test("the failed email says where it stopped and which button to press", () => {
   const a = buildEmail({ kind: "failed", siteName: "T", projectUrl: "u", stageLabel: "Putting it online", retryPublish: true });
