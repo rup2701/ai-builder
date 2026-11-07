@@ -31,10 +31,44 @@ try {
   const topShot = async (file) => page.screenshot({ ...shot, path: path.join(outDir, file), clip: { x: 0, y: 0, width: 1280, height: 900 } });
   const clean = (a) => String(a ?? "").replace(/^#/, "").replace(/[^\w-]/g, "");
 
+  // A picture of one section is cut from the window, so a sticky header or any fixed bar paints over the section's top edge
+  // (and half-hides its heading). Hide them for that picture only. They stay in the layout (visibility, not display), so nothing moves.
+  const bars = (hide, id) =>
+    page.evaluate(
+      ([hide, id]) => {
+        const key = "data-snap-hidden";
+        if (!hide) {
+          for (const el of document.querySelectorAll(`[${key}]`)) {
+            el.style.visibility = el.getAttribute(key) ?? "";
+            el.removeAttribute(key);
+          }
+          return;
+        }
+        const target = id ? document.getElementById(id) : null;
+        for (const el of document.querySelectorAll("body *")) {
+          const p = getComputedStyle(el).position;
+          if (p !== "fixed" && p !== "sticky") continue;
+          if (target && (target.contains(el) || el.contains(target))) continue; // part of the section itself, or holds it
+          el.setAttribute(key, el.style.visibility);
+          el.style.visibility = "hidden";
+        }
+      },
+      [hide, id],
+    );
+  const sectionShot = async (id, file) => {
+    await bars(true, id);
+    try {
+      await page.waitForTimeout(80);
+      await page.locator(`[id="${id}"]`).first().screenshot({ ...shot, path: path.join(outDir, file) });
+    } finally {
+      await bars(false, id);
+    }
+  };
+
   if (anchorArg) {
     const id = clean(anchorArg);
-    const el = id && id !== "top" ? page.locator(`[id="${id}"]`).first() : null;
-    if (el && (await el.count())) await el.screenshot({ ...shot, path: path.join(outDir, "after.jpg") });
+    const found = id && id !== "top" && (await page.locator(`[id="${id}"]`).first().count());
+    if (found) await sectionShot(id, "after.jpg");
     else await top("after.jpg");
   } else {
     const ids = await page.$$eval("section[id]", (els) => els.map((e) => e.id).filter(Boolean));
@@ -43,7 +77,7 @@ try {
       const safe = clean(id);
       if (!safe) continue;
       try {
-        await page.locator(`[id="${safe}"]`).first().screenshot({ ...shot, path: path.join(outDir, `${safe}.jpg`) });
+        await sectionShot(safe, `${safe}.jpg`);
         saved.push(safe);
       } catch {
         /* a section that cannot be photographed is simply left out */
