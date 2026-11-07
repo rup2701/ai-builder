@@ -44,11 +44,40 @@ export function isPlainSummary(s: string): boolean {
   return true;
 }
 
-/** What the card shows after a change: the agent's own words when they are plain, otherwise the plain result lines Scout showed in the plan. */
-export function ownerSummary(said: string, changes?: string[]): string {
+/** Seconds per phase as one readable line for the worker log, for example "agent 62s, build 38s, total 140s". Skips phases with no value. */
+export function formatTimings(seconds: Record<string, number | undefined>): string {
+  return Object.entries(seconds)
+    .filter(([, v]) => typeof v === "number" && Number.isFinite(v))
+    .map(([k, v]) => `${k} ${Math.round(v as number)}s`)
+    .join(", ");
+}
+
+/** The changed files in plain words ("the shared look, the Pricing section"), for when nothing else says what changed. Never shows a path. */
+export function plainFiles(files: string[]): string {
+  const words = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[-_]+/g, " ").trim();
+  const parts: string[] = [];
+  for (const f of files) {
+    let p = "";
+    if (/(^|\/)globals\.css$/.test(f) || /\.css$/.test(f)) p = "the shared look";
+    else if (/^src\/content\//.test(f)) p = "the page text";
+    else if (/^public\//.test(f)) p = "the images";
+    else if (/^src\/components\/.+\.(tsx|ts)$/.test(f)) {
+      const base = f.split("/").pop()!.replace(/\.(tsx|ts)$/, "");
+      p = base && !/^(index|layout|page)$/i.test(base) ? `the ${words(base)} section` : "the page layout";
+    } else if (/^src\/app\/.+\.(tsx|ts)$/.test(f)) p = "the page layout";
+    if (p && !parts.includes(p)) parts.push(p);
+  }
+  return parts.slice(0, 4).join(", ");
+}
+
+/** What the card shows after a change: the agent's own words when they are plain, otherwise the plain result lines Scout showed in the plan,
+ *  otherwise the parts of the page the commit touched. Never empty and never technical. */
+export function ownerSummary(said: string, changes?: string[], files?: string[]): string {
   if (isPlainSummary(said)) return said;
   const lines = (changes ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 2);
-  return lines.length ? lines.map((l) => (/[.!?]$/.test(l) ? l : `${l}.`)).join(" ") : "The change is ready.";
+  if (lines.length) return lines.map((l) => (/[.!?]$/.test(l) ? l : `${l}.`)).join(" ");
+  const parts = files?.length ? plainFiles(files) : "";
+  return parts ? `Updated ${parts}.` : "The change is ready.";
 }
 
 /** The last `final` line of the run's transcript (one JSON object per line). */
@@ -150,6 +179,14 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     await setMsg(db, job.project_id, job.id, { status: "review", note: message.slice(0, 300), action: undefined });
     return { ok: false, error: detail ? `${message} [${detail.slice(0, 400)}]` : message };
   };
+  // Where the time goes, per phase. One line in the worker log ("[timing] ...") and one entry in the job's log, so a slow change can be read afterwards.
+  const t0 = Date.now();
+  const secs = (ms: number) => Math.round(ms / 100) / 10;
+  const logTiming = async (kind: string, seconds: Record<string, number | undefined>, turns?: number) => {
+    const all = { ...seconds, total: secs(Date.now() - t0) };
+    console.log(`[timing] ${job.id.slice(0, 8)} ${kind}: ${formatTimings(all)}${turns ? `, ${turns} agent turns` : ""}`);
+    await db.query(`UPDATE jobs SET log = log || $2::jsonb WHERE id = $1`, [job.id, JSON.stringify([{ at: new Date().toISOString(), event: "timing", kind, seconds: all, turns }])]).catch(() => {});
+  };
   try {
     if (!runner) return await bad("The worker cannot find the runner, so it cannot change the site.");
     const { rows } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
@@ -207,7 +244,9 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     if (action === "publish") {
       await setMsg(db, job.project_id, job.id, { status: "publishing" });
       // Publish what the owner saw: the last commit, without leftovers from a revision that was cut off.
+      const tDeploy = Date.now();
       const failed = await deployNow();
+      await logTiming(failed === null ? "publish" : "publish-failed", { deploy: secs(Date.now() - tDeploy) });
       if (failed !== null) return await backToReview("It did not publish. Your live site is unchanged. You can try again, or remove the change.", failed);
       await setMsg(db, job.project_id, job.id, { status: "done", published: true, action: undefined, note: undefined });
       return { ok: true };
@@ -229,6 +268,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     const baseHead = msg.baseHead && SAFE_SHA.test(msg.baseHead) ? msg.baseHead : startHead;
 
     // 3. The change. The instruction goes before --site: the runner reads the word after a flag as that flag's value.
+    const tRunner = Date.now();
     const changed = await runProcess("npm", ["run", "change", "--", rel, instructionFor(msg), "--site"], {
       cwd: runner,
       env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_CHANGE_MAX_USD ?? "3", RUNNER_MAX_TURNS: env.WORKER_CHANGE_MAX_TURNS ?? "90" },
@@ -238,7 +278,11 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       return isRevision ? await backToReview(`${message} The earlier version of the change is still in the preview.`, detail) : await bad(`${message} Your site is unchanged.`, detail);
     };
     const summary = parseSummary(changed.out);
-    if (changed.code !== 0 || !summary) return await undoAndFail("The change did not finish, so I undid it.", tail(changed.out, 300));
+    const runnerSec = secs(Date.now() - tRunner);
+    if (changed.code !== 0 || !summary) {
+      await logTiming("make-failed", { runner: runnerSec });
+      return await undoAndFail("The change did not finish, so I undid it.", tail(changed.out, 300));
+    }
     if (summary.stopReason !== "finished") return await undoAndFail(`The change stopped early (${summary.stopReason}), so I undid it.`);
     if (!summary.checks?.typecheck || !summary.checks?.build) return await undoAndFail("The change did not pass the checks, so I undid it.");
     // The agent must have changed the page. Edits it left uncommitted are saved as a commit (publishing would otherwise discard them);
@@ -250,6 +294,9 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       await run("git", ["-C", appDir, "-c", "user.email=builder@appnomics.dev", "-c", "user.name=Appnomics", "commit", "-qm", "Change: save edits left uncommitted"], appDir, cleanEnv);
     }
     if ((await gitHead()) === startHead) return await undoAndFail("I could not find a way to make that change, so nothing was changed on your site.");
+    // What the commit touched. A change that only added tests or notes did not change the page: say so, and never publish it as a change.
+    const files = (await run("git", ["-C", appDir, "diff", "--name-only", startHead, "HEAD"], appDir, cleanEnv)).out.split("\n").map((f) => f.trim()).filter(Boolean);
+    if (!files.some((f) => f.startsWith("src/") || f.startsWith("public/"))) return await undoAndFail("The change did not touch the page itself, so nothing was changed on your site.", files.join(", "));
     const t = summary.tokens ?? {};
     await db
       .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'site_change', $3, $4, $5, $6)`, [
@@ -266,8 +313,10 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     const transcript = await readFile(path.join(runDir, "transcript.jsonl"), "utf8").catch(() => "");
     const { summary: said, anchor } = parseFinal(lastFinal(transcript));
     const afterDir = path.join(tmp, "after");
+    const tPreview = Date.now();
     const okAfter = wantPictures ? await previewSnap(appDir, afterDir, anchor, cleanEnv).catch(() => false) : false;
     await beforeShot;
+    const previewSec = secs(Date.now() - tPreview);
     const before = (await b64(path.join(beforeDir, `${anchor}.jpg`))) ?? (anchor === "top" ? await b64(path.join(beforeDir, "top.jpg")) : null);
     const after = okAfter ? await b64(path.join(afterDir, "after.jpg")) : null;
     const log = [
@@ -281,15 +330,18 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       baseHead,
       feedback: undefined,
       note: after || !wantPictures ? undefined : "I could not make a preview picture, but the change passed its checks.",
-      summary: ownerSummary(said, msg.changes),
+      summary: ownerSummary(said, msg.changes, files),
       snaps: { before: Boolean(before), after: Boolean(after) },
       snapJobId: log.length ? job.id : undefined,
       anchor,
     };
     // A small wording change goes live as soon as it is made. If publishing fails, it waits in the preview instead.
+    const phases = { runner: runnerSec, agent: summary.timingsSeconds?.agent, typecheck: summary.timingsSeconds?.typecheck, build: summary.timingsSeconds?.build, preview: previewSec };
     if (msg.size === "small" && !isRevision) {
       await setMsg(db, job.project_id, job.id, { ...fields, status: "publishing" });
+      const tDeploy = Date.now();
       const failed = await deployNow();
+      await logTiming("make-small", { ...phases, deploy: secs(Date.now() - tDeploy) }, summary.turns);
       if (failed === null) {
         await setMsg(db, job.project_id, job.id, { status: "done", published: true, note: undefined });
         return { ok: true };
@@ -297,6 +349,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       await setMsg(db, job.project_id, job.id, { status: "review", note: "It did not publish, so your live site is unchanged. You can approve it to try again, or remove it." });
       return { ok: false, error: `It did not publish. [${failed}]` };
     }
+    await logTiming(isRevision ? "revise" : "make", phases, summary.turns);
     await setMsg(db, job.project_id, job.id, { ...fields, status: "review" });
     return { ok: true };
   } catch (e) {

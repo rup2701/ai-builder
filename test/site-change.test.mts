@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { changeLimit, changesUsed, cleanInstruction, isOpen, needsAnswer, siteIsLive, changeMsgs, MAX_REVISIONS } from "../src/lib/builder/site-change";
-import { instructionFor, isPlainSummary, lastFinal, ownerSummary, parseFinal, patchChangeMsg } from "../worker/site-change";
+import { formatTimings, instructionFor, isPlainSummary, lastFinal, ownerSummary, parseFinal, patchChangeMsg, plainFiles } from "../worker/site-change";
 import { initialState } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
 
@@ -34,6 +34,19 @@ test("ownerSummary keeps plain words and replaces technical ones with the plan l
   assert.equal(isPlainSummary(technical), false);
   assert.equal(ownerSummary(technical, ["The page gets a soft dotted background", "Cards look like frosted glass", "A third line"]), "The page gets a soft dotted background. Cards look like frosted glass.");
   assert.equal(ownerSummary("", undefined), "The change is ready.");
+});
+
+test("formatTimings prints readable seconds and skips missing phases", () => {
+  assert.equal(formatTimings({ runner: 118.4, agent: 62.2, typecheck: undefined, build: 38, total: 140 }), "runner 118s, agent 62s, build 38s, total 140s");
+  assert.equal(formatTimings({}), "");
+});
+
+test("ownerSummary falls back to the parts of the page that changed, in plain words", () => {
+  const files = ["AGENT_LOG.md", "e2e/atmosphere.spec.ts", "src/app/globals.css", "src/components/PricingCards.tsx", "src/content/site.ts"];
+  assert.equal(plainFiles(files), "the shared look, the Pricing Cards section, the page text");
+  assert.equal(ownerSummary("It ran `npm run build` and edited globals.css.", [], files), "Updated the shared look, the Pricing Cards section, the page text.");
+  assert.equal(ownerSummary("", undefined, ["AGENT_LOG.md", "e2e/x.spec.ts"]), "The change is ready.");
+  assert.ok(!/[\/.]tsx?\b|\.css/.test(ownerSummary("", undefined, files)));
 });
 
 test("parseFinal accepts VIEW: top and a missing line", () => {
