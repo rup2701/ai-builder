@@ -9,10 +9,26 @@ export function changeLimit(env: NodeJS.ProcessEnv = process.env): number {
 }
 
 /** Clean what the owner typed. It is passed to the runner as one argument, never through a shell, but a leading dash would read as a flag. */
-export function cleanInstruction(raw: string, max = 500): string {
-  // eslint-disable-next-line no-control-regex
-  return raw.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").replace(/\s+/g, " ").trim().replace(/^-+\s*/, "").slice(0, max);
+export function cleanInstruction(raw: string, max = 2000): string {
+  // Line breaks stay, so a numbered list or a few paragraphs keep their shape. Spaces and tabs collapse.
+  return (
+    raw
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+/g, " ")
+      .split("\n")
+      .map((l) => l.trim())
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .replace(/^-+\s*/, "")
+      .slice(0, max)
+  );
 }
+
+/** Requests longer than this also reach the agent word for word, because a rewrite loses detail. */
+export const LONG_REQUEST = 300;
 
 export const MIN_INSTRUCTION = 5;
 

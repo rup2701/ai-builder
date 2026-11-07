@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { changeLimit, changesUsed, cleanInstruction, isOpen, needsAnswer, siteIsLive, changeMsgs, MAX_REVISIONS } from "../src/lib/builder/site-change";
-import { instructionFor, lastFinal, parseFinal, patchChangeMsg } from "../worker/site-change";
+import { instructionFor, isPlainSummary, lastFinal, ownerSummary, parseFinal, patchChangeMsg } from "../worker/site-change";
 import { initialState } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
 
@@ -20,6 +20,22 @@ test("parseFinal splits the sentence from the VIEW line", () => {
   assert.equal(r.summary, "Step 3 is now a wide panel with the full JSON.");
   assert.equal(r.anchor, "how-it-works");
 });
+test("parseFinal never ends mid-sentence when the reply is long", () => {
+  const long = `${"A full sentence here. ".repeat(40)}This last one runs past the limit and would be cut in the middle of a`;
+  const s = parseFinal(`${long}\nVIEW: top`).summary;
+  assert.ok(s.length <= 500);
+  assert.ok(s.endsWith("."));
+});
+
+test("ownerSummary keeps plain words and replaces technical ones with the plan lines", () => {
+  const plain = "The benefits are now four rows with an image each.";
+  assert.equal(ownerSummary(plain, ["Something else"]), plain);
+  const technical = "The page background now has a 16px dot grid (#e5e7eb). specs/look.md is read-only, so I ran `npm run build`.";
+  assert.equal(isPlainSummary(technical), false);
+  assert.equal(ownerSummary(technical, ["The page gets a soft dotted background", "Cards look like frosted glass", "A third line"]), "The page gets a soft dotted background. Cards look like frosted glass.");
+  assert.equal(ownerSummary("", undefined), "The change is ready.");
+});
+
 test("parseFinal accepts VIEW: top and a missing line", () => {
   assert.equal(parseFinal("Changed the headline.\nVIEW: top").anchor, "top");
   assert.equal(parseFinal("Changed the headline.").anchor, "top");
@@ -32,9 +48,11 @@ test("lastFinal takes the last final line and skips broken lines", () => {
   assert.equal(lastFinal(t), "last one");
   assert.equal(lastFinal(""), "");
 });
-test("cleanInstruction trims, flattens and removes leading dashes", () => {
-  assert.equal(cleanInstruction("  --site   make the\n\n headline   shorter "), "site make the headline shorter");
-  assert.equal(cleanInstruction("x".repeat(900)).length, 500);
+test("cleanInstruction trims, keeps line breaks and removes leading dashes", () => {
+  assert.equal(cleanInstruction("  --site   make the\n\n headline   shorter "), "site make the\n\nheadline shorter");
+  assert.equal(cleanInstruction("1. one\n2. two\n\n\n\n3. three"), "1. one\n2. two\n\n3. three");
+  assert.equal(cleanInstruction("x".repeat(2500)).length, 2000);
+  assert.equal(cleanInstruction("x".repeat(1700)).length, 1700);
 });
 test("changeLimit reads SITE_CHANGE_LIMIT and defaults to 5", () => {
   assert.equal(changeLimit({}), 5);

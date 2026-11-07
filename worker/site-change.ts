@@ -26,8 +26,29 @@ export type ChangeResult = { ok: boolean; error?: string };
 export function parseFinal(text: string): { summary: string; anchor: string } {
   const m = /^\s*VIEW:\s*#?([A-Za-z][\w-]*|top)\s*$/im.exec(text);
   const anchor = m ? (m[1].toLowerCase() === "top" ? "top" : m[1]) : "top";
-  const summary = text.replace(/^\s*VIEW:.*$/gim, "").replace(/\s+/g, " ").trim().slice(0, 500);
+  const whole = text.replace(/^\s*VIEW:.*$/gim, "").replace(/\s+/g, " ").trim();
+  // Never end mid-sentence: cut at the last full stop inside the limit.
+  const cut = whole.slice(0, 500);
+  const summary = whole.length <= 500 ? whole : cut.slice(0, cut.lastIndexOf(". ") + 1 || 500);
   return { summary, anchor };
+}
+
+/** True when the agent's closing reply reads like plain words for a site owner: short, no code, files, colour codes or commands. */
+export function isPlainSummary(s: string): boolean {
+  if (!s || s.length > 320) return false;
+  if ((s.match(/[.!?](\s|$)/g) ?? []).length > 3) return false;
+  if (/[`{}<>]/.test(s)) return false;
+  if (/#[0-9a-f]{3,8}\b/i.test(s)) return false;
+  if (/\b[\w-]+\.(md|mts|ts|tsx|js|css|json)\b/i.test(s)) return false;
+  if (/\b(npm|npx|tsc|e2e|tailwind|classname|git|commit|specs?\/|look\.md|\d+\s?px|\d+\s?rem)\b/i.test(s)) return false;
+  return true;
+}
+
+/** What the card shows after a change: the agent's own words when they are plain, otherwise the plain result lines Scout showed in the plan. */
+export function ownerSummary(said: string, changes?: string[]): string {
+  if (isPlainSummary(said)) return said;
+  const lines = (changes ?? []).map((c) => c.trim()).filter(Boolean).slice(0, 2);
+  return lines.length ? lines.map((l) => (/[.!?]$/.test(l) ? l : `${l}.`)).join(" ") : "The change is ready.";
 }
 
 /** The last `final` line of the run's transcript (one JSON object per line). */
@@ -260,7 +281,7 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       baseHead,
       feedback: undefined,
       note: after || !wantPictures ? undefined : "I could not make a preview picture, but the change passed its checks.",
-      summary: said || "The change is ready.",
+      summary: ownerSummary(said, msg.changes),
       snaps: { before: Boolean(before), after: Boolean(after) },
       snapJobId: log.length ? job.id : undefined,
       anchor,

@@ -159,7 +159,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 rows={3}
-                maxLength={500}
+                maxLength={2000}
                 autoFocus
                 className="mt-1.5 block w-full resize-none rounded-xl border border-foreground/20 bg-transparent px-3 py-2 text-base leading-snug outline-none focus:border-foreground"
               />

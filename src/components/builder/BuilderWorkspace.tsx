@@ -542,14 +542,20 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     edit(undoState);
   }
 
+  /** The server takes at most this many characters per message. Past it the box turns red and nothing is sent. */
+  const MAX_CHARS = 2000;
+  const overBy = input.length - MAX_CHARS;
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (overBy > 0) return;
     send(input);
   }
 
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      if (overBy > 0) return;
       send(input);
     }
   }
@@ -929,7 +935,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
 
           <form onSubmit={onSubmit} className="p-3">
             <div
-              className={`mx-auto w-full cursor-text rounded-2xl border border-foreground/15 bg-white transition-colors focus-within:border-foreground/50 ${expanded ? "lg:max-w-[640px]" : ""}`}
+              className={`mx-auto w-full cursor-text rounded-2xl border bg-white transition-colors ${overBy > 0 ? "border-red-600 focus-within:border-red-600" : "border-foreground/15 focus-within:border-foreground/50"} ${expanded ? "lg:max-w-[640px]" : ""}`}
               onClick={(e) => {
                 if (!(e.target as HTMLElement).closest("button")) inputRef.current?.focus();
               }}
@@ -962,9 +968,14 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                     </svg>
                   </button>
                 </div>
+                {overBy > 0 && (
+                  <p role="alert" className="mr-2 ml-auto text-xs text-red-700">
+                    {overBy.toLocaleString()} over the {MAX_CHARS.toLocaleString()} character limit. Shorten it, or send it in two parts.
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={busy || !input.trim()}
+                  disabled={busy || !input.trim() || overBy > 0}
                   aria-label="Send"
                   className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30 ${focusRing}`}
                 >

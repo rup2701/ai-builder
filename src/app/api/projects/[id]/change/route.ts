@@ -9,7 +9,7 @@ import { anthropicComplete } from "@/lib/agents/anthropic";
 import { pageContentOf, planChange, sectionsOf } from "@/lib/agents/change-planner";
 import { logUsage } from "@/lib/usage";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
-import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
+import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, LONG_REQUEST, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
 // Scout rewrites the request with one or two model calls before the card appears.
@@ -129,7 +129,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
     const brief = state.site?.brief ?? {};
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
-    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), text, { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     // A question, or something that cannot be done: the chat keeps what the owner wrote and the reply, and nothing is queued.
     const reply = plan?.answer ?? plan?.decline;
@@ -141,7 +141,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (plan?.title && plan.changes && plan.instruction) {
       title = plan.title;
       changes = plan.changes;
-      instruction = plan.instruction;
+      // A long request goes to the agent in the owner's own words as well, so nothing is lost in the rewrite.
+      instruction = text.length > LONG_REQUEST ? `${plan.instruction}\n\nThe owner's own words (follow these exactly where they differ from the summary above):\n${text}` : plan.instruction;
       size = plan.size;
     }
   }
