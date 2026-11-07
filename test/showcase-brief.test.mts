@@ -75,6 +75,14 @@ test("the main button link must be https or mailto, or empty", () => {
     assert.equal(validateSiteBrief(b, "saas").ok, ok, String(link));
   }
 });
+test("a secondary button is optional, limited to https or mailto, and may have no link yet", () => {
+  const b = example(); delete b.secondary_button;
+  assert.equal(validateSiteBrief(b, "saas").ok, true);
+  const b2 = example(); b2.secondary_button = { label: "Watch demo", link: null };
+  assert.equal(validateSiteBrief(b2, "saas").ok, true);
+  const b3 = example(); b3.secondary_button = { label: "Watch demo", link: "javascript:alert(1)" };
+  assert.equal(validateSiteBrief(b3, "saas").ok, false);
+});
 test("the brief card reads the bento benefits, the tone and the placeholders", () => {
   const c = briefCard(example());
   assert.equal(c.benefits.length, 3);

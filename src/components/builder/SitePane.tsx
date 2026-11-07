@@ -96,7 +96,7 @@ function briefBody(c: ReturnType<typeof briefCard>) {
         <Part label="Benefits">
           <ul className="space-y-1">
             {c.benefits.map((b) => (
-              <li key={b.title}><span className="text-foreground">{b.title}.</span> <span className="text-foreground/70">{b.text}</span></li>
+              <li key={b.title}><span className="text-foreground">{b.title.replace(/[.\s]+$/, "")}.</span> <span className="text-foreground/70">{b.text}</span></li>
             ))}
           </ul>
         </Part>

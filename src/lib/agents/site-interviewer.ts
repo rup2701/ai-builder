@@ -24,7 +24,7 @@ export const SITE_OPENER =
   "Hi! This site has one job: to test whether your idea has legs, so everything on the page will help you find that out.\n\nWhat's your idea about, in one or two sentences? Please include the name if you already have one.";
 
 export const SAAS_OPENER =
-  "Hi! I'll help you build a SaaS product showcase: a one-page site that makes your product look credible and sends people to one main button. No sign-up forms or emails to set up.\n\nWhat's your product, in one or two sentences? Please include the name.";
+  "Hi! I'll help you build a SaaS product showcase website.\n\nWhat's your product, in one or two sentences? Please include the name.";
 
 const SAVE_BRIEF: Tool = {
   name: "save_brief",

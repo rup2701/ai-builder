@@ -31,3 +31,9 @@ let sys = "";
 await planChange(async (req) => { sys = req.system; return { input: { decline: "x ok" }, usage: u }; }, "x", { ...ctx, content: '{"type":"pricing","plans":[{"name":"Starter","price":"$49"}]}' });
 assert.ok(sys.includes('"price":"$49"') && sys.includes("may be a little behind"));
 console.log("content ok");
+
+const ans = await planChange(async () => ({ input: { answer: "That card is large on purpose: it is the big card in the benefits grid. Nothing was changed. Tell me if you want it the same size as the others." }, usage: u }), "why is this title bigger?", ctx);
+assert.ok(ans.plan?.answer?.includes("Nothing was changed") && !ans.plan?.title);
+let qsys = ""; await planChange(async (req) => { qsys = req.system; return { input: { answer: "Three plans." }, usage: u }; }, "how many plans?", ctx);
+assert.ok(qsys.includes('set "answer"'));
+console.log("answer ok");

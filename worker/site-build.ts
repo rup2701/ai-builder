@@ -270,7 +270,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     msgs: [
       ...s.msgs,
       { id: s.nextId, kind: "site_ready", name: siteName, url: url!, ...(staticSite ? {} : { adminUrl: build.adminUrl!, ownerEmail, password }), checks: checklist(brief) },
-      { id: s.nextId + 1, kind: "bot", text: "Your site is live. To change anything on the page, tell me here, for example “make the closing headline shorter”. I'll show you before and after." },
+      { id: s.nextId + 1, kind: "bot", text: "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
     ],
     nextId: s.nextId + 2,
     site: { brief: s.site!.brief, build },

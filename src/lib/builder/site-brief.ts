@@ -66,6 +66,7 @@ export const ShowcaseBrief = z
     audience: z.object({ icp: z.string().trim().min(5) }).passthrough(),
     brand: z.object({ tone: z.enum(["calm", "bold", "playful", "serious"]), color: z.enum(["light", "dark", "blue-accent"]) }).passthrough(),
     main_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough(),
+    secondary_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().optional(),
     blocks: z.array(Block).min(5),
     look: z.object({}).passthrough(),
     placeholders: z.array(z.object({ where: z.string(), what: z.string() }).passthrough()).default([]),
@@ -76,8 +77,10 @@ export const ShowcaseBrief = z
     for (const need of ["hero", "how_it_works", "faq", "closing_cta", "footer"]) {
       if (!types.includes(need)) ctx.addIssue({ code: "custom", message: `blocks must include a "${need}" block` });
     }
-    const link = b.main_button.link;
-    if (link && !/^(https:\/\/\S+|mailto:\S+@\S+)$/.test(link)) ctx.addIssue({ code: "custom", path: ["main_button", "link"], message: "the link must start with https:// or mailto:" });
+    for (const key of ["main_button", "secondary_button"] as const) {
+      const link = (b[key] as { link?: string | null } | undefined)?.link;
+      if (link && !/^(https:\/\/\S+|mailto:\S+@\S+)$/.test(link)) ctx.addIssue({ code: "custom", path: [key, "link"], message: "the link must start with https:// or mailto:" });
+    }
     for (const blk of b.blocks as Record<string, any>[]) {
       if (blk.type !== "pricing") continue;
       const plans = Array.isArray(blk.plans) ? blk.plans : [];

@@ -16,6 +16,8 @@ export const ChangePlan = z.object({
   size: z.enum(["small", "substantial"]).optional(),
   /** The full instruction for the agent. Missing when the request cannot be done as a change to the public page. */
   instruction: z.string().trim().min(10).max(3000).optional(),
+  /** A short plain answer when the owner asked a question and did not ask for a change. Nothing is changed. */
+  answer: z.string().trim().min(5).max(800).optional(),
   /** A plain sentence for the owner when the request is not something this can do. */
   decline: z.string().trim().min(5).max(500).optional(),
 });
@@ -31,6 +33,7 @@ const TOOL: Tool = {
       changes: { type: "array", items: { type: "string" }, description: "One to four concrete results the owner will see, in plain words. State every choice you made for them, with the value." },
       size: { type: "string", enum: ["small", "substantial"], description: "small = only the text and figures shown on the page change (words, numbers, prices, labels, sentences), in as many places as they appear, including rounding or recalculating figures and updating every place that quotes them. substantial = anything that changes design, layout, spacing, color or behavior, or adds or removes a section. Only when you cannot tell which, substantial." },
       instruction: { type: "string", description: "One paragraph for the developer who makes the change: what to change, where, and every value." },
+      answer: { type: "string", description: "Only when the owner asked a question and did not ask for a change. One to four plain sentences that answer it. Nothing is changed." },
       decline: { type: "string", description: "Only when the request cannot be done as a change to the public page. One plain sentence." },
     },
   },
@@ -42,6 +45,7 @@ The page has these sections, top to bottom: ${sections.join("; ")}.
 
 ${content ? `What the page said when it was built, from the brief (it may be a little behind later changes):\n${content}\n\n` : ""}${applied.length ? `Changes already made and live on this site, newest last:\n${applied.map((a) => `- ${a}`).join("\n")}\n` : "No changes have been made through this chat yet.\n"}
 Rules:
+- The owner may ask a question instead of asking for a change ("why is this card bigger?", "what does this section do?", "how many plans are there?"). Then set "answer" to one to four plain sentences that answer it, using the page content, the section list and the list of live changes above, and leave everything else out. Say plainly when you cannot tell. Do not guess. When a change is the natural next step, end with one short sentence that offers it, for example "Tell me if you want it the same size as the others." Never make a change for a question and never ask the owner a question.
 - If everything the owner asks for is already in the list of live changes, set "decline" to one plain sentence that says so and names the change, for example "That is already live: <title>. Nothing to change." and leave the rest out.
 - The list comes from this chat and can be wrong. If the owner says it is not on the page, or asks to do it again or to redo it, plan the change as new and do not decline.
 - If only part of it is already live, plan only the new part, and add one line to "changes" that starts with "Already live:" naming what you are leaving as it is.
@@ -112,7 +116,8 @@ export async function planChange(
       return { plan: null, usage: r.usage };
     }
     const p = parsed.data;
-    // A plan is usable only if it declines, or has a title, results and an instruction together.
+    // A plan is usable only if it answers, declines, or has a title, results and an instruction together.
+    if (p.answer) return { plan: { answer: p.answer }, usage: r.usage };
     if (p.decline) return { plan: { decline: p.decline }, usage: r.usage };
     if (!p.title || !p.changes?.length || !p.instruction) {
       console.error("change planner: reply is missing a title, results or instruction");

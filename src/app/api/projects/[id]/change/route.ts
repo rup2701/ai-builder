@@ -131,8 +131,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
     const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 25000 }), cleanInstruction(data.text, 1200), { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
-    if (plan?.decline) {
-      return fail(plan.decline, 400);
+    // A question, or something that cannot be done: the chat keeps what the owner wrote and the reply, and nothing is queued.
+    const reply = plan?.answer ?? plan?.decline;
+    if (reply) {
+      let next = pushMsg(state, { kind: "user", text });
+      next = pushMsg(next, { kind: "bot", text: reply });
+      return save(next);
     }
     if (plan?.title && plan.changes && plan.instruction) {
       title = plan.title;
