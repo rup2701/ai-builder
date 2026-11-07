@@ -4,7 +4,8 @@ import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { initialState, pushMsg } from "@/lib/workspace/state";
 import { getSiteInterviewer } from "@/lib/agents/interviewer";
-import { SAAS_OPENER, SITE_OPENER } from "@/lib/agents/site-interviewer";
+import { SHOWCASE_OPENER, SITE_OPENER } from "@/lib/agents/site-interviewer";
+import { normalizePack } from "@/lib/builder/site-brief";
 import { logUsage } from "@/lib/usage";
 import { statusFor, titleFor } from "@/lib/projects";
 
@@ -16,13 +17,15 @@ const MIN_SITE_IDEA = 15;
 export default async function New({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string; pack?: string }> }) {
   const { idea: raw, kind: rawKind, pack: rawPack } = await searchParams;
   const kind = rawKind === "site" ? "site" : "store";
-  // The SaaS pack is behind a switch until it has been tested; without it, ?pack=saas is ignored.
-  const pack: "waitlist" | "saas" = kind === "site" && rawPack === "saas" && process.env.ENABLE_SAAS_PACK === "1" ? "saas" : "waitlist";
+  // The product showcase pack is behind a switch until it has been tested; without it, ?pack=showcase is ignored.
+  // ?pack=product-showcase and the old ?pack=saas open the same pack. ENABLE_SAAS_PACK is the old name of the switch.
+  const switchOn = process.env.ENABLE_SHOWCASE_PACK === "1" || process.env.ENABLE_SAAS_PACK === "1";
+  const pack: "waitlist" | "showcase" = kind === "site" && normalizePack(rawPack) === "showcase" && switchOn ? "showcase" : "waitlist";
   const trimmed = (raw ?? "").trim().slice(0, 1000);
   // A website idea shorter than this is not enough to start from: Scout opens with its usual first question instead.
   const idea = kind === "site" && trimmed.length < MIN_SITE_IDEA ? "" : trimmed;
   const user = await getUser();
-  if (!user) redirect(`/signin?${new URLSearchParams({ ...(idea ? { idea } : {}), ...(kind === "site" ? { kind } : {}), ...(pack === "saas" ? { pack } : {}) })}`);
+  if (!user) redirect(`/signin?${new URLSearchParams({ ...(idea ? { idea } : {}), ...(kind === "site" ? { kind } : {}), ...(pack === "showcase" ? { pack } : {}) })}`);
 
   // A refresh or a double click on "Let's go" reopens the project just made from this idea, not a second one.
   if (idea) {
@@ -54,7 +57,7 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
   redirect(`/projects/${row.id}`);
 }
 
-function siteStart(pack: "waitlist" | "saas") {
+function siteStart(pack: "waitlist" | "showcase") {
   const s = initialState();
-  return { ...pushMsg({ ...s, msgs: [], nextId: 1, phase: "intake" as const, sitePack: pack }, { kind: "bot", text: pack === "saas" ? SAAS_OPENER : SITE_OPENER }) };
+  return { ...pushMsg({ ...s, msgs: [], nextId: 1, phase: "intake" as const, sitePack: pack }, { kind: "bot", text: pack === "showcase" ? SHOWCASE_OPENER : SITE_OPENER }) };
 }

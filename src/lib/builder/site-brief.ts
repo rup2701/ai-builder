@@ -24,7 +24,7 @@ export const SiteBrief = z
     }
   });
 
-/** The SaaS product site brief: same envelope, different blocks, and a single-email signup instead of a waitlist form. */
+/** PARKED (old SaaS sign-up pack, not used by the builder): same envelope, different blocks, and a single-email signup instead of a waitlist form. */
 export const SaasBrief = z
   .object({
     site: z.object({ name: z.string().trim().min(1).max(60), kind: z.literal("saas") }).passthrough(),
@@ -59,10 +59,10 @@ export const perMonthOf = (yearly: number) => Math.floor(yearly / 12);
 
 const Plan = z.object({ name: z.string().trim().min(1).max(40), monthly_price: z.number().nonnegative() }).passthrough();
 
-/** The SaaS product showcase brief: no sign-up, no owner area. Sections in blocks, the brand and the main button beside them. */
+/** The product showcase brief: no sign-up, no owner area. Sections in blocks, the brand and the main button beside them. */
 export const ShowcaseBrief = z
   .object({
-    site: z.object({ name: z.string().trim().min(1).max(60), kind: z.literal("saas-showcase") }).passthrough(),
+    site: z.object({ name: z.string().trim().min(1).max(60), kind: z.enum(["product-showcase", "saas-showcase"]) }).passthrough(),
     audience: z.object({ icp: z.string().trim().min(5) }).passthrough(),
     brand: z.object({ tone: z.enum(["calm", "bold", "playful", "serious"]), color: z.enum(["light", "dark", "blue-accent"]) }).passthrough(),
     main_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough(),
@@ -101,10 +101,13 @@ export const ShowcaseBrief = z
   });
 
 export type SiteBriefT = z.infer<typeof SiteBrief>;
-export type SitePack = "waitlist" | "saas";
+export type SitePack = "waitlist" | "showcase";
 
-export function validateSiteBrief(input: unknown, pack: SitePack = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
-  const r = (pack === "saas" ? ShowcaseBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
+/** "saas" is the old name of the showcase pack; projects started under it keep working. */
+export const normalizePack = (p?: string | null): SitePack => (p === "showcase" || p === "saas" || p === "product-showcase" ? "showcase" : "waitlist");
+
+export function validateSiteBrief(input: unknown, pack: SitePack | "saas" = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
+  const r = (normalizePack(pack) === "showcase" ? ShowcaseBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };
   const lines = r.error.issues.slice(0, 6).map((i) => `${i.path.join(".") || "brief"}: ${i.message}`);
   return { ok: false, error: `The brief is not valid. Fix these and call save_brief again:\n${lines.join("\n")}` };
@@ -119,7 +122,7 @@ export function briefCard(b: Record<string, unknown>) {
   const get = (t: string) => blocks.find((x) => x.type === t) as Record<string, any> | undefined;
   const hero = get("hero"), preview = get("preview") ?? get("visual"), tools = get("integrations");
   const pills = get("pills") ?? get("benefits_bento");
-  // The SaaS pack shows its pills where the waitlist pack shows benefits, and its signup where the waitlist has a form.
+  // The showcase pack shows its pills where the waitlist pack shows benefits, and its signup where the waitlist has a form.
   const benefits = get("benefits") ?? (pills ? { items: ((pills.items as { text: string }[] | undefined) ?? []).map((i) => ({ title: i.text, text: "" })) } : undefined);
   const wl = get("waitlist") ?? ((b.signup as Record<string, any> | undefined) ? { form: b.signup } : undefined);
   const site = (b.site ?? {}) as Record<string, any>;

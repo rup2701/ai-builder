@@ -38,6 +38,7 @@ export type RunSummary = {
   stopReason?: string;
   turns?: number;
   durationMinutes?: number;
+  timingsSeconds?: { agent?: number; typecheck?: number; build?: number };
   estimatedCostUsd?: number;
   tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
   checks?: { typecheck?: boolean; build?: boolean };
@@ -74,20 +75,15 @@ export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
   const items = c.unconfirmed.map((u) => `Make sure this is true before you publish it: "${u}"`);
   const kind = (brief.site as { kind?: string } | undefined)?.kind;
-  if (kind === "saas-showcase") {
+  if (kind === "product-showcase" || kind === "saas-showcase") {
     // A showcase has no sign-ups and no owner area: the list is its placeholders and drafted wording.
     const ph = (brief.placeholders as { what?: string; fix?: string }[] | undefined) ?? [];
     for (const p of ph) if (p?.what) items.push(`${p.what}${p.fix ? `. ${p.fix}.` : "."}`);
     items.push("The headline, benefits, steps and FAQ were drafted from your answers. Read them and change anything that isn't right. To change anything, ask me in the chat.");
     return items;
   }
-  if (kind === "saas") {
-    items.push("The headline, pills, steps and success message were drafted for you. Read them and change anything that isn't right.");
-    items.push("Images are designed placeholders. To change any wording or add an image later, ask the builder in the chat.");
-  } else {
-    items.push("The headline, benefits and thank-you wording were drafted for you. Read them and change anything that isn't right.");
-    items.push("Images are designed placeholders. Image uploads need a Blob store connected to the site's Vercel project; until then the owner area says uploads are not available.");
-  }
+  items.push("The headline, benefits and thank-you wording were drafted for you. Read them and change anything that isn't right.");
+  items.push("Images are designed placeholders. Image uploads need a Blob store connected to the site's Vercel project; until then the owner area says uploads are not available.");
   items.push("The site starts with sample sign-ups, labelled as samples. Delete them in the owner area before real use.");
   return items;
 }
@@ -176,10 +172,10 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     }, Number(env.WORKER_FILES_MS ?? 6000));
 
     const siteKind = (brief.site as { kind?: string } | undefined)?.kind;
-    const saasPack = siteKind === "saas" || siteKind === "saas-showcase";
+    const showcasePack = siteKind === "product-showcase" || siteKind === "saas-showcase";
     const created = await runProcess(
       "npm",
-      ["run", "create", "--", `A ${saasPack ? "product" : "waitlist"} website for ${siteName}`, "--specs", `vertical-packs/${saasPack ? "saas" : "site"}/specs`, "--brief", path.relative(runner, briefFile)],
+      ["run", "create", "--", `A ${showcasePack ? "product showcase" : "waitlist"} website for ${siteName}`, "--specs", `vertical-packs/${showcasePack ? "product-showcase" : "site"}/specs`, "--brief", path.relative(runner, briefFile)],
       {
         cwd: runner,
         env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_BUILD_MAX_USD ?? "8" },
@@ -236,7 +232,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   const { runner, runDir, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild } = c;
   // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
   setStage(4);
-  const staticSite = (brief.site as { kind?: string } | undefined)?.kind === "saas-showcase";
+  const staticSite = ["product-showcase", "saas-showcase"].includes((brief.site as { kind?: string } | undefined)?.kind ?? "");
   // A showcase has no owner area, so no sign-in email and no password.
   const password = staticSite ? "" : randomBytes(12).toString("base64url");
   let url: string | null = null;

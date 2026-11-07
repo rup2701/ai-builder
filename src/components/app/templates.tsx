@@ -91,7 +91,7 @@ export const SITE_TEMPLATES: Template[] = [
   },
   {
     id: "website-saas",
-    caption: "SaaS site",
+    caption: "Product showcase",
     text: "A product website for ___, with pricing, how it works and a sign-up box.",
     soon: true,
     art: (
