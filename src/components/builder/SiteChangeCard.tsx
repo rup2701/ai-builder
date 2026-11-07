@@ -19,6 +19,7 @@ type Props = {
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 const primary = `rounded-xl bg-foreground px-4 py-2 text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
 const secondary = `rounded-xl border border-foreground/20 px-4 py-2 text-sm text-foreground transition-colors hover:bg-foreground/[0.05] disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
+const danger = `rounded-xl border border-red-600 px-4 py-2 text-sm text-foreground transition-colors hover:bg-red-600/10 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
 
 /** One change to the live site, from the request to the preview to "live". Shows the pictures from before and after when the worker took them. */
 export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction }: Props) {
@@ -195,8 +196,8 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
             </a>
           )}
           {msg.published && (
-            <div className="mt-3">
-              <button type="button" disabled={busy} onClick={() => onAction({ undo: msg.id })} className={secondary}>
+            <div className="mt-4 flex justify-end">
+              <button type="button" disabled={busy} onClick={() => onAction({ undo: msg.id })} className={danger}>
                 Undo this change
               </button>
             </div>
