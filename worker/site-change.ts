@@ -336,7 +336,9 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
       anchor,
     };
     // A small wording change goes live as soon as it is made. If publishing fails, it waits in the preview instead.
-    const phases = { runner: runnerSec, agent: summary.timingsSeconds?.agent, typecheck: summary.timingsSeconds?.typecheck, build: summary.timingsSeconds?.build, preview: previewSec };
+    const ts = summary.timingsSeconds;
+    // agent = model + tools; tests and agentChecks are parts of tools (the agent's own test runs and build or type checks).
+    const phases = { runner: runnerSec, agent: ts?.agent, model: ts?.model, tools: ts?.tools, tests: ts?.tests, agentChecks: ts?.agentChecks, typecheck: ts?.typecheck, build: ts?.build, preview: previewSec };
     if (msg.size === "small" && !isRevision) {
       await setMsg(db, job.project_id, job.id, { ...fields, status: "publishing" });
       const tDeploy = Date.now();

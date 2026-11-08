@@ -38,7 +38,7 @@ export type RunSummary = {
   stopReason?: string;
   turns?: number;
   durationMinutes?: number;
-  timingsSeconds?: { agent?: number; typecheck?: number; build?: number };
+  timingsSeconds?: { agent?: number; typecheck?: number; build?: number; model?: number; tools?: number; tests?: number; agentChecks?: number };
   estimatedCostUsd?: number;
   tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
   checks?: { typecheck?: boolean; build?: boolean };
