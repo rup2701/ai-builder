@@ -9,7 +9,7 @@ import { anthropicComplete } from "@/lib/agents/anthropic";
 import { pageContentOf, planChange, sectionsOf } from "@/lib/agents/change-planner";
 import { logUsage } from "@/lib/usage";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
-import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isOpen, LONG_REQUEST, MAX_REVISIONS, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
+import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isMaking, LONG_REQUEST, MAX_REVISIONS, mergeWorkerUpdates, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
 // Scout rewrites the request with one or two model calls before the card appears.
@@ -49,9 +49,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const state = p.state as WorkspaceState;
   if (!siteIsLive(state)) return fail("The site has to be live before it can be changed.", 409);
-  if (changeMsgs(state).some(isOpen)) return fail("A change is already running. I'll be done in a few minutes.", 409);
+  // A change that is only being checked and deployed after approval does not block the next request: its job is ahead in the queue.
+  if (changeMsgs(state).some(isMaking)) return fail("A change is already running. I'll be done in a few minutes.", 409);
 
-  const save = async (next: WorkspaceState) => {
+  /**
+   * The worker updates change messages (status, phase, summary) while this request is working, and the owner can now send a request
+   * while an approved change is still being checked. So a change message this request did not touch keeps the worker's latest version,
+   * read again just before saving; otherwise a slow request (Scout takes seconds to plan) would put an old status back.
+   */
+  const keepWorkerUpdates = async (next: WorkspaceState): Promise<WorkspaceState> => {
+    const [cur] = await db.select({ state: schema.projects.state }).from(schema.projects).where(eq(schema.projects.id, p.id));
+    return mergeWorkerUpdates(next, state, cur?.state as WorkspaceState | undefined);
+  };
+  const save = async (wanted: WorkspaceState) => {
+    const next = await keepWorkerUpdates(wanted);
     await db.update(schema.projects).set({ state: next, updatedAt: new Date() }).where(eq(schema.projects.id, p.id));
     return NextResponse.json({ state: next });
   };
@@ -65,9 +76,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const running = await db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
-      .where(and(eq(schema.jobs.projectId, p.id), inArray(schema.jobs.type, ["site_build", "site_publish", "site_change"]), inArray(schema.jobs.status, ["queued", "running"])))
-      .limit(1);
-    if (running.length) return fail("Something is already running on this site. Try again in a few minutes.", 409);
+      .where(and(eq(schema.jobs.projectId, p.id), inArray(schema.jobs.type, ["site_build", "site_publish", "site_change"]), inArray(schema.jobs.status, ["queued", "running"])));
+    // The one exception: jobs that are checking and deploying an approved change. The worker takes jobs one at a time, so a new job waits behind them.
+    const publishing = new Set(changeMsgs(state).filter((c) => c.status === "publishing" && c.jobId).map((c) => c.jobId));
+    if (running.some((r) => !publishing.has(r.id))) return fail("Something is already running on this site. Try again in a few minutes.", 409);
     const [job] = await db.insert(schema.jobs).values({ projectId: p.id, type: "site_change" }).returning({ id: schema.jobs.id });
     return save(patch(state, m.id, { ...change, jobId: job.id }));
   };
@@ -83,6 +95,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if ("confirm" in data) {
     const m = find(data.confirm, "proposed");
     if (!m) return gone();
+    // A change that failed its checks after approval can come back to its preview; nothing new is built on top of it until it is answered.
+    if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
     const limit = changeLimit();
     if (limit > 0 && changesUsed(state) >= limit) return fail(`This site has used its ${limit} changes for now.`, 429);
     return queue(m, { status: "queued", action: "make", note: undefined, error: undefined });
@@ -90,7 +104,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   if ("approve" in data) {
     const m = find(data.approve, "review");
-    return m ? queue(m, { status: "publishing", action: "publish", note: undefined }) : gone();
+    return m ? queue(m, { status: "publishing", action: "publish", phase: "checking", note: undefined }) : gone();
   }
 
   if ("undo" in data) {

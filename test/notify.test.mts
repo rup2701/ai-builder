@@ -82,6 +82,25 @@ await test("the admin gets a copy of the end email, even when the person has no 
   await notifyBuildEnd({ RESEND_API_KEY: "k" }, "person@x.dev", done, f); // no admin address set
   assert.deepEqual(sent.map((x) => x.to), [["person@x.dev"]]);
 });
+await test("a stopped change says what happened in plain words, and only the admin copy has the detail", async () => {
+  const m = { kind: "changeStopped" as const, siteName: "Tidewell", projectUrl: "https://b.example/projects/p1", cause: "system" as const, adminDetail: "job j1: EADDRINUSE" };
+  const owner = buildEmail(m);
+  const admin = buildEmail(m, true);
+  assert.match(owner.subject, /something went wrong on our side/);
+  assert.match(owner.text, /live site is unchanged/);
+  assert.doesNotMatch(owner.text + owner.html, /EADDRINUSE/);
+  assert.match(admin.text, /EADDRINUSE/);
+  const change = buildEmail({ ...m, cause: "change" });
+  assert.match(change.subject, /was not applied/);
+  assert.doesNotMatch(change.text, /our side/);
+  // End to end through the sender: the owner's email has no detail, the admin's copy does.
+  const sent: { to: string[]; text: string }[] = [];
+  const f = (async (_u: string, init: { body: string }) => { sent.push(JSON.parse(init.body)); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
+  await notifyBuildEnd({ RESEND_API_KEY: "k", ADMIN_NOTIFY_EMAIL: "admin@x.dev" }, "person@x.dev", m, f);
+  assert.equal(sent.length, 2);
+  assert.doesNotMatch(sent[0].text, /EADDRINUSE/);
+  assert.match(sent[1].text, /EADDRINUSE/);
+});
 await test("projectLink defaults to the builder address", () => {
   assert.equal(projectLink({}, "p1"), "https://builder.appnomics.dev/projects/p1");
   assert.equal(projectLink({ APP_URL: "http://x.test/" }, "p1"), "http://x.test/projects/p1");

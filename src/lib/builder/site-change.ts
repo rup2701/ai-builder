@@ -45,6 +45,20 @@ export function changeMsgs(s: WorkspaceState): ChangeMsg[] {
 /** The worker is busy with this change. */
 export const isOpen = (m: ChangeMsg) => m.status === "queued" || m.status === "working" || m.status === "publishing";
 
+/** The change is being made or revised, so the code is changing and the owner has to wait. A change that is publishing (checks and deploy) does not hold the owner back. */
+export const isMaking = (m: ChangeMsg) => m.status === "queued" || m.status === "working";
+
+/**
+ * The worker changes change messages (status, phase, summary) while a request is being handled. When the request saves, a change message it did
+ * not touch (same as when the request started) takes the worker's latest version, so an old status is never put back. The rest comes from `wanted`.
+ */
+export function mergeWorkerUpdates(wanted: WorkspaceState, started: WorkspaceState, current: WorkspaceState | undefined): WorkspaceState {
+  if (!current) return wanted;
+  const startedAs = new Map(started.msgs.map((m) => [m.id, JSON.stringify(m)]));
+  const latest = new Map(current.msgs.map((m) => [m.id, m]));
+  return { ...wanted, msgs: wanted.msgs.map((m) => (m.kind === "site_change" && startedAs.get(m.id) === JSON.stringify(m) && latest.has(m.id) ? latest.get(m.id)! : m)) };
+}
+
 /** The change is made and waiting for the owner: approve, ask for changes, or remove. */
 export const needsAnswer = (m: ChangeMsg) => m.status === "review";
 

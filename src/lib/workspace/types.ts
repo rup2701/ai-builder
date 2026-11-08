@@ -31,6 +31,8 @@ type MsgBody =
       jobId?: string;
       /** What the next worker job does for this change. */
       action?: "make" | "publish" | "discard";
+      /** While publishing: the approved change is being checked, repaired after a failed check, or deployed. The owner can keep working meanwhile. */
+      phase?: "checking" | "repairing" | "deploying";
       /** The code before this change, so "remove" and a failed change can put it back. */
       baseHead?: string;
       /** The owner's request for a revision, and how many rounds there have been (up to 3). */

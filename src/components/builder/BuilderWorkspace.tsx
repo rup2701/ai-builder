@@ -18,7 +18,7 @@ import StorePreview from "./StorePreview";
 import SitePane from "./SitePane";
 import SiteReadyCard from "./SiteReadyCard";
 import SiteChangeCard, { type ChangeAction } from "./SiteChangeCard";
-import { changeMsgs, isOpen, siteIsLive } from "@/lib/builder/site-change";
+import { changeMsgs, isMaking, isOpen, siteIsLive } from "@/lib/builder/site-change";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
@@ -384,8 +384,10 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   const cur: StoreConfig | undefined = history[history.length - 1];
   const results = useMemo(() => (cur ? verify(cur) : []), [cur]);
   const sum = summarize(results);
-  /** A change to the live site is queued or running on the worker. */
-  const changeRunning = site && changeMsgs(st).some(isOpen);
+  /** A change is being made or revised: the owner waits. A change that is only being checked and deployed after approval does not hold them back. */
+  const changeRunning = site && changeMsgs(st).some(isMaking);
+  /** Any change still busy on the worker, including the checks and deploy after approval: keep following it so the card updates. */
+  const changeOpen = site && changeMsgs(st).some(isOpen);
   /** Once the site is live, the chat asks what to change instead of interviewing. */
   const editing = site && siteIsLive(st) && !changeRunning;
   const busy = phase === "build" || phase === "verify" || pending || changeRunning;
@@ -422,7 +424,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
 
   // While a build runs on the worker, follow it. This also resumes after the tab was closed.
   useEffect(() => {
-    if (phase !== "build" && phase !== "verify" && !changeRunning) return;
+    if (phase !== "build" && phase !== "verify" && !changeOpen) return;
     const t = setInterval(async () => {
       try {
         const r = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
@@ -432,7 +434,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [phase, projectId, changeRunning]);
+  }, [phase, projectId, changeOpen]);
 
   // Save iterate-phase changes shortly after they happen.
   useEffect(() => {
@@ -628,7 +630,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     <div className="flex h-[100dvh] min-h-[40rem] flex-col bg-background text-foreground">
       <h1 className="sr-only">{site ? "Website builder" : "Store builder"}</h1>
 
-      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 border-b border-foreground/10 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
+      <header className={site ? "grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 md:grid-cols-[1fr_auto_1fr]" : "flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3"}>
         <a href={homeHref} className={`justify-self-start rounded-lg ${focusRing}`}>
           {back}
         </a>

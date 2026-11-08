@@ -7,16 +7,27 @@
 export type BuildMail =
   | { kind: "started"; siteName: string; projectUrl: string; by: string }
   | { kind: "done"; siteName: string; projectUrl: string; siteUrl: string; showcase?: boolean }
-  | { kind: "failed"; siteName: string; projectUrl: string; stageLabel: string; retryPublish: boolean };
+  | { kind: "failed"; siteName: string; projectUrl: string; stageLabel: string; retryPublish: boolean }
+  // A change the owner approved did not go live. cause "change": the checks found a problem the repair could not fix.
+  // cause "system": something broke on our side. `adminDetail` (job, phase, last lines) is only in the copy for the admin.
+  | { kind: "changeStopped"; siteName: string; projectUrl: string; cause: "change" | "system"; adminDetail?: string };
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export function buildEmail(m: BuildMail): { subject: string; text: string; html: string } {
+export function buildEmail(m: BuildMail, forAdmin = false): { subject: string; text: string; html: string } {
   const name = m.siteName || "Your site";
   let subject: string;
   let lines: string[];
   let cta: string;
-  if (m.kind === "started") {
+  if (m.kind === "changeStopped") {
+    subject = m.cause === "change" ? `${name}: your change was not applied` : `${name}: something went wrong on our side`;
+    lines =
+      m.cause === "change"
+        ? [`We could not apply your change to ${name}. Your live site is unchanged.`, "Open your project and ask again, in different words if you like."]
+        : [`Your change to ${name} did not go live because something went wrong on our side. Your live site is unchanged.`, "We have been told and are looking into it. You can try again from your project."];
+    if (forAdmin && m.adminDetail) lines = [...lines, `Details for you: ${m.adminDetail}`];
+    cta = "Open your project";
+  } else if (m.kind === "started") {
     // For the person running the builder, not for the customer.
     subject = `Build started: ${name}`;
     lines = [`${m.by} started building ${name}.`];
@@ -81,7 +92,8 @@ export async function notifyBuildEnd(env: Env, to: string | undefined, m: BuildM
   // Sent even when the person has no email on the build, and skipped when it would be the same address.
   const admin = env.ADMIN_NOTIFY_EMAIL?.trim();
   if (admin && admin.toLowerCase() !== (to ?? "").toLowerCase()) {
-    const r = await sendEmail(env, admin, { ...msg, subject: `[copy] ${msg.subject}` }, fetchImpl);
+    const copy = buildEmail(m, true);
+    const r = await sendEmail(env, admin, { ...copy, subject: `[copy] ${copy.subject}` }, fetchImpl);
     console.log(r.ok ? `worker: emailed admin copy of ${m.kind} notice` : `worker: admin copy not sent (${r.error})`);
   }
 }

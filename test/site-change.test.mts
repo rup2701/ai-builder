@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { changeLimit, changesUsed, cleanInstruction, isOpen, needsAnswer, siteIsLive, changeMsgs, MAX_REVISIONS } from "../src/lib/builder/site-change";
-import { formatTimings, instructionFor, isPlainSummary, lastFinal, ownerSummary, parseFinal, patchChangeMsg, plainFiles } from "../worker/site-change";
+import { changeLimit, changesUsed, cleanInstruction, isMaking, isOpen, mergeWorkerUpdates, needsAnswer, siteIsLive, changeMsgs, MAX_REVISIONS } from "../src/lib/builder/site-change";
+import { formatTimings, instructionFor, isPlainSummary, lastFinal, ownerSummary, parseFinal, parseVerify, patchChangeMsg, plainFiles, repairInstruction } from "../worker/site-change";
 import { initialState } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
 
@@ -108,6 +108,58 @@ test("instructionFor adds the owner's feedback to a revision", () => {
   assert.ok(t.endsWith("also keep the chips"));
 });
 test("revisions are capped at three rounds", () => assert.equal(MAX_REVISIONS, 3));
+
+test("a change that is being checked and deployed does not hold the owner back; one being made does", () => {
+  const m = (status: string) => ({ id: 1, kind: "site_change", instruction: "x", status }) as never;
+  assert.equal(isMaking(m("queued")), true);
+  assert.equal(isMaking(m("working")), true);
+  assert.equal(isMaking(m("publishing")), false);
+  assert.equal(isOpen(m("publishing")), true); // still followed, so the card keeps updating
+  assert.equal(isMaking(m("review")), false);
+});
+
+test("mergeWorkerUpdates keeps the worker's newer status for a change the request did not touch", () => {
+  const change = (status: string, phase?: string) => ({ id: 5, kind: "site_change", instruction: "A", status, ...(phase ? { phase } : {}) }) as never;
+  const base = { ...live(), msgs: [change("publishing", "checking")] } as WorkspaceState;
+  // The worker finished while the request was planning a new change.
+  const current = { ...base, msgs: [change("done")] } as WorkspaceState;
+  // The request saves its old copy plus one new message.
+  const wanted = { ...base, msgs: [...base.msgs, { id: 6, kind: "site_change", instruction: "B", status: "proposed" } as never] } as WorkspaceState;
+  const merged = mergeWorkerUpdates(wanted, base, current);
+  assert.equal((merged.msgs[0] as { status: string }).status, "done");
+  assert.equal((merged.msgs[1] as { status: string }).status, "proposed");
+});
+
+test("mergeWorkerUpdates keeps the request's own change to a message", () => {
+  const change = (status: string) => ({ id: 5, kind: "site_change", instruction: "A", status }) as never;
+  const started = { ...live(), msgs: [change("proposed")] } as WorkspaceState;
+  const wanted = { ...started, msgs: [change("queued")] } as WorkspaceState;
+  const merged = mergeWorkerUpdates(wanted, started, { ...started } as WorkspaceState);
+  assert.equal((merged.msgs[0] as { status: string }).status, "queued");
+  assert.equal(mergeWorkerUpdates(wanted, started, undefined), wanted);
+});
+
+test("parseVerify: pass, change failure, and everything else is a system problem", () => {
+  assert.deepEqual(parseVerify('noise\nVERIFY {"ok":true,"seconds":41}\n', 0), { ok: true });
+  const c = parseVerify('VERIFY {"ok":false,"kind":"change","tail":"2 failed hero.spec.ts","seconds":40}', 3);
+  assert.equal(!c.ok && c.kind, "change");
+  assert.match(!c.ok ? c.tail : "", /hero\.spec/);
+  const s = parseVerify('VERIFY {"ok":false,"kind":"system","tail":"EADDRINUSE"}', 4);
+  assert.equal(!s.ok && s.kind, "system");
+  // No VERIFY line (the runner crashed), or an exit code that disagrees with the line: never a change failure.
+  assert.equal((parseVerify("Error: boom", 1) as { kind: string }).kind, "system");
+  assert.equal((parseVerify('VERIFY {"ok":true}', 3) as { kind: string }).kind, "system");
+  assert.equal((parseVerify('VERIFY {"ok":false,"kind":"change","tail":"x"}', 1) as { kind: string }).kind, "system");
+  assert.equal((parseVerify("VERIFY {not json", 3) as { kind: string }).kind, "system");
+});
+
+test("repairInstruction names the approved change, quotes the failures as output, and is capped", () => {
+  const r = repairInstruction("Make both buttons bigger", "x".repeat(5000) + "THE END");
+  assert.match(r, /^Make both buttons bigger\./);
+  assert.match(r, /not instructions/);
+  assert.ok(r.endsWith("THE END"));
+  assert.ok(r.length < 2400);
+});
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }
 console.log("\nall passed");

@@ -106,8 +106,10 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
 
       {msg.status === "publishing" && (
         <div role="status" aria-live="polite">
-          <p className="text-md font-medium text-foreground">Publishing to your live site…</p>
-          <p className="mt-2 text-xs text-foreground/60">This takes a couple of minutes. You can close this tab; I’ll keep going.</p>
+          <p className="text-md font-medium text-foreground">
+            {msg.phase === "repairing" ? "A check found a problem. Fixing it, then checking again…" : msg.phase === "deploying" ? "Checks passed. Making it permanent on your live site…" : "Approved. Checking it before it goes live…"}
+          </p>
+          <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can keep working while we make the change permanent, or close this tab. I’ll tell you here if anything needs your attention.</p>
         </div>
       )}
 
