@@ -6,28 +6,28 @@ import { REQUEST_ACCESS_HREF } from "@/lib/brand";
 import { getUser } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import Image from "next/image";
+import { isShowcase } from "@/lib/builder/site-brief";
 import { ACCESS_COOKIE, checkCode, normalizeCode } from "@/lib/access-code";
 
 export const dynamic = "force-dynamic";
 
 /** Where to go back to on an error, keeping the idea and kind the person arrived with. */
-function backTo(err: string, idea: string | undefined, kind: string | undefined) {
-  return `/signin?error=${err}${idea ? `&idea=${encodeURIComponent(idea)}` : ""}${kind === "site" ? "&kind=site" : ""}`;
+function backTo(err: string, idea: string | undefined, kind: string | undefined, pack?: string) {
+  return `/signin?error=${err}${idea ? `&idea=${encodeURIComponent(idea)}` : ""}${kind === "site" ? "&kind=site" : ""}${isShowcase(pack) ? "&pack=showcase" : ""}`;
 }
 
 /** A typed code is checked now (so a typo is caught before Google) and kept ten minutes in a cookie for the sign-in step. */
-async function holdCode(fd: FormData, idea: string | undefined, kind: string | undefined) {
+async function holdCode(fd: FormData, idea: string | undefined, kind: string | undefined, pack?: string) {
   const code = normalizeCode(String(fd.get("code") ?? ""));
   if (!code) return;
-  if (!(await checkCode(code)).ok) redirect(backTo("BadCode", idea, kind));
+  if (!(await checkCode(code)).ok) redirect(backTo("BadCode", idea, kind, pack));
   (await cookies()).set(ACCESS_COOKIE, code, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 600, path: "/" });
 }
 
-export default async function SignIn({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string; error?: string }> }) {
-  const { idea, kind, error } = await searchParams;
+export default async function SignIn({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string; pack?: string; error?: string }> }) {
+  const { idea, kind, pack, error } = await searchParams;
   // Your idea travels with the sign-in, so it is still there when you arrive.
-  const newParams = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}) }).toString();
+  const newParams = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}), ...(kind === "site" && isShowcase(pack) ? { pack: "showcase" } : {}) }).toString();
   const target = newParams ? `/new?${newParams}` : "/";
   // Decide by whether this person may still use the builder, not by whether a session cookie exists:
   // after a code is revoked the cookie is still there, and sending them on would loop back here.
@@ -38,16 +38,16 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
 
   async function googleAction(fd: FormData) {
     "use server";
-    await holdCode(fd, idea, kind);
+    await holdCode(fd, idea, kind, pack);
     await signIn("google", { redirectTo: target });
   }
   async function devAction(fd: FormData) {
     "use server";
-    await holdCode(fd, idea, kind);
+    await holdCode(fd, idea, kind, pack);
     try {
       await signIn("dev", { email: String(fd.get("email") ?? ""), redirectTo: target });
     } catch (e) {
-      if (e instanceof AuthError) redirect(backTo("AccessDenied", idea, kind));
+      if (e instanceof AuthError) redirect(backTo("AccessDenied", idea, kind, pack));
       throw e;
     }
   }
@@ -57,12 +57,12 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     <main className="grid min-h-[100dvh] lg:grid-cols-2">
       <section className="relative flex min-h-[100dvh] flex-col justify-center px-6 py-24 sm:px-10">
         <div className="absolute inset-x-6 top-6 flex items-center justify-between sm:inset-x-10 sm:top-8 lg:top-8">
-          <Image src="/images/appnomics-logo.svg" alt="Appnomics" width={122} height={32} />
+          <p className="text-base font-medium tracking-tight">Appnomics</p>
           <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/70">Private beta</span>
         </div>
 
         <div className="mx-auto w-full max-w-[24rem]">
-          <h1 className="text-3xl leading-tight">Sign in</h1>
+          <h1 className="text-3xl leading-tight">Sign in to start building</h1>
           {error && (
             <div role="alert" data-testid="signin-error" className="mt-5 flex gap-2.5 rounded-xl border border-destructive/25 bg-destructive/[0.06] p-3 text-sm leading-relaxed text-destructive">
               <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -134,14 +134,14 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
       <aside aria-hidden="true" data-testid="signin-art" className="hidden items-center bg-white lg:flex lg:pl-24">
         <div
           className="h-[min(62vh,40rem)] w-full rounded-l-[32px] bg-cover bg-left-top bg-no-repeat"
-          style={{ backgroundImage: "url(/images/signin-hero.webp)" }}
+          style={{ backgroundImage: "url(/images/signin-hero.png)" }}
         />
       </aside>
     </main>
   );
 }
 
-/** The Google "G", in its four brand colours. */
+/** The Google "G", in its four brand colors. */
 function GoogleMark() {
   return (
     <svg viewBox="0 0 48 48" className="h-[18px] w-[18px]" aria-hidden="true">

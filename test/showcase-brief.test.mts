@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { briefCard, normalizePack, validateSiteBrief, yearlyPrice, perMonthOf } from "../src/lib/builder/site-brief";
+import { briefCard, isShowcase, normalizePack, validateSiteBrief, yearlyPrice, perMonthOf } from "../src/lib/builder/site-brief";
 import { checklist } from "../worker/site-build";
 import { SHOWCASE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { makeSiteInterviewer } from "../src/lib/agents/site-interviewer";
@@ -11,6 +11,10 @@ let failed = 0;
 function test(name: string, fn: () => void) {
   try { fn(); console.log(`PASS ${name}`); } catch (e) { failed++; console.log(`FAIL ${name}\n  ${e instanceof Error ? e.message : e}`); }
 }
+test("a link asks for the showcase pack only by its own names; everything else is the waitlist", () => {
+  for (const p of ["showcase", "product-showcase", "saas"]) assert.equal(isShowcase(p), true, p);
+  for (const p of [undefined, null, "", "waitlist", "other"]) assert.equal(isShowcase(p as string | undefined), false, String(p));
+});
 const example = () => JSON.parse(SHOWCASE_EXAMPLE_BRIEF) as Record<string, any>;
 const pricing = (b: Record<string, any>) => b.blocks.find((x: any) => x.type === "pricing");
 

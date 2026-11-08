@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import AppShell from "@/components/app/AppShell";
+import { isShowcase } from "@/lib/builder/site-brief";
 import NewProject from "@/components/app/NewProject";
 import { PROGRESS_STEPS, siteProgress } from "@/lib/builder/project-progress";
 import type { WorkspaceState } from "@/lib/workspace/types";
@@ -14,9 +15,9 @@ export const dynamic = "force-dynamic";
  * Home: the prompt and starter cards. The Appnomics site links here as /?kind=site&idea=…, and that still goes
  * straight to /new (or to sign-in first) with the idea kept.
  */
-export default async function Home({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string }> }) {
-  const { idea, kind } = await searchParams;
-  const params = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}) }).toString();
+export default async function Home({ searchParams }: { searchParams: Promise<{ idea?: string; kind?: string; pack?: string }> }) {
+  const { idea, kind, pack } = await searchParams;
+  const params = new URLSearchParams({ ...(idea?.trim() ? { idea: idea.trim().slice(0, 1000) } : {}), ...(kind === "site" ? { kind } : {}), ...(kind === "site" && isShowcase(pack) ? { pack: "showcase" } : {}) }).toString();
   const user = await getUser();
   if (params) redirect(user ? `/new?${params}` : `/signin?${params}`);
   if (!user) redirect("/signin");

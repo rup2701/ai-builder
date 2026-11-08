@@ -106,6 +106,9 @@ export type SitePack = "waitlist" | "showcase";
 /** "saas" is the old name of the showcase pack; projects started under it keep working. */
 export const normalizePack = (p?: string | null): SitePack => (p === "showcase" || p === "saas" || p === "product-showcase" ? "showcase" : "waitlist");
 
+/** A link asked for the product showcase pack (pack=showcase, product-showcase or the old saas). */
+export const isShowcase = (p?: string | null) => normalizePack(p) === "showcase";
+
 export function validateSiteBrief(input: unknown, pack: SitePack | "saas" = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
   const r = (normalizePack(pack) === "showcase" ? ShowcaseBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };

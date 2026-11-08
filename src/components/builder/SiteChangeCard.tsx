@@ -192,16 +192,20 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               ))}
             </ul>
           ) : null}
-          {siteUrl && (
-            <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`mt-3 inline-block text-sm underline underline-offset-4 hover:no-underline ${focusRing}`}>
-              Open your live site ↗
-            </a>
-          )}
-          {msg.published && (
-            <div className="mt-4 flex justify-end">
-              <button type="button" disabled={busy} onClick={() => onAction({ undo: msg.id })} className={danger}>
-                Undo this change
-              </button>
+          {(siteUrl || msg.published) && (
+            <div className="mt-4 flex items-center justify-between gap-3">
+              {siteUrl ? (
+                <a href={siteUrl} target="_blank" rel="noopener noreferrer" className={`inline-block text-sm underline underline-offset-4 hover:no-underline ${focusRing}`}>
+                  Open your live site ↗
+                </a>
+              ) : (
+                <span />
+              )}
+              {msg.published && (
+                <button type="button" disabled={busy} onClick={() => onAction({ undo: msg.id })} className={danger}>
+                  Undo this change
+                </button>
+              )}
             </div>
           )}
         </>

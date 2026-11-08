@@ -45,7 +45,9 @@ export default function NewProject() {
       boxRef.current?.focus();
       return;
     }
-    router.push(`/new?${new URLSearchParams({ kind, idea: value.slice(0, MAX) })}`);
+    // A template that belongs to another pack (the product showcase) says so in the link; typing over the text keeps it, as it is still that template.
+    const pack = kind === "site" ? templates.find((t) => t.id === template)?.pack : undefined;
+    router.push(`/new?${new URLSearchParams({ kind, idea: value.slice(0, MAX), ...(pack ? { pack } : {}) })}`);
   }
 
   return (
@@ -122,7 +124,7 @@ export default function NewProject() {
         {kind === "site" ? "Describe your idea and get a live waitlist site in about 45 minutes." : "Describe it and our agents build it, starting from a tested foundation."}
       </p>
 
-      <p className="mt-10 text-sm text-foreground/90">Start with a template</p>
+      <p className="mt-10 text-sm text-foreground/60">Start with a template</p>
       <ul data-testid="templates" className="mx-auto mt-4 grid max-w-3xl grid-cols-3 gap-2 sm:gap-4">
         {templates.map((t) => {
           const selected = template === t.id;
