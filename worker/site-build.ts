@@ -127,7 +127,10 @@ export async function heroShot(db: Db, job: Job, runDir: string, url: string, en
   try {
     const appDir = path.join(runDir, "app");
     const script = path.join(env.WORKER_DIR ?? path.join(process.cwd(), "worker"), "snap.mjs");
-    if (!existsSync(script) || !existsSync(path.join(appDir, "package.json"))) return false;
+    if (!existsSync(script) || !existsSync(path.join(appDir, "package.json"))) {
+      console.warn(`[hero] ${job.id.slice(0, 8)} skipped: snap.mjs or the site folder is missing (${script})`);
+      return false;
+    }
     const clean: NodeJS.ProcessEnv = { NODE_ENV: "production" };
     for (const k of ["PATH", "HOME", "USER", "LANG", "TMPDIR", "NODE_PATH"]) if (env[k]) clean[k] = env[k];
     const out = path.join(runDir, "hero-shot");
@@ -138,12 +141,15 @@ export async function heroShot(db: Db, job: Job, runDir: string, url: string, en
       if (jpg) {
         const entry = [{ at: new Date().toISOString(), event: "snapshot", which: "hero", mime: "image/jpeg", b64: jpg.toString("base64") }];
         await db.query(`UPDATE jobs SET log = log || $2::jsonb WHERE id = $1`, [job.id, JSON.stringify(entry)]);
+        console.log(`[hero] ${job.id.slice(0, 8)} picture saved (${Math.round(jpg.length / 1024)} KB)`);
         return true;
       }
+      console.warn(`[hero] ${job.id.slice(0, 8)} try ${i + 1} failed: ${tail(r.out ?? "")}`);
       await pause(5000);
     }
-  } catch {
+  } catch (e) {
     // no picture; the panel simply has no image
+    console.warn(`[hero] ${job.id.slice(0, 8)} error: ${e instanceof Error ? e.message : e}`);
   }
   return false;
 }

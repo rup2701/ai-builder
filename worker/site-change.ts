@@ -14,7 +14,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { parseSummary, runProcess, tail, type Db, type Job } from "./site-build";
+import { heroShot, parseSummary, runProcess, tail, type Db, type Job } from "./site-build";
 import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import type { Msg, WorkspaceState } from "../src/lib/workspace/types";
 
@@ -312,6 +312,12 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
         return await backToReview("It did not publish. Your live site is unchanged. I have been told. You can approve it again to retry, or remove the change.", failed);
       }
       await setMsg(db, job.project_id, job.id, { status: "done", published: true, action: undefined, phase: undefined, note: undefined });
+      // A fresh picture of the live site for the ready panel. Best effort: a failure leaves the old picture in place.
+      if (url && (await heroShot(db, job, runDir, url, env))) {
+        await db
+          .query(`UPDATE projects SET state = jsonb_set(state, '{site,build,heroJobId}', to_jsonb($2::text)) WHERE id = $1 AND state #> '{site,build}' IS NOT NULL`, [job.project_id, job.id])
+          .catch(() => {});
+      }
       return { ok: true };
     };
 

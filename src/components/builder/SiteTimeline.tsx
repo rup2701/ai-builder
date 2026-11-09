@@ -95,7 +95,7 @@ export default function SiteTimeline({ build, siteName, projectId }: { build: Si
       {finished && build.heroJobId && build.url && (
         <a href={build.url} target="_blank" rel="noreferrer" className="mt-4 block overflow-hidden rounded-xl border border-foreground/10 lg:rounded-[26px]" data-testid="hero-shot">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/api/projects/${projectId}/snapshot?which=hero`} alt={`The top of ${siteName}`} className="block w-full" loading="lazy" />
+          <img src={`/api/projects/${projectId}/snapshot?which=hero&v=${build.heroJobId}`} alt={`The top of ${siteName}`} className="block w-full" loading="lazy" />
         </a>
       )}
       {waiting && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="waiting">Waiting for a free builder. If someone else is building, yours starts when they finish.</p>}
