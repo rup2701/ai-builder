@@ -132,7 +132,8 @@ export async function heroShot(db: Db, job: Job, runDir: string, url: string, en
       return false;
     }
     const clean: NodeJS.ProcessEnv = { NODE_ENV: "production" };
-    for (const k of ["PATH", "HOME", "USER", "LANG", "TMPDIR", "NODE_PATH"]) if (env[k]) clean[k] = env[k];
+    // PLAYWRIGHT_BROWSERS_PATH tells Playwright where the browser lives (the volume); without it Chromium is not found.
+    for (const k of ["PATH", "HOME", "USER", "LANG", "TMPDIR", "NODE_PATH", "PLAYWRIGHT_BROWSERS_PATH"]) if (env[k]) clean[k] = env[k];
     const out = path.join(runDir, "hero-shot");
     // A site that was just deployed can take a few seconds to answer, so try a few times.
     for (let i = 0; i < 3; i++) {

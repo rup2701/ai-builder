@@ -67,6 +67,7 @@ export const ShowcaseBrief = z
     brand: z.object({ tone: z.enum(["calm", "bold", "playful", "serious"]), color: z.enum(["light", "dark", "blue-accent"]) }).passthrough(),
     main_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough(),
     secondary_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().optional(),
+    sign_in: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().nullable().optional(),
     blocks: z.array(Block).min(5),
     look: z.object({}).passthrough(),
     placeholders: z.array(z.object({ where: z.string(), what: z.string() }).passthrough()).default([]),
@@ -77,9 +78,17 @@ export const ShowcaseBrief = z
     for (const need of ["hero", "how_it_works", "faq", "closing_cta", "footer"]) {
       if (!types.includes(need)) ctx.addIssue({ code: "custom", message: `blocks must include a "${need}" block` });
     }
-    for (const key of ["main_button", "secondary_button"] as const) {
+    for (const key of ["main_button", "secondary_button", "sign_in"] as const) {
       const link = (b[key] as { link?: string | null } | undefined)?.link;
       if (link && !/^(https:\/\/\S+|mailto:\S+@\S+)$/.test(link)) ctx.addIssue({ code: "custom", path: [key, "link"], message: "the link must start with https:// or mailto:" });
+    }
+    // A closing section may have its own pair of buttons (target "custom"); their links follow the same rule.
+    for (const blk of b.blocks as Record<string, any>[]) {
+      if (blk.type !== "closing_cta" && blk.type !== "hero") continue;
+      for (const k of ["cta", "secondary_cta"]) {
+        const c = blk[k] as { target?: string; link?: string | null } | undefined;
+        if (c?.target === "custom" && c.link && !/^(https:\/\/\S+|mailto:\S+@\S+)$/.test(c.link)) ctx.addIssue({ code: "custom", path: ["blocks", blk.type, k, "link"], message: "the link must start with https:// or mailto:" });
+      }
     }
     for (const blk of b.blocks as Record<string, any>[]) {
       if (blk.type !== "pricing") continue;

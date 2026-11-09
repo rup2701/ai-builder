@@ -170,4 +170,17 @@ test("the plan card's choices go back as one plain sentence", () => {
   const off = new Set(p.added.filter((n) => n !== "FAQ"));
   assert.equal(planReply(p, off), "Looks good. No changes to the plan.");
 });
+test("a sign-in link and a different pair of closing buttons are accepted; bad links are refused", () => {
+  const b = example();
+  b.sign_in = { label: "Sign in", link: "https://example.com/signin" };
+  const closing = b.blocks.find((x: any) => x.type === "closing_cta");
+  closing.cta = { label: "Claim your room", target: "custom", link: "https://example.com/claim" };
+  closing.secondary_cta = { label: "Book a demo", target: "custom", link: null };
+  assert.equal(validateSiteBrief(b, "showcase").ok, true);
+  b.sign_in.link = "http://example.com/signin";
+  assert.equal(validateSiteBrief(b, "showcase").ok, false);
+  b.sign_in.link = null;
+  closing.cta.link = "javascript:alert(1)";
+  assert.equal(validateSiteBrief(b, "showcase").ok, false);
+});
 if (failed) process.exit(1);
