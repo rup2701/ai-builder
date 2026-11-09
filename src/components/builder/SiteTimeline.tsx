@@ -71,7 +71,7 @@ function minutesSince(iso: string, now: number) {
 }
 
 /** The vertical progress view for a website build: one icon per stage, joined by a dotted line. */
-export default function SiteTimeline({ build, siteName }: { build: SiteBuild; siteName: string }) {
+export default function SiteTimeline({ build, siteName, projectId }: { build: SiteBuild; siteName: string; projectId: string }) {
   const [now, setNow] = useState(() => Date.now());
   const running = build.stage < DONE_STAGE && build.failedStage === undefined;
   useEffect(() => {
@@ -92,6 +92,12 @@ export default function SiteTimeline({ build, siteName }: { build: SiteBuild; si
     <div data-testid="site-timeline">
       <p className="text-lg text-foreground">{build.stage >= DONE_STAGE ? `${siteName} is ready` : build.failedStage !== undefined ? "The build stopped" : `Building ${siteName}`}</p>
       {running && <p className="mt-0.5 text-sm text-foreground/60">Usually takes about 45 minutes.</p>}
+      {finished && build.heroJobId && build.url && (
+        <a href={build.url} target="_blank" rel="noreferrer" className="mt-4 block overflow-hidden rounded-xl border border-foreground/10 lg:rounded-[26px]" data-testid="hero-shot">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/projects/${projectId}/snapshot?which=hero`} alt={`The top of ${siteName}`} className="block w-full" loading="lazy" />
+        </a>
+      )}
       {waiting && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="waiting">Waiting for a free builder. If someone else is building, yours starts when they finish.</p>}
       {silent && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="silent">No update for a while. The builder may have stopped. If nothing changes in a few minutes, check back later.</p>}
 

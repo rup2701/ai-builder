@@ -117,6 +117,37 @@ export function runProcess(cmd: string, args: string[], opts: { cwd: string; env
   });
 }
 
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * A picture of the top of the live site, kept in the job's log for the ready panel. Best effort: any problem means no picture,
+ * and never a failed build. The site's own code is not given the worker's keys, only what a browser needs.
+ */
+export async function heroShot(db: Db, job: Job, runDir: string, url: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+  try {
+    const appDir = path.join(runDir, "app");
+    const script = path.join(env.WORKER_DIR ?? path.join(process.cwd(), "worker"), "snap.mjs");
+    if (!existsSync(script) || !existsSync(path.join(appDir, "package.json"))) return false;
+    const clean: NodeJS.ProcessEnv = { NODE_ENV: "production" };
+    for (const k of ["PATH", "HOME", "USER", "LANG", "TMPDIR", "NODE_PATH"]) if (env[k]) clean[k] = env[k];
+    const out = path.join(runDir, "hero-shot");
+    // A site that was just deployed can take a few seconds to answer, so try a few times.
+    for (let i = 0; i < 3; i++) {
+      const r = await runProcess("node", [script, appDir, url, out, "top"], { cwd: appDir, env: clean });
+      const jpg = r.code === 0 ? await readFile(path.join(out, "after.jpg")).catch(() => null) : null;
+      if (jpg) {
+        const entry = [{ at: new Date().toISOString(), event: "snapshot", which: "hero", mime: "image/jpeg", b64: jpg.toString("base64") }];
+        await db.query(`UPDATE jobs SET log = log || $2::jsonb WHERE id = $1`, [job.id, JSON.stringify(entry)]);
+        return true;
+      }
+      await pause(5000);
+    }
+  } catch {
+    // no picture; the panel simply has no image
+  }
+  return false;
+}
+
 export const tail = (s: string, n = 400) => s.trim().split("\n").slice(-6).join("\n").slice(-n);
 
 /** A stage-level failure. runSiteBuild records which stage it stopped at, then throws. */
@@ -257,10 +288,11 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   }
   if (!url) await stop(4, `Publishing did not work. ${tail(password ? lastOut.split(password).join("***") : lastOut)}`);
 
-  // 4. Done: write the result and tell the person in the chat.
+  // 4. Done: take a picture of the top of the live site for the ready panel, write the result and tell the person in the chat.
+  const heroOk = await heroShot(db, job, runDir, url!, env);
   const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
   const s = now[0].state as WorkspaceState;
-  const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, ...(staticSite ? {} : { adminUrl: `${url}/admin/sign-in`, ownerEmail }) };
+  const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, ...(heroOk ? { heroJobId: job.id } : {}), ...(staticSite ? {} : { adminUrl: `${url}/admin/sign-in`, ownerEmail }) };
   const done: WorkspaceState = {
     ...s,
     phase: "summary",

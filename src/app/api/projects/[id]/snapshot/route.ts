@@ -9,7 +9,10 @@ export const dynamic = "force-dynamic";
 
 type Snap = { event?: string; which?: string; mime?: string; b64?: string };
 
-/** The before or after picture of one change: /snapshot?msg=<chat message id>&which=before|after. Only the owner can see it. */
+/**
+ * The before or after picture of one change: /snapshot?msg=<chat message id>&which=before|after.
+ * The top of the live site, taken when the build finished: /snapshot?which=hero. Only the owner can see it.
+ */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await getUser();
   if (!user) return new NextResponse("Sign in first.", { status: 401 });
@@ -18,12 +21,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!p) return new NextResponse("Not found.", { status: 404 });
 
   const url = new URL(req.url);
-  const msgId = Number(url.searchParams.get("msg"));
   const which = url.searchParams.get("which");
-  if (!Number.isInteger(msgId) || (which !== "before" && which !== "after")) return new NextResponse("Bad request.", { status: 400 });
-
-  const m = (p.state as WorkspaceState).msgs.find((x) => x.id === msgId && x.kind === "site_change");
-  const jobId = m && m.kind === "site_change" ? (m.snapJobId ?? m.jobId) : undefined;
+  let jobId: string | undefined;
+  if (which === "hero") {
+    jobId = (p.state as WorkspaceState).site?.build?.heroJobId;
+  } else {
+    const msgId = Number(url.searchParams.get("msg"));
+    if (!Number.isInteger(msgId) || (which !== "before" && which !== "after")) return new NextResponse("Bad request.", { status: 400 });
+    const m = (p.state as WorkspaceState).msgs.find((x) => x.id === msgId && x.kind === "site_change");
+    jobId = m && m.kind === "site_change" ? (m.snapJobId ?? m.jobId) : undefined;
+  }
   if (!jobId) return new NextResponse("Not found.", { status: 404 });
 
   const [job] = await db

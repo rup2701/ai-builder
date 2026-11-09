@@ -43,7 +43,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
       <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-relaxed">
         {build && c ? (
           <div>
-            <SiteTimeline build={build} siteName={c.name || "your site"} />
+            <SiteTimeline build={build} siteName={c.name || "your site"} projectId={projectId} />
             {!running && !finishedForReal && <div className="mt-6">{(publishRetry ? buildButton("Retry publishing", "publish") : buildButton(build.failedStage !== undefined ? "Try again" : buildLabel))}</div>}
             <details className="mt-8 border-t border-foreground/10 pt-4">
               <summary className="cursor-pointer text-sm text-foreground/60">Your brief</summary>

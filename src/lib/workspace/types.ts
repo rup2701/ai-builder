@@ -87,6 +87,8 @@ export type SiteBuild = {
   error?: string;
   /** The finished site's folder on the worker. With it, a failed publish can be retried without rebuilding. Empty when the folder is gone. */
   runDir?: string;
+  /** The job whose log holds a picture of the top of the live site (event snapshot, which hero). Absent when no picture could be taken. */
+  heroJobId?: string;
   /** The live address and the owner sign-in, once deployed. */
   url?: string;
   adminUrl?: string;
