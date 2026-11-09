@@ -45,7 +45,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         )}
         {msg.snaps.after && (
           <figure>
-            <figcaption className="mb-1 text-xs text-foreground/60">{live ? "After" : "After (preview, not live yet)"}</figcaption>
+            <figcaption className="mb-1 text-xs text-foreground/60">{msg.anchor?.startsWith("/") ? (live ? `The page ${msg.anchor}` : `The page ${msg.anchor} (preview, not live yet)`) : live ? "After" : "After (preview, not live yet)"}</figcaption>
             <a href={pic("after")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={pic("after")} alt="The section after the change" className="block w-full" loading="lazy" />

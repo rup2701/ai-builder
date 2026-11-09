@@ -20,6 +20,13 @@ test("parseFinal splits the sentence from the VIEW line", () => {
   assert.equal(r.summary, "Step 3 is now a wide panel with the full JSON.");
   assert.equal(r.anchor, "how-it-works");
 });
+test("parseFinal reads a page path as the anchor", () => {
+  const r = parseFinal("There is now an About page.\nVIEW: /about");
+  assert.equal(r.anchor, "/about");
+  assert.equal(r.summary, "There is now an About page.");
+  assert.equal(parseFinal("Done.\nVIEW: #pricing").anchor, "pricing");
+  assert.equal(parseFinal("Done.\nVIEW: top").anchor, "top");
+});
 test("parseFinal never ends mid-sentence when the reply is long", () => {
   const long = `${"A full sentence here. ".repeat(40)}This last one runs past the limit and would be cut in the middle of a`;
   const s = parseFinal(`${long}\nVIEW: top`).summary;

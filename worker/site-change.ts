@@ -23,10 +23,10 @@ export type ChangeResult = { ok: boolean; error?: string };
 
 // ---- small pure helpers (tested) ----
 
-/** The agent ends its last reply with "VIEW: #section-id" or "VIEW: top". Returns the plain sentence(s) and the anchor (no #). */
+/** The agent ends its last reply with "VIEW: #section-id", "VIEW: top" or, for a whole page, "VIEW: /about". Returns the plain sentence(s) and the anchor (no #; a page keeps its leading slash). */
 export function parseFinal(text: string): { summary: string; anchor: string } {
-  const m = /^\s*VIEW:\s*#?([A-Za-z][\w-]*|top)\s*$/im.exec(text);
-  const anchor = m ? (m[1].toLowerCase() === "top" ? "top" : m[1]) : "top";
+  const m = /^\s*VIEW:\s*(?:#?([A-Za-z][\w-]*|top)|(\/[\w\-/]*))\s*$/im.exec(text);
+  const anchor = m ? (m[2] ?? (m[1].toLowerCase() === "top" ? "top" : m[1])) : "top";
   const whole = text.replace(/^\s*VIEW:.*$/gim, "").replace(/\s+/g, " ").trim();
   // Never end mid-sentence: cut at the last full stop inside the limit.
   const cut = whole.slice(0, 500);
@@ -175,7 +175,9 @@ async function previewSnap(appDir: string, outDir: string, anchor: string, env: 
       await new Promise((r) => setTimeout(r, 500));
       up = await fetch(url).then((r) => r.ok, () => false);
     }
-    return up ? await snap(appDir, url, outDir, anchor, env) : false;
+    // A whole page (anchor "/about") is photographed at its own address, from the top.
+    const isPage = anchor.startsWith("/");
+    return up ? await snap(appDir, isPage ? `${url}${anchor}` : url, outDir, isPage ? "top" : anchor, env) : false;
   } finally {
     try {
       if (child.pid) process.kill(-child.pid, "SIGKILL");
@@ -246,7 +248,10 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
 
     const verifyOnce = async (): Promise<Verdict> => {
       const r = await runProcess("npm", ["run", "verify", "--", rel], { cwd: runner, env });
-      return parseVerify(r.out, r.code);
+      const v = parseVerify(r.out, r.code);
+      // Without this the first failure is invisible: the repair fixes it and only the word "repaired" is left in the timing line.
+      if (!v.ok) console.warn(`[verify] ${job.id.slice(0, 8)} ${v.kind} failure: ${tail(r.out ?? "", 900).replace(/\n/g, " | ")}`);
+      return v;
     };
     const owner = state.site?.build?.notifyEmail;
     const briefName = (state.site?.brief as { name?: unknown } | undefined)?.name;
@@ -414,7 +419,8 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     const okAfter = wantPictures ? await previewSnap(appDir, afterDir, anchor, cleanEnv).catch(() => false) : false;
     await beforeShot;
     const previewSec = secs(Date.now() - tPreview);
-    const before = (await b64(path.join(beforeDir, `${anchor}.jpg`))) ?? (anchor === "top" ? await b64(path.join(beforeDir, "top.jpg")) : null);
+    // A page has no "before" picture: the live pictures are of the home page, and a new page is not there yet.
+    const before = anchor.startsWith("/") ? null : (await b64(path.join(beforeDir, `${anchor}.jpg`))) ?? (anchor === "top" ? await b64(path.join(beforeDir, "top.jpg")) : null);
     const after = okAfter ? await b64(path.join(afterDir, "after.jpg")) : null;
     const log = [
       ...(before ? [{ at: new Date().toISOString(), event: "snapshot", which: "before", anchor, mime: "image/jpeg", b64: before }] : []),
