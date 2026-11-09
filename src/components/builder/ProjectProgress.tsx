@@ -4,6 +4,24 @@ import { PROGRESS_STEPS, type Progress } from "@/lib/builder/project-progress";
 export default function ProjectProgress({ name, progress }: { name: string; progress: Progress }) {
   const { active, live, failed } = progress;
   const current = PROGRESS_STEPS[active];
+  // Once the site is live the steps have done their job: the name and a Live tag are enough.
+  if (live) {
+    return (
+      <div className="flex min-w-0 items-center justify-center gap-3">
+        <p className="max-w-[18rem] truncate text-sm font-medium" title={name}>
+          {name}
+        </p>
+        <span aria-hidden="true" className="h-4 w-px bg-foreground/20" />
+        <span className="flex items-center gap-1.5 text-xs text-foreground/70">
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-600" />
+          Live
+        </span>
+        <p className="sr-only" role="status">
+          Your site is live.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 flex-col items-center gap-1.5">
       <p className="max-w-[18rem] truncate text-sm font-medium" title={name}>

@@ -85,6 +85,8 @@ export default function SiteTimeline({ build, siteName }: { build: SiteBuild; si
   const sinceBeat = (now - new Date(build.heartbeatAt ?? build.startedAt).getTime()) / 1000;
   const waiting = running && !build.heartbeatAt && sinceBeat > 20;
   const silent = running && Boolean(build.heartbeatAt) && sinceBeat > 90;
+  // Once the site is ready the steps have done their job: the heading, the button and the brief are enough.
+  const finished = build.stage >= DONE_STAGE && build.failedStage === undefined && !build.error;
 
   return (
     <div data-testid="site-timeline">
@@ -93,6 +95,7 @@ export default function SiteTimeline({ build, siteName }: { build: SiteBuild; si
       {waiting && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="waiting">Waiting for a free builder. If someone else is building, yours starts when they finish.</p>}
       {silent && <p className="mt-3 rounded-xl bg-[#fff4d6] p-3 text-sm text-[#6b4e00]" data-testid="silent">No update for a while. The builder may have stopped. If nothing changes in a few minutes, check back later.</p>}
 
+      {!finished && (
       <ol className="mt-6" aria-label="Build progress">
         {SITE_STAGES.map((st, i) => {
           const status = statusOf(i, build);
@@ -132,6 +135,7 @@ export default function SiteTimeline({ build, siteName }: { build: SiteBuild; si
           );
         })}
       </ol>
+      )}
 
       {running && (
         <p className="mt-6 rounded-xl bg-foreground/[0.04] p-3 text-sm leading-relaxed text-foreground/70" data-testid="step-away-site">
