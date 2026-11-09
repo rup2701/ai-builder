@@ -132,4 +132,42 @@ try {
   assert.ok(!/product showcase/i.test(waitlist));
   console.log("PASS the interview prompt follows the project's pack");
 } catch (e) { failed++; console.log(`FAIL the interview prompt follows the project's pack\n  ${e instanceof Error ? e.message : e}`); }
+
+import { parsePlan, planReply } from "../src/lib/builder/plan-card";
+const PLAN = `Thanks, that's clear. Here's the page plan for DispatchOS.
+
+I've added these sections:
+- Hero with the main button and a product image placeholder
+- Benefits
+- How it works
+- Pricing
+- Testimonials
+- FAQ
+- Closing call to action
+- Footer
+
+More sections to add:
+- Examples gallery
+- Comparison table
+- Use-case cards
+
+Want any of the extra ones, or want to drop one of the added ones? You can also ask for a section of your own.`;
+test("the page plan is read out of Scout's message", () => {
+  const p = parsePlan(PLAN)!;
+  assert.equal(p.added.length, 8);
+  assert.deepEqual(p.extra, ["Examples gallery", "Comparison table", "Use-case cards"]);
+  assert.match(p.before, /DispatchOS/);
+  assert.match(p.after, /^Want any of the extra/);
+  assert.equal(parsePlan("What is your product?"), null);
+});
+test("the plan card's choices go back as one plain sentence", () => {
+  const p = parsePlan(PLAN)!;
+  assert.equal(planReply(p, new Set(p.added)), "Looks good. No changes to the plan.");
+  const on = new Set(p.added.filter((n) => n !== "Testimonials"));
+  on.add("Use-case cards");
+  assert.equal(planReply(p, on), "Looks good. Add: Use-case cards. Drop: Testimonials.");
+  // a locked section cannot be dropped, even if it is missing from the set
+  const off = new Set(p.added.filter((n) => n !== "FAQ"));
+  assert.equal(planReply(p, off), "Looks good. No changes to the plan.");
+});
 if (failed) process.exit(1);

@@ -12,6 +12,8 @@
  * worker; once the store exists, chat changes run here and are saved back through the state API.
  */
 
+import { PlanCard } from "./PlanCard";
+import { parsePlan } from "@/lib/builder/plan-card";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
@@ -776,11 +778,20 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-md text-background">{m.text}</p>
                     </div>
                   );
-                case "bot":
+                case "bot": {
+                  const plan = site ? parsePlan(m.text) : null;
                   return (
                     <div key={m.id} className="max-w-[92%]">
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
-                      <p className="whitespace-pre-wrap text-md text-foreground">{boldText(m.text)}</p>
+                      {plan ? (
+                        <>
+                          {plan.before && <p className="whitespace-pre-wrap text-md text-foreground">{boldText(plan.before)}</p>}
+                          <PlanCard plan={plan} active={m.id === msgs[msgs.length - 1]?.id && !busy} onSend={(t) => send(t)} />
+                          {plan.after && <p className="mt-2 whitespace-pre-wrap text-md text-foreground">{boldText(plan.after)}</p>}
+                        </>
+                      ) : (
+                        <p className="whitespace-pre-wrap text-md text-foreground">{boldText(m.text)}</p>
+                      )}
                       {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
                         <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
@@ -799,6 +810,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       )}
                     </div>
                   );
+                }
                 case "site_ready":
                   return (
                     <div key={m.id}>
