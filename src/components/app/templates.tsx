@@ -96,7 +96,12 @@ export const SITE_TEMPLATES: Template[] = [
     caption: "Product showcase",
     text: "A product website for ___, with features, pricing and how it works.",
     pack: "showcase",
-    demos: [{ label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live" }],
+    demos: [
+      { label: "Ledgerline", url: "https://ledgerline.appnomics.live" },
+      { label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live" },
+      { label: "InstaRoom", url: "https://instaroom.appnomics.live" }
+
+    ],
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-indigo-50 p-5 text-indigo-950 sm:p-8">
         <span className="font-mono text-[10px]">YOUR PRODUCT</span>
