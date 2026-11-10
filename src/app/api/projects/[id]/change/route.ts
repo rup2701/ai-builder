@@ -8,23 +8,14 @@ import { pushMsg } from "@/lib/workspace/state";
 import { anthropicComplete } from "@/lib/agents/anthropic";
 import { pageContentOf, planChange, sectionsOf } from "@/lib/agents/change-planner";
 import { logUsage } from "@/lib/usage";
-import { attachmentNote, MAX_ASSETS_PER_CHANGE } from "@/lib/builder/site-assets";
+import { attachmentNote } from "@/lib/builder/site-assets";
+import { ChangeBody as Body } from "@/lib/builder/change-body";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
 import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isMaking, LONG_REQUEST, MAX_REVISIONS, mergeWorkerUpdates, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
 export const dynamic = "force-dynamic";
 // Scout rewrites the request with one or two model calls before the card appears.
 export const maxDuration = 60;
-
-const Body = z.union([
-  z.object({ text: z.string().min(1).max(2000), assetIds: z.array(z.string().uuid()).max(MAX_ASSETS_PER_CHANGE).optional() }),
-  z.object({ confirm: z.number().int() }),
-  z.object({ cancel: z.number().int() }),
-  z.object({ approve: z.number().int() }),
-  z.object({ revise: z.number().int(), text: z.string().min(1).max(2000), assetIds: z.array(z.string().uuid()).max(MAX_ASSETS_PER_CHANGE).optional() }),
-  z.object({ remove: z.number().int() }),
-  z.object({ undo: z.number().int() }),
-]);
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
