@@ -21,7 +21,7 @@ const Body = z.union([
   z.object({ confirm: z.number().int() }),
   z.object({ cancel: z.number().int() }),
   z.object({ approve: z.number().int() }),
-  z.object({ revise: z.number().int(), text: z.string().min(1).max(2000) }),
+  z.object({ revise: z.number().int(), text: z.string().min(1).max(2000), assetIds: z.array(z.string().uuid()).max(MAX_ASSETS_PER_CHANGE).optional() }),
   z.object({ remove: z.number().int() }),
   z.object({ undo: z.number().int() }),
 ]);
@@ -73,7 +73,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   });
   const find = (msgId: number, status: ChangeMsg["status"]) => changeMsgs(state).find((c) => c.id === msgId && c.status === status);
   /** Queue one worker job for this change and move the message to its next status. */
-  const queue = async (m: ChangeMsg, change: Partial<ChangeMsg>) => {
+  const queue = async (m: ChangeMsg, change: Partial<ChangeMsg>, base: WorkspaceState = state) => {
     const running = await db
       .select({ id: schema.jobs.id })
       .from(schema.jobs)
@@ -82,7 +82,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const publishing = new Set(changeMsgs(state).filter((c) => c.status === "publishing" && c.jobId).map((c) => c.jobId));
     if (running.some((r) => !publishing.has(r.id))) return fail("Something is already running on this site. Try again in a few minutes.", 409);
     const [job] = await db.insert(schema.jobs).values({ projectId: p.id, type: "site_change" }).returning({ id: schema.jobs.id });
-    return save(patch(state, m.id, { ...change, jobId: job.id }));
+    return save(patch(base, m.id, { ...change, jobId: job.id }));
+  };
+
+  /** Attached pictures must be this project's own. Only their details are kept in the chat; the bytes stay in site_assets. */
+  const loadAssets = async (ids: string[] | undefined) => {
+    const wanted = [...new Set(ids ?? [])];
+    if (!wanted.length) return [];
+    const rows = await db
+      .select({ id: schema.siteAssets.id, name: schema.siteAssets.name, width: schema.siteAssets.width, height: schema.siteAssets.height })
+      .from(schema.siteAssets)
+      .where(and(eq(schema.siteAssets.projectId, p.id), inArray(schema.siteAssets.id, wanted)));
+    return rows.length === wanted.length ? rows : null;
   };
 
   const data = body.data;
@@ -97,7 +108,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const m = find(data.confirm, "proposed");
     if (!m) return gone();
     // A change that failed its checks after approval can come back to its preview; nothing new is built on top of it until it is answered.
-    if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
+    if (changeMsgs(state).some(needsAnswer)) return fail("Approve or cancel the change above first.", 409);
     const limit = changeLimit();
     if (limit > 0 && changesUsed(state) >= limit) return fail(`This site has used its ${limit} changes for now.`, 429);
     return queue(m, { status: "queued", action: "make", note: undefined, error: undefined });
@@ -124,27 +135,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if ("revise" in data) {
     const m = find(data.revise, "review");
     if (!m) return gone();
-    if ((m.revisions ?? 0) >= MAX_REVISIONS) return fail(`That's ${MAX_REVISIONS} rounds of changes. Approve it, or remove it and start again with a new request.`, 409);
-    const feedback = cleanInstruction(data.text);
-    if (feedback.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
-    return queue(m, { status: "queued", action: "make", feedback, revisions: (m.revisions ?? 0) + 1, note: undefined });
+    if ((m.revisions ?? 0) >= MAX_REVISIONS) return fail(`That's ${MAX_REVISIONS} rounds of changes. Approve it, or cancel it and start again with a new request.`, 409);
+    const typed = cleanInstruction(data.text);
+    if (typed.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
+    const added = await loadAssets(data.assetIds);
+    if (!added) return fail("One of the pictures is not there any more. Please attach it again.", 400);
+    const have = new Map((m.assets ?? []).map((a) => [a.id, a]));
+    for (const a of added) have.set(a.id, a);
+    const feedback = typed + attachmentNote(added);
+    // The owner's words stay in the chat, after the card, so the conversation reads in order.
+    const withText = pushMsg(state, { kind: "user", text: typed });
+    return queue(m, { status: "queued", action: "make", feedback, lastFeedback: typed, revisions: (m.revisions ?? 0) + 1, note: undefined, ...(have.size ? { assets: [...have.values()] } : {}) }, withText);
   }
 
   // A new request. The one above has to be answered first, because the next change would build on top of it.
-  if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
+  if (changeMsgs(state).some(needsAnswer)) return fail("Approve or cancel the change above first.", 409);
   const text = cleanInstruction(data.text);
   if (text.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
-  // Attached pictures must be this project's own. Only their details are kept in the chat; the bytes stay in site_assets.
-  let assets: { id: string; name: string; width: number; height: number }[] = [];
-  const wantedIds = [...new Set(data.assetIds ?? [])];
-  if (wantedIds.length) {
-    const rows = await db
-      .select({ id: schema.siteAssets.id, name: schema.siteAssets.name, width: schema.siteAssets.width, height: schema.siteAssets.height })
-      .from(schema.siteAssets)
-      .where(and(eq(schema.siteAssets.projectId, p.id), inArray(schema.siteAssets.id, wantedIds)));
-    if (rows.length !== wantedIds.length) return fail("One of the pictures is not there any more. Please attach it again.", 400);
-    assets = rows;
-  }
+  const loaded = await loadAssets(data.assetIds);
+  if (!loaded) return fail("One of the pictures is not there any more. Please attach it again.", 400);
+  const assets = loaded;
   const note = attachmentNote(assets);
   // Scout rewrites the request as a short plan the owner can check. If that fails, the owner's own words are used.
   let title: string | undefined;

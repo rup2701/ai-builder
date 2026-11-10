@@ -59,10 +59,10 @@ export function mergeWorkerUpdates(wanted: WorkspaceState, started: WorkspaceSta
   return { ...wanted, msgs: wanted.msgs.map((m) => (m.kind === "site_change" && startedAs.get(m.id) === JSON.stringify(m) && latest.has(m.id) ? latest.get(m.id)! : m)) };
 }
 
-/** The change is made and waiting for the owner: approve, ask for changes, or remove. */
+/** The change is made and waiting for the owner: approve, cancel, or type what to change in the chat. */
 export const needsAnswer = (m: ChangeMsg) => m.status === "review";
 
-export const MAX_REVISIONS = 3;
+export const MAX_REVISIONS = 5;
 
 /** What has already been made live through the chat, newest last, for Scout to compare a new request with. Undone and removed changes are not in it. */
 export function appliedChanges(s: WorkspaceState, max = 10): string[] {

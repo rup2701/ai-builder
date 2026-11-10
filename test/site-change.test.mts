@@ -114,7 +114,7 @@ test("instructionFor adds the owner's feedback to a revision", () => {
   assert.ok(t.startsWith("make step 3 bigger. You already made this change"));
   assert.ok(t.endsWith("also keep the chips"));
 });
-test("revisions are capped at three rounds", () => assert.equal(MAX_REVISIONS, 3));
+test("revisions are capped at five rounds", () => assert.equal(MAX_REVISIONS, 5));
 
 test("a change that is being checked and deployed does not hold the owner back; one being made does", () => {
   const m = (status: string) => ({ id: 1, kind: "site_change", instruction: "x", status }) as never;

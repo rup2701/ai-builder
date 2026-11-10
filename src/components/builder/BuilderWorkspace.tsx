@@ -20,7 +20,7 @@ import StorePreview from "./StorePreview";
 import SitePane from "./SitePane";
 import SiteReadyCard from "./SiteReadyCard";
 import SiteChangeCard, { type ChangeAction } from "./SiteChangeCard";
-import { changeMsgs, isMaking, isOpen, siteIsLive } from "@/lib/builder/site-change";
+import { changeMsgs, isMaking, isOpen, MAX_REVISIONS, siteIsLive } from "@/lib/builder/site-change";
 import { summarize, verify, type Check } from "@/lib/builder/verify";
 import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
@@ -396,6 +396,8 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   /** Any change still busy on the worker, including the checks and deploy after approval: keep following it so the card updates. */
   const changeOpen = site && changeMsgs(st).some(isOpen);
   /** Once the site is live, the chat asks what to change instead of interviewing. */
+  /** A change waiting in its preview: what the owner types now is a revision of it. */
+  const reviewing = site ? changeMsgs(st).find((c) => c.status === "review") : undefined;
   const editing = site && siteIsLive(st) && !changeRunning;
   const busy = phase === "build" || phase === "verify" || pending || changeRunning;
   const canPublish = phase === "iterate" && Boolean(cur) && sum.fail === 0;
@@ -865,6 +867,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                         siteUrl={st.site?.build?.url}
                         busy={busy}
                         onAction={(body) => void changeAction(body)}
+                        onAdjust={() => inputRef.current?.focus()}
                       />
                     </div>
                   );
@@ -994,7 +997,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 disabled={busy}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
-                placeholder={busy ? (changeRunning ? "Making your change…" : "Working on it…") : editing ? "Tell me what to change on your site…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
+                placeholder={busy ? (changeRunning ? "Making your change…" : "Working on it…") : editing ? (reviewing ? "Type what to change, or press Approve…" : "Tell me what to change on your site…") : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
                 className="field-sizing-content block max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base leading-snug outline-none placeholder:text-foreground/40 disabled:opacity-60"
               />
               {(attached.length > 0 || uploading || uploadError) && (
