@@ -25,7 +25,7 @@ const danger = `rounded-xl border border-red-600 px-4 py-2 text-sm text-foregrou
 
 /** One change to the live site, from the request to the preview to "live". Shows the pictures from before and after when the worker took them. */
 export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction, onAdjust }: Props) {
-  const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}`;
+  const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}&v=${msg.snapJobId ?? msg.jobId ?? ""}`;
 
   if (msg.status === "cancelled") return <p className="text-md text-foreground/50">Cancelled. Nothing was changed on your site.</p>;
   if (msg.status === "removed") return <p className="text-md text-foreground/60">Removed: “{msg.title ?? msg.instruction}”. Your site is as it was.</p>;
@@ -98,9 +98,16 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               ))}
             </ul>
           ) : (
-            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-md leading-relaxed text-foreground/70">{msg.feedback ?? msg.instruction}</p>
+            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-md leading-relaxed text-foreground/70">{msg.lastFeedback ?? msg.feedback ?? msg.instruction}</p>
           )}
           {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
+          {/* While a revision is made, the last preview stays in view (dimmed) until the new one is ready. */}
+          {msg.feedback && msg.action !== "discard" && pictures && (
+            <div className="opacity-60">
+              <p className="mt-3 text-xs text-foreground/60">Current preview, until the new one is ready:</p>
+              {pictures}
+            </div>
+          )}
         </div>
       )}
 
