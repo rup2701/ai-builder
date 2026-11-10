@@ -809,7 +809,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 case "user":
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-foreground px-3.5 py-2 text-md text-background">{m.text}</p>
+                      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-none bg-foreground px-3.5 py-2 text-md text-background">{m.text}</p>
                     </div>
                   );
                 case "bot": {
@@ -870,7 +870,6 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                         siteUrl={st.site?.build?.url}
                         busy={busy}
                         onAction={(body) => void changeAction(body)}
-                        onAdjust={() => inputRef.current?.focus()}
                       />
                     </div>
                   );

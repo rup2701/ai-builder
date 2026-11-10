@@ -14,8 +14,6 @@ type Props = {
   siteUrl?: string;
   busy: boolean;
   onAction: (body: ChangeAction) => void;
-  /** Moves the cursor to the chat box, where a tweak is typed. */
-  onAdjust?: () => void;
 };
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
@@ -24,7 +22,9 @@ const secondary = `rounded-xl border border-foreground/20 px-4 py-2 text-sm text
 const danger = `rounded-xl border border-red-600 px-4 py-2 text-sm text-foreground transition-colors hover:bg-red-600/10 disabled:cursor-not-allowed disabled:opacity-40 ${focusRing}`;
 
 /** One change to the live site, from the request to the preview to "live". Shows the pictures from before and after when the worker took them. */
-export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction, onAdjust }: Props) {
+export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction }: Props) {
+  const [asking, setAsking] = useState(false);
+  const [feedback, setFeedback] = useState("");
   const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}&v=${msg.snapJobId ?? msg.jobId ?? ""}`;
 
   if (msg.status === "cancelled") return <p className="text-md text-foreground/50">Cancelled. Nothing was changed on your site.</p>;
@@ -142,20 +142,55 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               Revised (round {msg.revisions} of {MAX_REVISIONS}): {msg.lastFeedback.length > 160 ? `${msg.lastFeedback.slice(0, 160)}…` : msg.lastFeedback}
             </p>
           )}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button type="button" disabled={busy} onClick={() => onAction({ approve: msg.id })} className={primary}>
-              Approve and publish
-            </button>
-            <button type="button" disabled={busy || (msg.revisions ?? 0) >= MAX_REVISIONS} onClick={() => onAdjust?.()} className={secondary}>
-              Adjust it
-            </button>
-            <button type="button" disabled={busy} onClick={() => onAction({ remove: msg.id })} className={secondary}>
-              Cancel
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-foreground/60">
-            {(msg.revisions ?? 0) >= MAX_REVISIONS ? "That is the most adjustments for this change. Approve it, or cancel and ask again." : "Like it but want an adjustment? Press Adjust it, then type what to change in the box below."}
-          </p>
+          {!asking ? (
+            <>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button type="button" disabled={busy} onClick={() => onAction({ approve: msg.id })} className={primary}>
+                  Approve and publish
+                </button>
+                <button type="button" disabled={busy || (msg.revisions ?? 0) >= MAX_REVISIONS} onClick={() => setAsking(true)} className={secondary}>
+                  Adjust it
+                </button>
+                <button type="button" disabled={busy} onClick={() => onAction({ remove: msg.id })} className={secondary}>
+                  Cancel
+                </button>
+              </div>
+              {(msg.revisions ?? 0) >= MAX_REVISIONS && <p className="mt-2 text-xs text-foreground/60">That is the most adjustments for this change. Approve it, or cancel and ask again.</p>}
+            </>
+          ) : (
+            <form
+              className="mt-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const text = feedback.trim();
+                if (text.length < 5) return;
+                setAsking(false);
+                setFeedback("");
+                onAction({ revise: msg.id, text });
+              }}
+            >
+              <label htmlFor={`feedback-${msg.id}`} className="text-xs text-foreground/60">
+                What should be different? (Adjustment {(msg.revisions ?? 0) + 1} of {MAX_REVISIONS})
+              </label>
+              <textarea
+                id={`feedback-${msg.id}`}
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                autoFocus
+                className="mt-1.5 block w-full resize-none rounded-xl border border-foreground/20 bg-transparent px-3 py-2 text-base leading-snug outline-none focus:border-foreground"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button type="submit" disabled={busy || feedback.trim().length < 5} className={primary}>
+                  Send
+                </button>
+                <button type="button" onClick={() => setAsking(false)} className={secondary}>
+                  Back
+                </button>
+              </div>
+            </form>
+          )}
         </>
       )}
 
