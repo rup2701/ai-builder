@@ -350,6 +350,11 @@ function boldText(text: string) {
 export default function BuilderWorkspace({ projectId, initial, homeHref, title, publishNote, kind = "store" }: Props) {
   const site = kind === "site";
   const [st, setSt] = useState<WorkspaceState>(initial);
+  /** Pictures attached to the message being written (live sites only). They are uploaded as soon as they are picked. */
+  const [attached, setAttached] = useState<{ id: string; name: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [pane, setPane] = useState<"chat" | "preview">("chat");
@@ -522,6 +527,27 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     }
   }
 
+  async function attachFiles(files: FileList | null) {
+    const list = Array.from(files ?? []).slice(0, 3 - attached.length);
+    if (!list.length) return;
+    setUploading(true);
+    setUploadError("");
+    for (const file of list) {
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const r = await fetch(`/api/projects/${projectId}/assets`, { method: "POST", body: form });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.id) setAttached((a) => [...a, { id: j.id as string, name: String(j.name ?? file.name) }]);
+        else setUploadError(j.error ?? "I could not attach that picture.");
+      } catch {
+        setUploadError("I couldn't reach the server just now. Try attaching it again.");
+      }
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   function send(raw: string) {
     const text = raw.trim();
     if (!text || busy) return;
@@ -531,7 +557,10 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
       // and it holds the same message, so it is never shown twice.
       setSt((s) => pushMsg(s, { kind: "user", text }));
       setPane("chat");
-      void changeAction({ text });
+      const assetIds = attached.map((a) => a.id);
+      setAttached([]);
+      setUploadError("");
+      void changeAction({ text, ...(assetIds.length ? { assetIds } : {}) });
       return;
     }
     if (phase === "iterate" && !/^\s*(start over|reset)\b/i.test(text)) {
@@ -968,10 +997,37 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 placeholder={busy ? (changeRunning ? "Making your change…" : "Working on it…") : editing ? "Tell me what to change on your site…" : site ? "Type your answer…" : phase === "intake" ? "Type your answer…" : phase === "summary" ? "Say “build it” or what to change…" : cur ? "Ask for a change…" : "Describe your store…"}
                 className="field-sizing-content block max-h-48 min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base leading-snug outline-none placeholder:text-foreground/40 disabled:opacity-60"
               />
+              {(attached.length > 0 || uploading || uploadError) && (
+                <div className="flex flex-wrap items-center gap-2 px-3 pb-1">
+                  {attached.map((a) => (
+                    <span key={a.id} className="flex items-center gap-2 rounded-lg border border-foreground/15 py-1 pl-1 pr-2 text-xs">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/projects/${projectId}/assets/${a.id}`} alt="" className="h-8 w-8 rounded object-cover" />
+                      <span className="max-w-40 truncate">{a.name}</span>
+                      <button type="button" aria-label={`Remove ${a.name}`} onClick={() => setAttached((x) => x.filter((y) => y.id !== a.id))} className={`text-foreground/50 hover:text-foreground ${focusRing}`}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {uploading && <span className="text-xs text-foreground/60">Attaching…</span>}
+                  {uploadError && (
+                    <span role="alert" className="text-xs text-red-700">
+                      {uploadError}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-between px-2 pb-2">
                 <div className="flex items-center gap-0.5">
-                  {/* Not built yet: shown dimmed so the layout is final. Remove these two when you would rather not show them. */}
-                  <button type="button" disabled title="Attach a file (coming soon)" aria-label="Attach a file (coming soon)" className="grid h-8 w-8 place-items-center rounded-lg text-foreground/30">
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(e) => void attachFiles(e.target.files)} />
+                  <button
+                    type="button"
+                    disabled={!editing || busy || uploading || attached.length >= 3}
+                    onClick={() => fileRef.current?.click()}
+                    title={editing ? "Attach a picture (JPG, PNG or WebP, up to 3 MB)" : "You can attach pictures once your site is live"}
+                    aria-label="Attach a picture"
+                    className={`grid h-8 w-8 place-items-center rounded-lg ${editing && !busy && !uploading && attached.length < 3 ? "text-foreground/60 hover:bg-foreground/5" : "text-foreground/30"} ${focusRing}`}
+                  >
                     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                     </svg>

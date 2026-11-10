@@ -8,6 +8,7 @@ import { pushMsg } from "@/lib/workspace/state";
 import { anthropicComplete } from "@/lib/agents/anthropic";
 import { pageContentOf, planChange, sectionsOf } from "@/lib/agents/change-planner";
 import { logUsage } from "@/lib/usage";
+import { attachmentNote, MAX_ASSETS_PER_CHANGE } from "@/lib/builder/site-assets";
 import type { Msg, WorkspaceState } from "@/lib/workspace/types";
 import { appliedChanges, changeLimit, changeMsgs, changesUsed, cleanInstruction, isMaking, LONG_REQUEST, MAX_REVISIONS, mergeWorkerUpdates, MIN_INSTRUCTION, needsAnswer, siteIsLive, type ChangeMsg } from "@/lib/builder/site-change";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const Body = z.union([
-  z.object({ text: z.string().min(1).max(2000) }),
+  z.object({ text: z.string().min(1).max(2000), assetIds: z.array(z.string().uuid()).max(MAX_ASSETS_PER_CHANGE).optional() }),
   z.object({ confirm: z.number().int() }),
   z.object({ cancel: z.number().int() }),
   z.object({ approve: z.number().int() }),
@@ -133,17 +134,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (changeMsgs(state).some(needsAnswer)) return fail("Finish the change above first: approve it, ask for changes, or remove it.", 409);
   const text = cleanInstruction(data.text);
   if (text.length < MIN_INSTRUCTION) return fail("Say a little more about what to change.", 400);
+  // Attached pictures must be this project's own. Only their details are kept in the chat; the bytes stay in site_assets.
+  let assets: { id: string; name: string; width: number; height: number }[] = [];
+  const wantedIds = [...new Set(data.assetIds ?? [])];
+  if (wantedIds.length) {
+    const rows = await db
+      .select({ id: schema.siteAssets.id, name: schema.siteAssets.name, width: schema.siteAssets.width, height: schema.siteAssets.height })
+      .from(schema.siteAssets)
+      .where(and(eq(schema.siteAssets.projectId, p.id), inArray(schema.siteAssets.id, wantedIds)));
+    if (rows.length !== wantedIds.length) return fail("One of the pictures is not there any more. Please attach it again.", 400);
+    assets = rows;
+  }
+  const note = attachmentNote(assets);
   // Scout rewrites the request as a short plan the owner can check. If that fails, the owner's own words are used.
   let title: string | undefined;
   let changes: string[] | undefined;
-  let instruction = text;
+  let instruction = text + note;
   let size: "small" | "substantial" | undefined;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey) {
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
     const brief = state.site?.brief ?? {};
     const siteName = typeof brief.name === "string" && brief.name ? brief.name : "this site";
-    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 30000, maxTokens: 3000 }), text, { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
+    const { plan, usage } = await planChange(anthropicComplete({ apiKey, model, timeoutMs: 30000, maxTokens: 3000 }), text + note, { siteName, sections: sectionsOf(brief), applied: appliedChanges(state), content: pageContentOf(brief) });
     if (usage) await logUsage({ projectId: p.id, step: "change_plan", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     // A question, or something that cannot be done: the chat keeps what the owner wrote and the reply, and nothing is queued.
     const reply = plan?.answer ?? plan?.decline;
@@ -157,6 +170,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       changes = plan.changes;
       // A long request goes to the agent in the owner's own words as well, so nothing is lost in the rewrite.
       instruction = text.length > LONG_REQUEST ? `${plan.instruction}\n\nThe owner's own words (follow these exactly where they differ from the summary above):\n${text}` : plan.instruction;
+      // The planner may leave the file paths out of its rewrite; the agent always gets them.
+      if (note && !plan.instruction.includes("/art/")) instruction += note;
       size = plan.size;
     }
   }
@@ -165,6 +180,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     msgs: state.msgs.map((m) => (m.kind === "site_change" && m.status === "proposed" ? ({ ...m, status: "cancelled" } as Msg) : m)),
   };
   next = pushMsg(next, { kind: "user", text });
-  next = pushMsg(next, { kind: "site_change", instruction, ...(title ? { title, changes, size } : {}), status: "proposed" });
+  next = pushMsg(next, { kind: "site_change", instruction, ...(title ? { title, changes, size } : {}), status: "proposed", ...(assets.length ? { assets } : {}) });
   return save(next);
 }

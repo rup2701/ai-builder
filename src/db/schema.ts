@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
-import { boolean, integer, jsonb, numeric, pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { boolean, customType, integer, jsonb, numeric, pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 /** Access codes for the beta. The code itself is never stored, only its hash and the last four characters. */
 export const accessCodes = pgTable("access_codes", {
@@ -60,6 +62,23 @@ export const jobs = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [index("jobs_status_idx").on(t.status, t.createdAt)],
+);
+
+/** Pictures an owner attached in the chat, converted to WebP. Kept until the worker copies them into the site's public/art folder. */
+export const siteAssets = pgTable(
+  "site_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    mime: text("mime").notNull().default("image/webp"),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    size: integer("size").notNull(),
+    bytes: bytea("bytes").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("site_assets_project_idx").on(t.projectId)],
 );
 
 /** Tokens and cost per step, so every app has a real cost. */

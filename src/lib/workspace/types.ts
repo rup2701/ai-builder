@@ -38,6 +38,8 @@ type MsgBody =
       /** The owner's request for a revision, and how many rounds there have been (up to 3). */
       feedback?: string;
       revisions?: number;
+      /** Pictures the owner attached to the request. They are saved in site_assets and copied into the site's public/art folder when the change is made. */
+      assets?: { id: string; name: string; width: number; height: number }[];
       /** A short line shown on the card, for example why a revision or a publish did not work. */
       note?: string;
       /** The job whose record holds the pictures (they are not live pictures until the change is published). */

@@ -11,16 +11,15 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "worker": "tsx --env-file=.env worker/index.ts",
+    "code": "tsx --env-file=.env scripts/access-code.ts",
+    "test:access": "tsx test/access-code.test.mts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
     "test:e2e": "node e2e/flow.mjs",
     "test:interviewer": "tsx test/interviewer.test.ts",
     "sync:site-pack": "node scripts/sync-site-pack.mjs",
     "test:site-interviewer": "tsx test/site-interviewer.test.ts",
-    "test:site-build": "tsx test/site-build.test.mts",
-    "test:site-stages": "tsx test/site-stages.test.ts",
-    "code": "tsx --env-file=.env scripts/access-code.ts",
-    "test:access": "tsx test/access-code.test.mts"
+    "test:site-stages": "tsx test/site-stages.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -35,6 +34,7 @@
     "react": "19.2.9",
     "react-dom": "19.2.9",
     "server-only": "^0.0.1",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.25.76"
   },

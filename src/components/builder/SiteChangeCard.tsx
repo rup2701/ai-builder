@@ -6,7 +6,7 @@ import { MAX_REVISIONS } from "@/lib/builder/site-change";
 
 type ChangeMsg = Extract<Msg, { kind: "site_change" }>;
 
-export type ChangeAction = { text: string } | { confirm: number } | { cancel: number } | { approve: number } | { revise: number; text: string } | { remove: number } | { undo: number };
+export type ChangeAction = { text: string; assetIds?: string[] } | { confirm: number } | { cancel: number } | { approve: number } | { revise: number; text: string } | { remove: number } | { undo: number };
 
 type Props = {
   msg: ChangeMsg;

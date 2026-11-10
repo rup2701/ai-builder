@@ -11,7 +11,7 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { heroShot, parseSummary, runProcess, tail, type Db, type Job } from "./site-build";
@@ -368,6 +368,18 @@ export async function runSiteChange(db: Db, job: Job, env: NodeJS.ProcessEnv = p
     // 2. Remember where the code is: the start of this job (a failed revision returns here) and the start of the whole change.
     const startHead = await gitHead();
     const baseHead = msg.baseHead && SAFE_SHA.test(msg.baseHead) ? msg.baseHead : startHead;
+
+    // 2b. Pictures the owner attached go into the site's public/art folder first, so the agent can look at them and use them.
+    if (msg.assets?.length) {
+      const artDir = path.join(appDir, "public", "art");
+      await mkdir(artDir, { recursive: true });
+      for (const a of msg.assets) {
+        if (!/^[0-9a-f-]{36}$/i.test(a.id)) continue;
+        const { rows: found } = await db.query(`SELECT bytes FROM site_assets WHERE id = $1 AND project_id = $2`, [a.id, job.project_id]);
+        if (!found[0]) return await bad("An attached picture is no longer saved, so the change was not made. Please attach it again.");
+        await writeFile(path.join(artDir, `${a.id}.webp`), found[0].bytes as Buffer);
+      }
+    }
 
     // 3. The change. The instruction goes before --site: the runner reads the word after a flag as that flag's value.
     const tRunner = Date.now();
