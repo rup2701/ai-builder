@@ -562,7 +562,10 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
       const assetIds = attached.map((a) => a.id);
       setAttached([]);
       setUploadError("");
-      void changeAction({ text, ...(assetIds.length ? { assetIds } : {}) });
+      const extra = assetIds.length ? { assetIds } : {};
+      // A preview is waiting: what is typed now adjusts that change instead of starting a new one.
+      if (reviewing && (reviewing.revisions ?? 0) < MAX_REVISIONS) void changeAction({ revise: reviewing.id, text, ...extra });
+      else void changeAction({ text, ...extra });
       return;
     }
     if (phase === "iterate" && !/^\s*(start over|reset)\b/i.test(text)) {
