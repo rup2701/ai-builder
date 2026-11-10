@@ -37,3 +37,7 @@ assert.ok(ans.plan?.answer?.includes("Nothing was changed") && !ans.plan?.title)
 let qsys = ""; await planChange(async (req) => { qsys = req.system; return { input: { answer: "Three plans." }, usage: u }; }, "how many plans?", ctx);
 assert.ok(qsys.includes('set "answer"'));
 console.log("answer ok");
+
+await planChange(async (req) => { seen = req.system; return { input: { decline: "That is already live: x." }, usage: u }; }, "x", ctx);
+assert.ok(seen.includes("Plain slips in the owner's text are fixed") && seen.includes("inside quotation marks stay exactly as typed"));
+console.log("slips ok");

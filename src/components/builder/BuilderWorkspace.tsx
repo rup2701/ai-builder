@@ -557,14 +557,16 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     if (site && siteIsLive(st)) {
       // Show the message at once. The server's state replaces this when the reply (or the change card) comes back,
       // and it holds the same message, so it is never shown twice.
-      setSt((s) => pushMsg(s, { kind: "user", text }));
+      const revising = reviewing && (reviewing.revisions ?? 0) < MAX_REVISIONS;
+      // An adjustment is shown on its change card, not as a chat message after it.
+      if (!revising) setSt((s) => pushMsg(s, { kind: "user", text }));
       setPane("chat");
       const assetIds = attached.map((a) => a.id);
       setAttached([]);
       setUploadError("");
       const extra = assetIds.length ? { assetIds } : {};
       // A preview is waiting: what is typed now adjusts that change instead of starting a new one.
-      if (reviewing && (reviewing.revisions ?? 0) < MAX_REVISIONS) void changeAction({ revise: reviewing.id, text, ...extra });
+      if (reviewing && revising) void changeAction({ revise: reviewing.id, text, ...extra });
       else void changeAction({ text, ...extra });
       return;
     }

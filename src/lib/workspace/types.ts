@@ -40,6 +40,8 @@ type MsgBody =
       revisions?: number;
       /** What the owner asked for in the latest round, kept so the card can show it after the revision is made. */
       lastFeedback?: string;
+      /** Every adjustment the owner asked for on this change, in order. The card shows them, so the history stays with the change. */
+      adjustments?: string[];
       /** Pictures the owner attached to the request. They are saved in site_assets and copied into the site's public/art folder when the change is made. */
       assets?: { id: string; name: string; width: number; height: number }[];
       /** A short line shown on the card, for example why a revision or a publish did not work. */

@@ -31,6 +31,16 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
   if (msg.status === "removed") return <p className="text-md text-foreground/60">Removed: “{msg.title ?? msg.instruction}”. Your site is as it was.</p>;
 
   const live = msg.status === "done";
+  const adjustmentsList = msg.adjustments?.length ? (
+    <div className="mt-3 text-xs text-foreground/60">
+      <p className="font-medium">Your adjustments</p>
+      <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+        {msg.adjustments.map((a, i) => (
+          <li key={i}>{a.length > 200 ? `${a.slice(0, 200)}…` : a}</li>
+        ))}
+      </ol>
+    </div>
+  ) : null;
   const pictures =
     msg.snaps && (msg.snaps.before || msg.snaps.after) ? (
       <div className="mt-3 space-y-3">
@@ -137,11 +147,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
             </p>
           )}
           {pictures}
-          {msg.lastFeedback && (msg.revisions ?? 0) > 0 && (
-            <p className="mt-2 text-xs text-foreground/60">
-              Revised (round {msg.revisions} of {MAX_REVISIONS}): {msg.lastFeedback.length > 160 ? `${msg.lastFeedback.slice(0, 160)}…` : msg.lastFeedback}
-            </p>
-          )}
+          {adjustmentsList}
           {!asking ? (
             <>
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -149,13 +155,13 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
                   Approve and publish
                 </button>
                 <button type="button" disabled={busy || (msg.revisions ?? 0) >= MAX_REVISIONS} onClick={() => setAsking(true)} className={secondary}>
-                  Adjust it
+                  Ask for a change
                 </button>
                 <button type="button" disabled={busy} onClick={() => onAction({ remove: msg.id })} className={secondary}>
                   Cancel
                 </button>
               </div>
-              {(msg.revisions ?? 0) >= MAX_REVISIONS && <p className="mt-2 text-xs text-foreground/60">That is the most adjustments for this change. Approve it, or cancel and ask again.</p>}
+              {(msg.revisions ?? 0) >= MAX_REVISIONS && <p className="mt-2 text-xs text-foreground/60">That is the most rounds for this change. Approve it, or cancel and ask again.</p>}
             </>
           ) : (
             <form
@@ -170,7 +176,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
               }}
             >
               <label htmlFor={`feedback-${msg.id}`} className="text-xs text-foreground/60">
-                What should be different? (Adjustment {(msg.revisions ?? 0) + 1} of {MAX_REVISIONS})
+                What should be different? (Round {(msg.revisions ?? 0) + 1} of {MAX_REVISIONS})
               </label>
               <textarea
                 id={`feedback-${msg.id}`}
@@ -197,6 +203,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
       {msg.status === "done" && (
         <>
           <p className="text-md font-medium text-foreground">Published</p>
+          {adjustmentsList}
           {msg.note && <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.note}</p>}
           {msg.summary && msg.summary !== "The change is ready." ? (
             <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.summary}</p>

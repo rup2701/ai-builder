@@ -134,9 +134,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const have = new Map((m.assets ?? []).map((a) => [a.id, a]));
     for (const a of added) have.set(a.id, a);
     const feedback = typed + attachmentNote(added);
-    // The owner's words stay in the chat, after the card, so the conversation reads in order.
-    const withText = pushMsg(state, { kind: "user", text: typed });
-    return queue(m, { status: "queued", action: "make", feedback, lastFeedback: typed, revisions: (m.revisions ?? 0) + 1, note: undefined, ...(have.size ? { assets: [...have.values()] } : {}) }, withText);
+    // The owner's words are kept on the change card (not as a chat message after it), so the history stays with the change.
+    return queue(m, { status: "queued", action: "make", feedback, lastFeedback: typed, adjustments: [...(m.adjustments ?? []), typed], revisions: (m.revisions ?? 0) + 1, note: undefined, ...(have.size ? { assets: [...have.values()] } : {}) });
   }
 
   // A new request. The one above has to be answered first, because the next change would build on top of it.
