@@ -45,11 +45,14 @@ const Basics = z.object({
 });
 export const ImportedSite = Basics.extend({ menu: Menu.optional() });
 export type ImportedSiteT = z.infer<typeof ImportedSite>;
+/** A page of the old site other than the menu, in a few words: Catering, Our story, Services. */
+export type ExtraPage = { title: string; body: string };
 export type ImportResult = ImportedSiteT & {
   socials: SiteSnapshot["socials"];
   images: SiteSnapshot["images"];
   sourceUrl: string;
   actions: SiteSnapshot["actions"];
+  extras: ExtraPage[];
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
   dropped: string[];
   /** How much was read, and anything that went wrong on the way, so an empty result can be explained. */
@@ -91,6 +94,27 @@ const MENU_TOOL: Tool = {
           properties: {
             category: { type: "string" },
             items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, price: { type: "string", description: "As written, for example 14 or $14.50." } } } },
+          },
+        },
+      },
+    },
+  },
+};
+
+const EXTRAS_TOOL: Tool = {
+  name: "save_pages",
+  description: "Save a short description of each other page of this business's website (not the menu, not the home page).",
+  input_schema: {
+    type: "object",
+    properties: {
+      pages: {
+        type: "array",
+        description: "One entry per page such as Catering, Services, Our story, Events. Skip contact, ordering and reservation pages.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "The page's name, such as Catering." },
+            body: { type: "string", description: "Two to four sentences copied or closely shortened from that page's own text, at most 450 characters. No claims the page does not make." },
           },
         },
       },
@@ -161,6 +185,33 @@ export function groundCheck(draft: ImportedSiteT, snap: SiteSnapshot): { site: I
   return { site: out, dropped };
 }
 
+/** The other pages, trimmed to fit. */
+export function coerceExtras(input: unknown): ExtraPage[] {
+  const raw = (input as { pages?: unknown } | null)?.pages;
+  if (!Array.isArray(raw)) return [];
+  const out: ExtraPage[] = [];
+  for (const p of raw.slice(0, 6)) {
+    const title = typeof p?.title === "string" ? p.title.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+    const body = typeof p?.body === "string" ? p.body.replace(/\s+/g, " ").trim().slice(0, 450) : "";
+    if (title && body.length >= 20) out.push({ title, body });
+  }
+  return out;
+}
+
+/** Keeps a page description only when most of its words are on the pages that were read. */
+export function groundExtras(extras: ExtraPage[], snap: SiteSnapshot): { kept: ExtraPage[]; dropped: string[] } {
+  const corpus = new Set(norm(snap.pages.map((p) => p.text).join(" ")).split(" "));
+  const kept: ExtraPage[] = [];
+  const dropped: string[] = [];
+  for (const e of extras) {
+    const words = norm(e.body).split(" ").filter((w) => w.length > 3);
+    const found = words.filter((w) => corpus.has(w)).length;
+    if (words.length && found / words.length >= 0.7) kept.push(e);
+    else dropped.push(`page ${e.title}`);
+  }
+  return { kept, dropped };
+}
+
 type Usage = { inputTokens: number; outputTokens: number; costUsd: number };
 
 /** One model call with one retry (the model sometimes answers in words instead of calling the tool). Never throws: a failure becomes a warning. */
@@ -204,19 +255,21 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
     .filter(Boolean)
     .join("\n\n");
   const warnings: string[] = [];
-  const [basics, menu] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings)]);
+  const [basics, menu, other] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings), ask(complete, EXTRAS_TOOL, body, "other pages", warnings)]);
   const menuItems = menu ? coerceMenu(menu.input) : [];
   const draft: ImportedSiteT = { ...(basics ? lenient(Basics, basics.input) : {}), ...(menuItems.length ? { menu: menuItems } : {}) };
   // Said out loud, so an empty menu next to a long menu page is never a mystery.
   const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
   if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
-  const used = [basics?.usage, menu?.usage].filter((u): u is Usage => !!u);
+  const grounded = groundExtras(other ? coerceExtras(other.input) : [], snap);
+  const used = [basics?.usage, menu?.usage, other?.usage].filter((u): u is Usage => !!u);
   const usage = used.length ? used.reduce((a, b) => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd })) : null;
-  const { site, dropped } = groundCheck(draft, snap);
+  const { site, dropped: droppedFacts } = groundCheck(draft, snap);
+  const dropped = [...droppedFacts, ...grounded.dropped];
   // Contact facts the page links directly are more reliable than the model's copy.
   if (!site.phone && snap.phones[0]) site.phone = snap.phones[0];
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }

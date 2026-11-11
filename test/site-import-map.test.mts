@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { coerceMenu, groundCheck, mapSnapshot } from "../src/lib/builder/site-import";
+import { coerceExtras, coerceMenu, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
 import type { SiteSnapshot } from "../src/lib/builder/site-extract";
 
 let failed = 0;
@@ -64,7 +64,7 @@ await test("the menu comes from its own call, and a failed menu call keeps the b
   const both = await mapSnapshot(async (req) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Drinks", items: [{ name: "Latte", price: "5" }, { name: "Croissant", price: "4.50" }] }] } : { name: "Luna Cafe" }, usage: u }), snap);
   assert.equal(both.result.name, "Luna Cafe");
   assert.equal(both.result.menu?.[0].items.length, 2);
-  assert.equal(both.usage?.inputTokens, 2);
+  assert.equal(both.usage?.inputTokens, 3); // three calls: details, menu, other pages
   const menuDown = await mapSnapshot(async (req) => { if (req.tool.name === "save_menu") throw new Error("cut off at 8000 tokens"); return { input: { name: "Luna Cafe" }, usage: u }; }, snap);
   assert.equal(menuDown.result.name, "Luna Cafe");
   assert.equal(menuDown.result.menu, undefined);
@@ -81,6 +81,19 @@ await test("junk menu entries are skipped", () => {
   assert.deepEqual(coerceMenu({ menu: [{ category: "A", items: [{ name: "  " }, { name: "Tea", price: 5 }, null] }, { category: "", items: [{ name: "x" }] }, "no"] }), [{ category: "A", items: [{ name: "Tea" }] }]);
   assert.deepEqual(coerceMenu(null), []);
   assert.deepEqual(coerceMenu({ menu: "none" }), []);
+});
+await test("other pages are described, and invented descriptions are dropped", () => {
+  const withPages: SiteSnapshot = { ...snap, pages: [...snap.pages, { url: "https://lunacafe.com/catering", title: "Catering", text: "We cater parties of twenty to two hundred guests. Choose trays of pastries and coffee delivered to your office." }] };
+  const ex = coerceExtras({ pages: [{ title: "Catering", body: "We cater parties of twenty to two hundred guests with trays of pastries and coffee delivered to your office." }, { title: "Awards", body: "Winner of the national baking championship and featured on television twice." }, { title: "x", body: "short" }] });
+  assert.equal(ex.length, 2);
+  const g = groundExtras(ex, withPages);
+  assert.deepEqual(g.kept.map((e) => e.title), ["Catering"]);
+  assert.deepEqual(g.dropped, ["page Awards"]);
+});
+await test("a result carries the other pages", async () => {
+  const withPages: SiteSnapshot = { ...snap, pages: [...snap.pages, { url: "https://lunacafe.com/catering", title: "Catering", text: "We cater parties of twenty to two hundred guests. Choose trays of pastries and coffee delivered to your office." }] };
+  const { result } = await mapSnapshot(async (req) => ({ input: req.tool.name === "save_pages" ? { pages: [{ title: "Catering", body: "We cater parties of twenty to two hundred guests with trays of pastries and coffee delivered." }] } : {}, usage: u }), withPages);
+  assert.equal(result.extras[0].title, "Catering");
 });
 await test("a site with almost no text says so", async () => {
   const thin: SiteSnapshot = { ...snap, pages: [{ url: "https://x.com/", title: "x", text: "Welcome" }] };

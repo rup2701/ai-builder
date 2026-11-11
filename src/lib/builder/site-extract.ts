@@ -25,8 +25,8 @@ export type SiteSnapshot = {
   images: SiteImage[];
 };
 
-export const MAX_PAGES = 5;
-export const MAX_TEXT_CHARS = 24_000;
+export const MAX_PAGES = 7;
+export const MAX_TEXT_CHARS = 40_000;
 const MAX_IMAGES = 12;
 const SOCIAL: [string, RegExp][] = [
   ["instagram", /(^|\.)instagram\.com$/],
