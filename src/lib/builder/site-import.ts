@@ -104,6 +104,10 @@ export type ImportResult = ImportedSiteT & {
   extras: ExtraPage[];
   /** Works or products listed on the site (a painter's paintings, a shop's goods). Empty for a restaurant, which has a menu. */
   catalog: Work[];
+  /** Quotes from customers that the site shows, copied exactly. Never written by the reader. */
+  testimonials: { quote: string; author?: string }[];
+  /** The site has an email sign-up box. */
+  signup: boolean;
   /** Links the home page offers and whether each was read. */
   linksSeen: SiteSnapshot["linksSeen"];
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
@@ -180,13 +184,18 @@ const CATALOG_TOOL: Tool = {
 
 const EXTRAS_TOOL: Tool = {
   name: "save_pages",
-  description: "Save a short description of each other page of this business's website (not the menu, not the home page).",
+  description: "Save the other parts of this business's website (not the menu, not the list of works), and any customer testimonials it shows.",
   input_schema: {
     type: "object",
     properties: {
+      testimonials: {
+        type: "array",
+        description: "Quotes from customers or press that the site shows, copied exactly, with who said it if the site says. Never write one.",
+        items: { type: "object", properties: { quote: { type: "string" }, author: { type: "string" } } },
+      },
       pages: {
         type: "array",
-        description: "One entry per page such as Catering, Services, Our story, Events. Skip contact, ordering and reservation pages.",
+        description: "One entry per part of the site, from any page including the home page: a page such as Catering, Services, Our story, or a section under a heading such as Commissions, Exhibitions, FAQ, Where else to buy, Delivery. Use the site's own heading as the title. Skip contact, ordering and reservation, and skip testimonials (they go in the other list).",
         items: {
           type: "object",
           properties: {
@@ -267,12 +276,28 @@ export function coerceExtras(input: unknown): ExtraPage[] {
   const raw = (input as { pages?: unknown } | null)?.pages;
   if (!Array.isArray(raw)) return [];
   const out: ExtraPage[] = [];
-  for (const p of raw.slice(0, 6)) {
+  for (const p of raw.slice(0, 10)) {
     const title = typeof p?.title === "string" ? p.title.replace(/\s+/g, " ").trim().slice(0, 60) : "";
     const body = typeof p?.body === "string" ? p.body.replace(/\s+/g, " ").trim().slice(0, 450) : "";
     if (title && body.length >= 20) out.push({ title, body });
   }
   return out;
+}
+
+/** Testimonials copied from the model, kept only when the exact words are on the pages. A quote the reader could not find is never shown. */
+export function groundTestimonials(input: unknown, snap: SiteSnapshot): { kept: { quote: string; author?: string }[]; dropped: string[] } {
+  const raw = (input as { testimonials?: unknown } | null)?.testimonials;
+  const corpus = norm(snap.pages.map((p) => p.text).join(" "));
+  const kept: { quote: string; author?: string }[] = [];
+  const dropped: string[] = [];
+  for (const t of Array.isArray(raw) ? raw.slice(0, 6) : []) {
+    const quote = typeof t?.quote === "string" ? t.quote.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    const author = typeof t?.author === "string" ? t.author.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+    if (quote.length < 10) continue;
+    if (!corpus.includes(norm(quote))) { dropped.push("a testimonial"); continue; }
+    kept.push({ quote, ...(author && corpus.includes(norm(author)) ? { author } : {}) });
+  }
+  return { kept, dropped };
 }
 
 /** Keeps a page description only when most of its words are on the pages that were read. */
@@ -341,14 +366,15 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
   if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
   const grounded = groundExtras(other ? coerceExtras(other.input) : [], snap);
+  const quotes = groundTestimonials(other?.input, snap);
   const used = [basics?.usage, menu?.usage, other?.usage, works?.usage].filter((u): u is Usage => !!u);
   const usage = used.length ? used.reduce((a, b) => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd })) : null;
   const { site, dropped: droppedFacts } = groundCheck(draft, snap);
-  const dropped = [...droppedFacts, ...grounded.dropped, ...grounded2.dropped];
+  const dropped = [...droppedFacts, ...grounded.dropped, ...grounded2.dropped, ...quotes.dropped];
   // Contact facts the page links directly are more reliable than the model's copy.
   if (!site.phone && snap.phones[0]) site.phone = snap.phones[0];
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, catalog: grounded2.kept, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, catalog: grounded2.kept, testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }

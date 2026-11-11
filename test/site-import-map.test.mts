@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
+import { groundTestimonials, coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
 import type { SiteSnapshot } from "../src/lib/builder/site-extract";
 
 let failed = 0;
@@ -9,7 +9,7 @@ async function test(name: string, fn: () => Promise<void> | void) {
 const snap: SiteSnapshot = {
   rootUrl: "https://lunacafe.com/", title: "Luna Cafe", description: "Coffee in Oakland",
   pages: [{ url: "https://lunacafe.com/", title: "Luna Cafe", text: "Luna Cafe\nNeighbourhood coffee and pastries.\nLatte 5\nCroissant 4.50\n12 Grand Ave, Oakland CA\nMon-Fri 7am-5pm\nCall (510) 555-1234" }],
-  phones: ["+15105551234"], emails: ["hi@lunacafe.com"], socials: [{ network: "instagram", url: "https://www.instagram.com/lunacafe" }], actions: [{ label: "Order online", url: "https://order.example.com/luna" }], structured: [], images: [{ src: "https://lunacafe.com/a.jpg", alt: "" }], linksSeen: [],
+  phones: ["+15105551234"], emails: ["hi@lunacafe.com"], socials: [{ network: "instagram", url: "https://www.instagram.com/lunacafe" }], actions: [{ label: "Order online", url: "https://order.example.com/luna" }], structured: [], images: [{ src: "https://lunacafe.com/a.jpg", alt: "" }], linksSeen: [], signup: false,
 };
 const u = { inputTokens: 1, outputTokens: 1, costUsd: 0 };
 
@@ -129,5 +129,12 @@ await test("a gallery gets a catalog and no menu", async () => {
   const { result } = await mapSnapshot(complete as never, gallery);
   assert.equal(result.catalog.length, 1);
   assert.equal(result.menu, undefined);
+});
+await test("testimonials are kept only when the exact words are on the page", () => {
+  const g: SiteSnapshot = { ...snap, pages: [{ url: "https://a.example.com/", title: "a", text: "## Kind words\nThe painting changed our hallway. Anna P." }] };
+  const { kept, dropped } = groundTestimonials({ testimonials: [{ quote: "The painting changed our hallway.", author: "Anna P." }, { quote: "Best artist in London, truly wonderful.", author: "Bob" }] }, g);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].author, "Anna P.");
+  assert.deepEqual(dropped, ["a testimonial"]);
 });
 if (failed) process.exit(1);

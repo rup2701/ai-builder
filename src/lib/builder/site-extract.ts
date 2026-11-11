@@ -25,6 +25,8 @@ export type SiteSnapshot = {
   images: SiteImage[];
   /** Links the home page offers, and which of them were read, so a missing page can be explained. */
   linksSeen: { href: string; text: string; read: boolean }[];
+  /** True when a page has an email box to sign up (a newsletter), seen before forms are stripped for reading. */
+  signup: boolean;
 };
 
 export const MAX_PAGES = 7;
@@ -44,7 +46,7 @@ const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|
 const ACTION = /order|reserv|book|menu|catering|call us|get directions|appointment|buy/i;
 const BUSINESS_TYPES = /(LocalBusiness|Restaurant|CafeOrCoffeeShop|Bakery|BarOrPub|FoodEstablishment|Store|HealthAndBeautyBusiness|Organization|ProfessionalService)/;
 
-type Page = { page: PageText; actions: SiteAction[]; links: { href: string; text: string }[]; phones: string[]; emails: string[]; socials: { network: string; url: string }[]; structured: unknown[]; images: SiteImage[]; description: string };
+type Page = { signup: boolean; page: PageText; actions: SiteAction[]; links: { href: string; text: string }[]; phones: string[]; emails: string[]; socials: { network: string; url: string }[]; structured: unknown[]; images: SiteImage[]; description: string };
 
 const abs = (href: string | undefined, base: string): string | null => {
   if (!href) return null;
@@ -116,6 +118,7 @@ export function extractPage(html: string, pageUrl: string): Page {
     addImage(abs($(el).attr("src") ?? $(el).attr("data-src"), pageUrl), $(el).attr("alt") ?? "");
   });
 
+  const signup = $('input[type="email"]').length > 0 || /subscribe|newsletter|mailing list/i.test($("form").text());
   $("script, style, noscript, iframe, svg, nav, form, select, button").remove();
   const seen = new Set<string>();
   const lines: string[] = [];
@@ -136,7 +139,7 @@ export function extractPage(html: string, pageUrl: string): Page {
     if (actions.some((a) => a.url === l.href || a.label.toLowerCase() === label.toLowerCase())) continue;
     actions.push({ label, url: l.href });
   }
-  return { page: { url: pageUrl, title, text: lines.join("\n") }, actions: actions.slice(0, 8), links, phones: [...phones], emails: [...emails], socials, structured, images, description };
+  return { signup, page: { url: pageUrl, title, text: lines.join("\n") }, actions: actions.slice(0, 8), links, phones: [...phones], emails: [...emails], socials, structured, images, description };
 }
 
 /** Which same-site pages are worth reading for a local business: menu, about, contact, hours. */
@@ -206,6 +209,7 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
     actions: first.actions,
     structured: pages.flatMap((p) => p.structured).slice(0, 4),
     images: uniq(pages.flatMap((p) => p.images), (x) => x.src).slice(0, MAX_IMAGES),
+    signup: pages.some((p) => p.signup),
     linksSeen: uniq(first.links, (x) => x.href).slice(0, 60).map((l) => ({ ...l, read: pages.some((p) => p.page.url.replace(/\/$/, "") === l.href.split("#")[0].replace(/\/$/, "")) })),
   };
 }
