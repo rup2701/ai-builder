@@ -17,7 +17,10 @@ export type Plan = { title: string; source: string };
 
 /** The works that have a picture address, in the brief's order. */
 export function planImages(briefJson: unknown): Plan[] {
-  const works = (briefJson as { catalog?: { works?: BriefWork[] } } | null)?.catalog?.works;
+  // The file may be the brief itself or the whole answer of the brief route, which holds it under "brief".
+  const top = briefJson as { brief?: unknown } | null;
+  const brief = (top && typeof top === "object" && top.brief && typeof top.brief === "object" ? top.brief : briefJson) as { catalog?: { works?: BriefWork[] } } | null;
+  const works = brief?.catalog?.works;
   if (!Array.isArray(works)) return [];
   return works.filter((w) => typeof w?.title === "string" && typeof w?.image_source === "string" && w.image_source).map((w) => ({ title: w.title, source: w.image_source as string }));
 }

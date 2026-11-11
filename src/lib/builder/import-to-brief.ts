@@ -44,7 +44,9 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
     sells: r.tagline ?? r.kind ?? store.sells,
     artist: { name: r.name, note: "Imported from the owner's own website. The owner can change everything in the owner area." },
   };
-  brief.purpose = `Brief built from the owner's existing website (${r.sourceUrl}), used with the owner's confirmation. Works, words and pictures are the owner's own. Anything the site did not give is empty and listed under not_found.`;
+  brief.purpose = isTest
+    ? `Private test: a brief built from a public website (${r.sourceUrl}) to try the tool. The owner has not been asked yet, so this must not be published or shown to anyone. Works, words and pictures belong to the owner. Anything the site did not give is empty and listed under not_found.`
+    : `Brief built from the owner's existing website (${r.sourceUrl}), used with the owner's confirmation. Works, words and pictures are the owner's own. Anything the site did not give is empty and listed under not_found.`;
 
   const works = r.catalog.map((w, i) => {
     const minor = priceToMinor(w.price);

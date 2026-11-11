@@ -81,4 +81,11 @@ await test("the real shop page layout: shared prices and stock words give every 
   const w = fillFromPage(["Sunshine Of Your Love", "Pocket Full Of Sunshine", "Gimme All Your Love", "I Found You", "Beautiful Day"].map((title) => ({ title })), { pages: [{ url: "u", title: "t", text }] } as unknown as SiteSnapshot);
   assert.deepEqual(w.map((x) => [x.price, x.status]), [["£2,250.00", "Sold"], ["£2,250.00", "Available"], ["£2,250.00", "Available"], ["£1,850.00", "Available"], ["£1,850.00", "Sold"]]);
 });
+await test("a private test never says the owner confirmed", () => {
+  const priv = importToBrief(base, result, { privateTest: true, by: "rp" }).brief as Record<string, any>;
+  const real = importToBrief(base, result, { ownerConfirmed: true, confirmedBy: "rp" }).brief as Record<string, any>;
+  assert.match(priv.purpose, /owner has not been asked/);
+  assert.ok(!/owner's confirmation/.test(priv.purpose));
+  assert.match(real.purpose, /owner's confirmation/);
+});
 if (failed) process.exit(1);

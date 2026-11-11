@@ -11,6 +11,8 @@ await test("only works with a picture address are planned", () => {
   const plan = planImages({ catalog: { works: [{ title: "A", image_source: "https://x/a.jpg" }, { title: "B", image_source: null }, { title: "C" }] } });
   assert.deepEqual(plan, [{ title: "A", source: "https://x/a.jpg" }]);
   assert.deepEqual(planImages({}), []);
+  // the whole answer of the brief route, with the brief under "brief"
+  assert.deepEqual(planImages({ brief: { catalog: { works: [{ title: "A", image_source: "https://x/a.jpg" }] } }, notFound: [] }), [{ title: "A", source: "https://x/a.jpg" }]);
 });
 await test("it only runs against a local run database", () => {
   assert.equal(localRunDatabaseUrl("DATABASE_URL=postgres://localhost:5432/run_2026_abc\n"), "postgres://app@localhost:5432/run_2026_abc");
