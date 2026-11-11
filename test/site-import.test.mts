@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { assertPublicUrl, ImportError, isBlockedAddress, safeFetchHtml, MAX_BYTES } from "../src/lib/builder/safe-fetch";
-import { crawlSite, extractPage, pickSubpages } from "../src/lib/builder/site-extract";
+import { crawlSite, extractPage, pickSubpages, splitSections } from "../src/lib/builder/site-extract";
 
 let failed = 0;
 async function test(name: string, fn: () => Promise<void> | void) {
@@ -124,5 +124,9 @@ await test("crawl reads the home page and sub-pages, and survives a failing sub-
 });
 await test("a home page that fails is a plain error", async () => {
   await assert.rejects(crawlSite("lunacafe.com", { fetchImpl: (async () => { throw new Error("x"); }) as unknown as typeof fetch, resolve: pub }), /could not open/);
+});
+await test("a section drops page furniture and lines that repeat part of a longer line", () => {
+  const s = splitSections({ url: "https://x.example.com/", title: "Home", text: "## Intro\ntop of page\nFrom my London studio I create landscape paintings for calm homes\nFrom my London studio I create\nFree UK delivery" });
+  assert.equal(s[0].text, "From my London studio I create landscape paintings for calm homes\nFree UK delivery");
 });
 if (failed) process.exit(1);

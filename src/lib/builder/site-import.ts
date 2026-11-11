@@ -63,21 +63,36 @@ const PRICE = /(?:£|\$|€)\s?\d[\d,]*(?:\.\d{1,2})?/g;
 
 /**
  * Prices and Sold marks read by code, not by the model, so the same page gives the same answer every run.
- * A work owns the lines after its title up to the next work's title. Exactly one price there is its price; the word Sold there is its status.
+ * A work owns the lines from its title up to the next work's title. Exactly one price there is its price; the word Sold there is its status.
  * A model answer that disagrees with the page is replaced; a work with no price in its lines keeps what the model found only if the page has it.
  */
 export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
   const lines = snap.pages.flatMap((p) => p.text.split("\n")).map((l) => l.trim());
-  const at = works.map((w) => lines.findIndex((l) => norm(l) === norm(w.title)));
+  const keys = lines.map(norm);
+  const titles = works.map((w) => norm(w.title));
+  // Lines where a work's title begins (the line may carry more after it, such as "Title - style  Price £900").
+  const starts = (t: string) => keys.map((k, n) => (k === t || k.startsWith(t + " ") ? n : -1)).filter((n) => n >= 0);
+  const allStarts = new Set(titles.flatMap(starts));
   return works.map((w, i) => {
-    const start = at[i];
-    if (start < 0) return w;
-    const next = at.filter((n) => n > start).sort((a, b) => a - b)[0] ?? Math.min(lines.length, start + 8);
-    const window = lines.slice(start + 1, Math.min(next, start + 8));
-    const prices = [...new Set(window.flatMap((l) => l.match(PRICE) ?? []))];
+    let best: { prices: string[]; window: string[]; before: string } | null = null;
+    for (const start of starts(titles[i])) {
+      let end = start + 1;
+      while (end < lines.length && end < start + 8 && !allStarts.has(end)) end++;
+      const window = lines.slice(start, end);
+      const prices = [...new Set(window.flatMap((l) => l.match(PRICE) ?? []))];
+      const before = start > 0 ? lines[start - 1] : "";
+      // The entry that has a price (or a status) is the shop listing; a mention elsewhere has neither.
+      const score = (prices.length === 1 ? 2 : 0) + (window.some((l) => /add to cart|out of stock|sold/i.test(l)) ? 1 : 0);
+      const bestScore = best ? (best.prices.length === 1 ? 2 : 0) + (best.window.some((l) => /add to cart|out of stock|sold/i.test(l)) ? 1 : 0) : -1;
+      if (score > bestScore) best = { prices, window, before };
+    }
+    if (!best) return w;
     const out: Work = { ...w };
-    if (prices.length === 1) out.price = prices[0].replace(/\s/g, "");
-    if (window.some((l) => /^sold$/i.test(l) || /\bsold\b/i.test(l) && l.length < 20)) { out.status = "Sold"; delete out.price; }
+    if (best.prices.length === 1) out.price = best.prices[0].replace(/\s/g, "");
+    const text = best.window.join(" ");
+    const soldLabel = /^sold$/i.test(best.before) || /out of stock/i.test(text) || /(^|\s)sold(\s|$)/i.test(best.window.slice(1).join(" "));
+    if (soldLabel) out.status = "Sold"; // a sold work keeps its list price, as galleries show it
+    else if (/add to cart/i.test(text)) out.status = "Available";
     return out;
   });
 }
@@ -235,7 +250,7 @@ const LABEL_TOOL: Tool = {
     properties: {
       keep: {
         type: "array",
-        description: "The sections to keep, such as Commissions, Exhibitions, FAQ, Shipping, Returns, Materials, Our story, Delivery, Catering. Skip the menu, lists of works or products, testimonials, contact details, navigation, cookie notices, newsletter boxes and copyright lines.",
+        description: "The sections to keep, such as Commissions, Exhibitions, FAQ, Shipping, Returns, Materials, Our story, Delivery, Catering. Skip the menu, lists of works or products, testimonials, contact details, navigation, banners such as free delivery notices, the home page introduction that only repeats the tagline, cookie notices, newsletter boxes and copyright lines.",
         items: { type: "object", properties: { id: { type: "number" }, title: { type: "string", description: "A short name for the section, at most five words." } } },
       },
     },

@@ -144,7 +144,7 @@ export function extractPage(html: string, pageUrl: string): Page {
 
 export type Section = { id: number; url: string; heading: string; text: string };
 export const MAX_SECTIONS = 40;
-export const MAX_SECTION_CHARS = 2500;
+export const MAX_SECTION_CHARS = 8000;
 
 /**
  * Splits a page's text at its marked headings into sections, keeping each section's words exactly as the page has them.
@@ -155,7 +155,9 @@ export function splitSections(page: PageText): Omit<Section, "id">[] {
   let heading = "";
   let body: string[] = [];
   const flush = () => {
-    const text = body.join("\n").trim();
+    // Page furniture is dropped, and a line that only repeats part of a longer line in the same section (a Wix habit) is dropped.
+    const kept = body.map((l) => l.replace(/\u200b/g, "").trim()).filter((l) => l && !/^top of page$/i.test(l));
+    const text = kept.filter((l, n) => !kept.some((o, m) => m !== n && (o.length > l.length || (o.length === l.length && m < n)) && o.includes(l))).join("\n").trim();
     if (text.length >= 40) out.push({ url: page.url, heading: heading || page.title, text: text.slice(0, MAX_SECTION_CHARS) });
     body = [];
   };

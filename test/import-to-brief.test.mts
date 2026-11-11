@@ -37,11 +37,12 @@ await test("the brief carries real works, her words, and lists what was not foun
   assert.equal(b.catalog.works[0].price_minor, 350000);
   assert.equal(b.catalog.works[1].price_minor, null);
   assert.equal(b.catalog.works[2].status, "Sold");
+  assert.ok(b.catalog.status_values.some((v: string) => /Sold.*list price/.test(v)));
   assert.equal(b.catalog.works[0].image, null);
   assert.equal(b.catalog.works[0].image_source, "https://x/a.jpg");
   assert.equal(b.orders.currency, "GBP");
   assert.equal(b.content.sections[0].text, "There is a 14-day return policy.");
-  assert.ok(notFound.includes("price of Rapture") && !notFound.includes("price of Windfall"));
+  assert.ok(notFound.includes("price of Rapture") && notFound.includes("price of Windfall"));
   assert.ok(!b.assumptions.some((a: string) => /fictional/.test(a)));
   assert.equal((base as any).sample_catalog.mode, "generate_sample"); // the base is not changed
 });
@@ -49,7 +50,7 @@ await test("price and sold mark come from the page lines, not the model", () => 
   const snap = { pages: [{ url: "u", title: "t", text: "Sunshine\n£2,250.00\nSOLD\nBeautiful Day\nWarm Nights\n£950.00" }] } as unknown as SiteSnapshot;
   const w = fillFromPage([{ title: "Sunshine", price: "£1" }, { title: "Beautiful Day" }, { title: "Warm Nights" }], snap);
   assert.equal(w[0].status, "Sold");
-  assert.equal(w[0].price, undefined);
+  assert.equal(w[0].price, "£2,250.00");
   assert.equal(w[1].price, undefined);
   assert.equal(w[2].price, "£950.00");
 });
@@ -59,5 +60,20 @@ await test("a private test is allowed, is marked, and says so", () => {
   assert.equal(b.private_test, true);
   assert.ok(b.assumptions.some((a: string) => /Private test/.test(a)));
   assert.throws(() => importToBrief(base, result, { privateTest: false, by: "rp" } as never), /confirmed/);
+});
+await test("a price on the title line and the stock line below are read, and sold works keep their price", () => {
+  const snap = { pages: [{ url: "u", title: "t", text: "Sunshine Of Your Love -abstract landscape painting Price£2,250.00\nOut of Stock\nPocket Full Of Sunshine -abstract landscape painting\nPrice\n£2,250.00\nAdd to Cart\nBeautiful Day\nSOLD\nPrice£1,850.00\nOut of Stock" }, { url: "v", title: "home", text: "Pocket Full Of Sunshine" }] } as unknown as SiteSnapshot;
+  const w = fillFromPage([{ title: "Sunshine Of Your Love" }, { title: "Pocket Full Of Sunshine" }, { title: "Beautiful Day" }], snap);
+  assert.deepEqual([w[0].status, w[0].price], ["Sold", "£2,250.00"]);
+  assert.deepEqual([w[1].status, w[1].price], ["Available", "£2,250.00"]);
+  assert.deepEqual([w[2].status, w[2].price], ["Sold", "£1,850.00"]);
+});
+await test("the sample studio name never reaches the owner brief", () => {
+  const b = { ...base, pages: { x: "Intro: the wordmark Studio Avant by Neil Patrick" }, look: { footer: { columns: ["Follow (placeholder links)"] }, home: { n: "Studio Avant" } } };
+  const { brief } = importToBrief(b, { ...result, socials: [{ network: "instagram", url: "https://i" }] } as never, { privateTest: true, by: "rp" });
+  const text = JSON.stringify(brief);
+  assert.ok(!/Studio Avant|Neil Patrick/.test(text));
+  assert.match(text, /Simone Russell by|Simone Russell Art by/);
+  assert.equal((brief as any).store.artist.name, "Simone Russell");
 });
 if (failed) process.exit(1);

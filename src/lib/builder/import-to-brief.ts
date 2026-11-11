@@ -48,13 +48,13 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
 
   const works = r.catalog.map((w, i) => {
     const minor = priceToMinor(w.price);
-    if (!w.price && w.status !== "Sold") notFound.push(`price of ${w.title}`);
+    if (!w.price) notFound.push(`price of ${w.title}`);
     return {
       title: w.title,
       year: w.year ?? null,
       medium: w.medium ?? null,
       size: w.size ?? null,
-      price_minor: w.status === "Sold" ? null : minor,
+      price_minor: minor,
       status: w.status ?? null,
       // Pictures come later: until then the work shows the neutral placeholder. The address is kept so the picture step can use it.
       image: null,
@@ -63,8 +63,20 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
       feature_on_home: i === 0,
     };
   });
+  // The person's name for the wordmark ("Simone Russell Art" is the business, "Simone Russell" the artist).
+  const artistName = r.name.replace(/\s+(art|studio|gallery|paintings?|fine art|design)$/i, "").trim() || r.name;
+  (brief.store as Record<string, unknown>).artist = { name: artistName, note: "Imported from the owner's own website. The owner can change everything in the owner area." };
   delete brief.sample_catalog;
+  const oldCatalog = (base.catalog ?? {}) as Record<string, unknown>;
   brief.catalog = {
+    // The base brief's field list, statuses and notes on originals and prints are kept; only the works and the Sold rule change.
+    ...oldCatalog,
+    status_values: [
+      "Available (can be bought from its page)",
+      "Sold (stays visible and keeps its list price, cannot be bought)",
+      "Private collection (stays visible, cannot be bought)",
+      "Not for sale (stays visible, cannot be bought)",
+    ],
     mode: "provided",
     note: "These are the owner's real works, copied from their website. They are not samples and must not be labelled as samples. A work with no status or no price is shown without a buy button until the owner sets them.",
     works,
@@ -99,6 +111,22 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
     "Shipping amounts, tax and countries are still the pack's estimates until the owner sets their own.",
     "The first eight works are shown on the home page and the first is featured. The owner can change this.",
   ];
+  // Words from the sample brief that name the sample studio must not reach the owner's site.
+  const swap = (v: unknown): unknown =>
+    typeof v === "string" ? v.replace(/Studio Avant/g, r.name!).replace(/Neil Patrick/g, artistName) : Array.isArray(v) ? v.map(swap) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)])) : v;
+  for (const k of ["pages", "look"]) brief[k] = swap(brief[k]);
+  // Sold works keep their price on screen.
+  const pg = (brief.pages ?? {}) as Record<string, unknown>;
+  if (typeof pg.work_index === "string") pg.work_index = pg.work_index.replace("or 'Sold'", "or 'Sold' with its list price");
+  if (typeof pg.work_page === "string") pg.work_page = pg.work_page.replace("it shows the status instead and no buy button", "it shows the status, and the list price for a Sold work, and no buy button");
+  // Real links and real wording, not the sample's placeholders.
+  const look = (brief.look ?? {}) as { footer?: { columns?: string[] } };
+  if (look.footer?.columns && r.socials.length) look.footer.columns = look.footer.columns.map((c) => (/^Follow/.test(c) ? `Follow (${r.socials.map((s) => s.network).join(", ")}: the real links in content.contact.socials)` : c));
+  if (r.extras.length) {
+    const pages = (brief.pages ?? {}) as Record<string, any>;
+    if (pages.commissions) pages.commissions.page = "Explains how commissions work and has an inquiry form: name, email, what they have in mind, rough size and budget range. Use the owner's own wording from content.sections (for example the FAQ answer about commissions); write sample wording only where the owner's pages say nothing.";
+    brief.policies = { ...((brief.policies ?? {}) as Record<string, unknown>), note: "Use the owner's own wording from content.sections for shipping, returns and payment. Sample wording only where the owner's pages say nothing." };
+  }
   brief.not_found = notFound;
   if (isTest) brief.private_test = true;
   return { brief, notFound };
