@@ -67,6 +67,11 @@ await test("a page keeps footer text, short lines, phone, email, social, structu
   assert.deepEqual(p.images.map((i) => i.src), ["https://lunacafe.com/img/og.jpg", "https://lunacafe.com/img/hero.jpg"]);
   assert.equal(p.description, "Coffee in Oakland");
 });
+await test("thumbnails, logos and the same picture spelled two ways are skipped", () => {
+  const w = html(`<img src="https://static.wixstatic.com/media/a%7Emv2.png/v1/fill/w_45,h_45/a.png" alt="x"><img src="https://static.wixstatic.com/media/b~mv2.jpg/v1/fill/w_900,h_600/b.jpg" alt="Spices"><img src="https://static.wixstatic.com/media/b%7Emv2.jpg/v1/fill/w_900,h_600/b.jpg" alt="Spices"><img src="/c.jpg" alt="Our Logo">`);
+  const p = extractPage(w, "https://x.example.com/");
+  assert.deepEqual(p.images.map((i) => i.alt), ["Spices"]);
+});
 await test("scripts and styles never reach the text", () => {
   const p = extractPage(html("<p>Hello there</p><script>var secret='abc'</script><style>.x{}</style>"), "https://a.example.com/");
   assert.ok(!p.page.text.includes("secret") && !p.page.text.includes(".x"));

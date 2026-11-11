@@ -84,9 +84,15 @@ export function extractPage(html: string, pageUrl: string): Page {
   });
 
   const images: SiteImage[] = [];
-  const addImage = (src: string | null, alt: string) => {
-    if (!src || images.length >= MAX_IMAGES || images.some((i) => i.src === src)) return;
-    if (/\.svg(\?|$)|^data:|sprite|logo|icon|pixel|tracking/i.test(src)) return;
+  const addImage = (raw: string | null, alt: string) => {
+    if (!raw || images.length >= MAX_IMAGES) return;
+    // Some hosts write the same address two ways (%7E and ~), so compare one spelling.
+    const src = raw.replace(/%7E/gi, "~");
+    if (images.some((i) => i.src === src)) return;
+    if (/\.svg(\?|$)|^data:|sprite|logo|icon|pixel|tracking/i.test(src) || /logo|icon/i.test(alt)) return;
+    // Resizing hosts put the size in the address (w_45,h_45): a thumbnail is not a picture to build a page around.
+    const size = /[/,_]w_(\d+),h_(\d+)/.exec(src);
+    if (size && Number(size[1]) < 300) return;
     images.push({ src, alt: alt.trim().slice(0, 140) });
   };
   addImage(ogImage, "");

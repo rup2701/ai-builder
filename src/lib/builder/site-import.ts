@@ -34,6 +34,10 @@ export type ImportResult = ImportedSiteT & {
   sourceUrl: string;
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
   dropped: string[];
+  /** How much was read, and anything that went wrong on the way, so an empty result can be explained. */
+  pagesRead: number;
+  textChars: number;
+  warnings: string[];
 };
 
 const TOOL: Tool = {
@@ -139,8 +143,18 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot): Promi
     .join("\n\n");
   let usage: { inputTokens: number; outputTokens: number; costUsd: number } | null = null;
   let draft: ImportedSiteT = {};
+  const warnings: string[] = [];
   try {
-    const r = await complete({ system: SYSTEM, user: body, tool: TOOL });
+    let r: Awaited<ReturnType<Complete>> | undefined;
+    for (let attempt = 0; attempt < 2 && !r; attempt++) {
+      try {
+        r = await complete({ system: SYSTEM, user: body, tool: TOOL });
+      } catch (e) {
+        // One more try: the model sometimes answers in words instead of calling the tool.
+        if (attempt === 1) throw e;
+      }
+    }
+    if (!r) throw new Error("no answer");
     usage = r.usage;
     const parsed = ImportedSite.safeParse(r.input);
     if (parsed.success) draft = parsed.data;
@@ -152,12 +166,15 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot): Promi
         if (one.success) Object.assign(draft, one.data);
       }
     }
-  } catch {
-    /* the model is down: the owner still gets the facts that did not need it */
+  } catch (e) {
+    // The model is down or confused: the owner still gets the facts that did not need it, and the reason is reported.
+    warnings.push(`The reader model failed: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`);
   }
   const { site, dropped } = groundCheck(draft, snap);
   // Contact facts the page links directly are more reliable than the model's copy.
   if (!site.phone && snap.phones[0]) site.phone = snap.phones[0];
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
-  return { result: { ...site, socials: snap.socials, images: snap.images, sourceUrl: snap.rootUrl, dropped }, usage };
+  const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
+  if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
+  return { result: { ...site, socials: snap.socials, images: snap.images, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, textChars, warnings }, usage };
 }
