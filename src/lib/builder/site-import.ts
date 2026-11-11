@@ -59,6 +59,29 @@ export function coerceCatalog(input: unknown): Work[] {
 
 const MATERIAL = /\b(oil|acrylic|watercolou?r|gouache|ink|charcoal|pastel|graphite|pencil|canvas|paper|board|panel|linen|giclee|giclée|lithograph|etching|screen ?print|mixed media|collage|bronze|clay|ceramic|wood|glass)\b/i;
 
+const PRICE = /(?:£|\$|€)\s?\d[\d,]*(?:\.\d{1,2})?/g;
+
+/**
+ * Prices and Sold marks read by code, not by the model, so the same page gives the same answer every run.
+ * A work owns the lines after its title up to the next work's title. Exactly one price there is its price; the word Sold there is its status.
+ * A model answer that disagrees with the page is replaced; a work with no price in its lines keeps what the model found only if the page has it.
+ */
+export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
+  const lines = snap.pages.flatMap((p) => p.text.split("\n")).map((l) => l.trim());
+  const at = works.map((w) => lines.findIndex((l) => norm(l) === norm(w.title)));
+  return works.map((w, i) => {
+    const start = at[i];
+    if (start < 0) return w;
+    const next = at.filter((n) => n > start).sort((a, b) => a - b)[0] ?? Math.min(lines.length, start + 8);
+    const window = lines.slice(start + 1, Math.min(next, start + 8));
+    const prices = [...new Set(window.flatMap((l) => l.match(PRICE) ?? []))];
+    const out: Work = { ...w };
+    if (prices.length === 1) out.price = prices[0].replace(/\s/g, "");
+    if (window.some((l) => /^sold$/i.test(l) || /\bsold\b/i.test(l) && l.length < 20)) { out.status = "Sold"; delete out.price; }
+    return out;
+  });
+}
+
 /** Pairs a work with a picture whose description starts with its title. */
 export function attachImages(works: Work[], images: SiteSnapshot["images"]): Work[] {
   return works.map((w) => {
@@ -421,5 +444,5 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? ""]), catalog: attachImages(grounded2.kept, snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? ""]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }
