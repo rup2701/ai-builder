@@ -17,9 +17,9 @@ export class UploadError extends Error {}
  * The picture is turned upright (phone photos carry a rotation flag), shrunk to MAX_WIDTH if wider, and location and camera data is dropped.
  * SVG and anything else is refused: an SVG can carry scripts.
  */
-export async function convertToWebp(input: Buffer): Promise<ConvertedImage> {
+export async function convertToWebp(input: Buffer, maxInputBytes: number = MAX_UPLOAD_BYTES): Promise<ConvertedImage> {
   if (input.length === 0) throw new UploadError("That file is empty.");
-  if (input.length > MAX_UPLOAD_BYTES) throw new UploadError("That picture is over 3 MB. Please send a smaller one.");
+  if (input.length > maxInputBytes) throw new UploadError("That picture is over 3 MB. Please send a smaller one.");
   let meta: sharp.Metadata;
   try {
     meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();

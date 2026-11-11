@@ -120,3 +120,46 @@ export async function safeFetchHtml(raw: string, deps: FetchDeps = {}): Promise<
   }
   throw new ImportError("That website redirects too many times.");
 }
+
+export const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+/** Fetches one picture from a public address, with the same address checks as a page. Returns the bytes, or throws ImportError. */
+export async function safeFetchImage(raw: string, deps: FetchDeps = {}): Promise<{ url: string; bytes: Buffer }> {
+  const doFetch = deps.fetchImpl ?? fetch;
+  let current = await assertPublicUrl(raw, deps.resolve);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    let res: Response;
+    try {
+      res = await doFetch(current.toString(), {
+        redirect: "manual",
+        signal: AbortSignal.timeout(30_000),
+        headers: { "user-agent": "Mozilla/5.0 (compatible; AppnomicsImport/1.0; +https://appnomics.dev)", accept: "image/jpeg,image/png,image/webp" },
+      });
+    } catch {
+      throw new ImportError("I could not download that picture.");
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc || hop === MAX_REDIRECTS) throw new ImportError("That picture redirects too many times.");
+      current = await assertPublicUrl(new URL(loc, current).toString(), deps.resolve);
+      continue;
+    }
+    if (!res.ok) throw new ImportError(`That picture answered with an error (${res.status}).`);
+    if (!/^image\/(jpe?g|png|webp)/i.test(res.headers.get("content-type") ?? "")) throw new ImportError("That address is not a JPG, PNG or WebP picture.");
+    const declared = Number(res.headers.get("content-length") ?? 0);
+    if (declared > MAX_IMAGE_BYTES) throw new ImportError("That picture is too large.");
+    const reader = res.body?.getReader();
+    if (!reader) throw new ImportError("That picture was empty.");
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_IMAGE_BYTES) { await reader.cancel().catch(() => {}); throw new ImportError("That picture is too large."); }
+      chunks.push(value);
+    }
+    return { url: current.toString(), bytes: Buffer.concat(chunks) };
+  }
+  throw new ImportError("That picture redirects too many times.");
+}
