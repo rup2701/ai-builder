@@ -7,7 +7,8 @@ import type { ImportResult, Work } from "./site-import";
  * The caller must pass proof that the owner (or someone they allowed) said the site and its pictures can be used.
  */
 
-export type Consent = { ownerConfirmed: true; confirmedBy: string; note?: string };
+/** The owner agreed, or this is a private test of our own tool on public content that nobody else sees and that is never published. */
+export type Consent = { ownerConfirmed: true; confirmedBy: string; note?: string } | { privateTest: true; by: string };
 type Brief = Record<string, unknown>;
 
 const CURRENCY: [RegExp, string][] = [[/£/, "GBP"], [/€/, "EUR"], [/\$/, "USD"]];
@@ -28,7 +29,10 @@ export function currencyOf(works: Work[], fallback: string): string {
 }
 
 export function importToBrief(base: Brief, r: ImportResult, consent: Consent): { brief: Brief; notFound: string[] } {
-  if (!consent || consent.ownerConfirmed !== true || !consent.confirmedBy) throw new Error("The owner has not confirmed that this site and its pictures can be used.");
+  const isTest = !!consent && "privateTest" in consent && consent.privateTest === true && !!consent.by;
+  const isOwner = !!consent && "ownerConfirmed" in consent && consent.ownerConfirmed === true && !!consent.confirmedBy;
+  if (!isTest && !isOwner) throw new Error("The owner has not confirmed that this site and its pictures can be used.");
+  const who = isTest ? (consent as { by: string }).by : (consent as { confirmedBy: string }).confirmedBy;
   if (!r.name) throw new Error("The site gave no name, so there is nothing to build from yet.");
   const notFound: string[] = [];
   const brief: Brief = JSON.parse(JSON.stringify(base));
@@ -52,9 +56,11 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
       size: w.size ?? null,
       price_minor: w.status === "Sold" ? null : minor,
       status: w.status ?? null,
-      image: w.image ?? null,
-      show_on_home: i < 8 && !!w.image,
-      feature_on_home: i === 0 && !!w.image,
+      // Pictures come later: until then the work shows the neutral placeholder. The address is kept so the picture step can use it.
+      image: null,
+      image_source: w.image ?? null,
+      show_on_home: i < 8,
+      feature_on_home: i === 0,
     };
   });
   delete brief.sample_catalog;
@@ -67,7 +73,7 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
   brief.series = { note: "No series were found on the site. The owner can add series later.", sample_series: [] };
   brief.imagery = {
     source: "imported_from_owner_site",
-    rules: ["Pictures were copied from the owner's own website with their confirmation.", "No stock or generated photos are fetched or invented.", "A work without a picture shows a neutral placeholder until the owner adds one."],
+    rules: ["Pictures were copied from the owner's own website with their confirmation.", "No stock or generated photos are fetched or invented.", "No pictures are fetched yet: every work shows the neutral placeholder until the owner adds one."],
   };
   const orders = (brief.orders ?? {}) as Record<string, unknown>;
   brief.orders = { ...orders, currency: currencyOf(r.catalog, String(orders.currency ?? "USD")) };
@@ -89,10 +95,11 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
   const assumptions = Array.isArray(brief.assumptions) ? (brief.assumptions as string[]) : [];
   brief.assumptions = [
     ...assumptions.filter((a) => !/sample|fictional/i.test(a)),
-    `Imported on the owner's confirmation (${consent.confirmedBy}).`,
+    isTest ? `Private test by ${who}: built from the public site to try the tool. It is not shown to anyone or published until the owner agrees.` : `Imported on the owner's confirmation (${who}).`,
     "Shipping amounts, tax and countries are still the pack's estimates until the owner sets their own.",
-    "The first eight works with a picture are shown on the home page and the first is featured. The owner can change this.",
+    "The first eight works are shown on the home page and the first is featured. The owner can change this.",
   ];
   brief.not_found = notFound;
+  if (isTest) brief.private_test = true;
   return { brief, notFound };
 }

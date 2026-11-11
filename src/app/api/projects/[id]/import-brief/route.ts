@@ -31,9 +31,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const p = await loadOwned(id, user.id);
   if (!p) return fail("Not found.", 404);
   if (!allowedEmails().includes((user.email ?? "").toLowerCase())) return fail("This is not switched on for your account.", 403);
-  const body = (await req.json().catch(() => null)) as { url?: unknown; ownerConfirmed?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { url?: unknown; ownerConfirmed?: unknown; privateTest?: unknown } | null;
   if (typeof body?.url !== "string") return fail("Please give the address of the website.", 400);
-  if (body.ownerConfirmed !== true) return fail("Confirm that the owner has agreed to their site and pictures being used (ownerConfirmed: true).", 400);
+  if (body.ownerConfirmed !== true && body.privateTest !== true) return fail("Say either that the owner agreed (ownerConfirmed: true) or that this is a private test (privateTest: true).", 400);
 
   const since = new Date(Date.now() - 3_600_000);
   const [{ n }] = await db.select({ n: count() }).from(schema.usage).where(and(eq(schema.usage.projectId, p.id), eq(schema.usage.step, "site_import"), gte(schema.usage.createdAt, since)));
@@ -47,7 +47,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const model = process.env.ANTHROPIC_IMPORT_MODEL || "claude-haiku-5-5";
     const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }));
     if (usage) await logUsage({ projectId: p.id, step: "site_import_map", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
-    const { brief, notFound } = importToBrief(baseBrief as Record<string, unknown>, result, { ownerConfirmed: true, confirmedBy: user.email ?? "builder admin" });
+    const { brief, notFound } = importToBrief(baseBrief as Record<string, unknown>, result, body.ownerConfirmed === true ? { ownerConfirmed: true, confirmedBy: user.email ?? "builder admin" } : { privateTest: true, by: user.email ?? "builder admin" });
     return NextResponse.json({ brief, notFound, warnings: result.warnings, dropped: result.dropped, works: result.catalog.length, pagesRead: result.pagesRead });
   } catch (e) {
     if (e instanceof ImportError || (e as Error)?.name === "ImportError") return fail((e as Error).message, 422);

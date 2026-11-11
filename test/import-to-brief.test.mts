@@ -37,6 +37,8 @@ await test("the brief carries real works, her words, and lists what was not foun
   assert.equal(b.catalog.works[0].price_minor, 350000);
   assert.equal(b.catalog.works[1].price_minor, null);
   assert.equal(b.catalog.works[2].status, "Sold");
+  assert.equal(b.catalog.works[0].image, null);
+  assert.equal(b.catalog.works[0].image_source, "https://x/a.jpg");
   assert.equal(b.orders.currency, "GBP");
   assert.equal(b.content.sections[0].text, "There is a 14-day return policy.");
   assert.ok(notFound.includes("price of Rapture") && !notFound.includes("price of Windfall"));
@@ -50,5 +52,12 @@ await test("price and sold mark come from the page lines, not the model", () => 
   assert.equal(w[0].price, undefined);
   assert.equal(w[1].price, undefined);
   assert.equal(w[2].price, "£950.00");
+});
+await test("a private test is allowed, is marked, and says so", () => {
+  const { brief } = importToBrief(base, result, { privateTest: true, by: "rp" });
+  const b = brief as Record<string, any>;
+  assert.equal(b.private_test, true);
+  assert.ok(b.assumptions.some((a: string) => /Private test/.test(a)));
+  assert.throws(() => importToBrief(base, result, { privateTest: false, by: "rp" } as never), /confirmed/);
 });
 if (failed) process.exit(1);
