@@ -32,10 +32,13 @@ export type ImportResult = ImportedSiteT & {
   socials: SiteSnapshot["socials"];
   images: SiteSnapshot["images"];
   sourceUrl: string;
+  actions: SiteSnapshot["actions"];
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
   dropped: string[];
   /** How much was read, and anything that went wrong on the way, so an empty result can be explained. */
   pagesRead: number;
+  /** Which pages were read and how much text each gave, to explain a result that is missing something. */
+  readPages: { url: string; chars: number }[];
   textChars: number;
   warnings: string[];
 };
@@ -192,5 +195,5 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }

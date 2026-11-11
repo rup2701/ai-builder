@@ -71,6 +71,24 @@ await test("thumbnails, logos and the same picture spelled two ways are skipped"
   const w = html(`<img src="https://static.wixstatic.com/media/a%7Emv2.png/v1/fill/w_45,h_45/a.png" alt="x"><img src="https://static.wixstatic.com/media/b~mv2.jpg/v1/fill/w_900,h_600/b.jpg" alt="Spices"><img src="https://static.wixstatic.com/media/b%7Emv2.jpg/v1/fill/w_900,h_600/b.jpg" alt="Spices"><img src="/c.jpg" alt="Our Logo">`);
   const p = extractPage(w, "https://x.example.com/");
   assert.deepEqual(p.images.map((i) => i.alt), ["Spices"]);
+  assert.equal(p.images[0].src, "https://static.wixstatic.com/media/b~mv2.jpg"); // the original, not the resized copy
+});
+await test("the menu page is read first, even when it is not the first link", () => {
+  const links = ["/story", "/catering", "/online-ordering", "/contact-us", "/menu"].map((p) => ({ href: `https://x.example.com${p}`, text: "" }));
+  assert.equal(pickSubpages(links, "https://x.example.com/", 2)[0], "https://x.example.com/menu");
+});
+await test("the home page's buttons are captured with their addresses", () => {
+  const h = html(`<a href="https://order.example.com/x">Order online</a><a href="/menu">View menu</a><a href="/reservations">Make a reservation</a><a href="/about">About us</a><a href="/menu">Menu</a>`);
+  const p = extractPage(h, "https://x.example.com/");
+  assert.deepEqual(p.actions, [
+    { label: "Order online", url: "https://order.example.com/x" },
+    { label: "View menu", url: "https://x.example.com/menu" },
+    { label: "Make a reservation", url: "https://x.example.com/reservations" },
+  ]);
+});
+await test("catering and events pages are worth reading", () => {
+  const links = ["/catering", "/events", "/privacy"].map((p) => ({ href: `https://x.example.com${p}`, text: "" }));
+  assert.deepEqual(pickSubpages(links, "https://x.example.com/"), ["https://x.example.com/catering", "https://x.example.com/events"]);
 });
 await test("scripts and styles never reach the text", () => {
   const p = extractPage(html("<p>Hello there</p><script>var secret='abc'</script><style>.x{}</style>"), "https://a.example.com/");
@@ -78,7 +96,7 @@ await test("scripts and styles never reach the text", () => {
 });
 await test("only useful same-site pages are chosen", () => {
   const p = extractPage(HOME, "https://lunacafe.com/");
-  assert.deepEqual(pickSubpages(p.links, "https://lunacafe.com/"), ["https://lunacafe.com/menu", "https://lunacafe.com/about-us", "https://lunacafe.com/contact"]);
+  assert.deepEqual(pickSubpages(p.links, "https://lunacafe.com/"), ["https://lunacafe.com/menu", "https://lunacafe.com/contact", "https://lunacafe.com/about-us"]);
 });
 await test("crawl reads the home page and sub-pages, and survives a failing sub-page", async () => {
   const fetchImpl = (async (u: string) => {

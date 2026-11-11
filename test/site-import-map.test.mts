@@ -9,7 +9,7 @@ async function test(name: string, fn: () => Promise<void> | void) {
 const snap: SiteSnapshot = {
   rootUrl: "https://lunacafe.com/", title: "Luna Cafe", description: "Coffee in Oakland",
   pages: [{ url: "https://lunacafe.com/", title: "Luna Cafe", text: "Luna Cafe\nNeighbourhood coffee and pastries.\nLatte 5\nCroissant 4.50\n12 Grand Ave, Oakland CA\nMon-Fri 7am-5pm\nCall (510) 555-1234" }],
-  phones: ["+15105551234"], emails: ["hi@lunacafe.com"], socials: [{ network: "instagram", url: "https://www.instagram.com/lunacafe" }], structured: [], images: [{ src: "https://lunacafe.com/a.jpg", alt: "" }],
+  phones: ["+15105551234"], emails: ["hi@lunacafe.com"], socials: [{ network: "instagram", url: "https://www.instagram.com/lunacafe" }], actions: [{ label: "Order online", url: "https://order.example.com/luna" }], structured: [], images: [{ src: "https://lunacafe.com/a.jpg", alt: "" }],
 };
 const u = { inputTokens: 1, outputTokens: 1, costUsd: 0 };
 
@@ -36,6 +36,7 @@ await test("the result carries socials, images and the source, and uses page lin
   assert.equal(result.email, "hi@lunacafe.com");
   assert.equal(result.socials[0].network, "instagram");
   assert.equal(result.images.length, 1);
+  assert.deepEqual(result.actions, [{ label: "Order online", url: "https://order.example.com/luna" }]);
   assert.equal(result.sourceUrl, "https://lunacafe.com/");
 });
 await test("a partly invalid model answer keeps its good fields", async () => {

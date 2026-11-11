@@ -9,6 +9,7 @@ import { ImportError, safeFetchHtml, type FetchDeps } from "./safe-fetch";
 
 export type PageText = { url: string; title: string; text: string };
 export type SiteImage = { src: string; alt: string };
+export type SiteAction = { label: string; url: string };
 export type SiteSnapshot = {
   rootUrl: string;
   title: string;
@@ -17,6 +18,8 @@ export type SiteSnapshot = {
   phones: string[];
   emails: string[];
   socials: { network: string; url: string }[];
+  /** The buttons and links the home page offers (Order online, Reserve, View menu) with where they go. */
+  actions: SiteAction[];
   /** schema.org data the site publishes about itself (business name, address, hours). */
   structured: unknown[];
   images: SiteImage[];
@@ -34,10 +37,12 @@ const SOCIAL: [string, RegExp][] = [
   ["tiktok", /(^|\.)tiktok\.com$/],
   ["yelp", /(^|\.)yelp\.com$/],
 ];
-const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book/i;
+const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book|catering|events?|experience|gallery|special/i;
+/** Words on a button or link that say what a visitor can do here. Their addresses become the new site's buttons. */
+const ACTION = /order|reserv|book|menu|catering|call us|get directions|appointment|buy/i;
 const BUSINESS_TYPES = /(LocalBusiness|Restaurant|CafeOrCoffeeShop|Bakery|BarOrPub|FoodEstablishment|Store|HealthAndBeautyBusiness|Organization|ProfessionalService)/;
 
-type Page = { page: PageText; links: { href: string; text: string }[]; phones: string[]; emails: string[]; socials: { network: string; url: string }[]; structured: unknown[]; images: SiteImage[]; description: string };
+type Page = { page: PageText; actions: SiteAction[]; links: { href: string; text: string }[]; phones: string[]; emails: string[]; socials: { network: string; url: string }[]; structured: unknown[]; images: SiteImage[]; description: string };
 
 const abs = (href: string | undefined, base: string): string | null => {
   if (!href) return null;
@@ -87,12 +92,16 @@ export function extractPage(html: string, pageUrl: string): Page {
   const addImage = (raw: string | null, alt: string) => {
     if (!raw || images.length >= MAX_IMAGES) return;
     // Some hosts write the same address two ways (%7E and ~), so compare one spelling.
-    const src = raw.replace(/%7E/gi, "~");
+    let src = raw.replace(/%7E/gi, "~");
+    // Wix serves the original file at the plain media address, without the /v1/... resize part (which is often a thumbnail).
+    const wix = /^(https:\/\/static\.wixstatic\.com\/media\/[^/]+)\/v1\//.exec(src);
+    if (wix) src = wix[1];
     if (images.some((i) => i.src === src)) return;
     if (/\.svg(\?|$)|^data:|sprite|logo|icon|pixel|tracking/i.test(src) || /logo|icon/i.test(alt)) return;
     // Resizing hosts put the size in the address (w_45,h_45): a thumbnail is not a picture to build a page around.
     const size = /[/,_]w_(\d+),h_(\d+)/.exec(src);
     if (size && Number(size[1]) < 300) return;
+    if (wix && /w_(\d+),h_(\d+)/.test(raw) && Number(/w_(\d+)/.exec(raw)?.[1]) < 100) return; // an icon-sized thumbnail, not a photo
     images.push({ src, alt: alt.trim().slice(0, 140) });
   };
   addImage(ogImage, "");
@@ -114,7 +123,14 @@ export function extractPage(html: string, pageUrl: string): Page {
     lines.push(t);
   });
   const title = ($("title").text() || $("h1").first().text()).replace(/\s+/g, " ").trim().slice(0, 160);
-  return { page: { url: pageUrl, title, text: lines.join("\n") }, links, phones: [...phones], emails: [...emails], socials, structured, images, description };
+  const actions: SiteAction[] = [];
+  for (const l of links) {
+    const label = l.text.replace(/\s+/g, " ").trim();
+    if (label.length < 3 || label.length > 40 || !ACTION.test(label)) continue;
+    if (actions.some((a) => a.url === l.href || a.label.toLowerCase() === label.toLowerCase())) continue;
+    actions.push({ label, url: l.href });
+  }
+  return { page: { url: pageUrl, title, text: lines.join("\n") }, actions: actions.slice(0, 8), links, phones: [...phones], emails: [...emails], socials, structured, images, description };
 }
 
 /** Which same-site pages are worth reading for a local business: menu, about, contact, hours. */
@@ -133,9 +149,13 @@ export function pickSubpages(links: { href: string; text: string }[], rootUrl: s
     const key = u.toString();
     if (key === root.toString() || /\.(pdf|jpe?g|png|webp|gif|zip)$/i.test(u.pathname) || out.includes(key)) continue;
     if (SUBPAGE.test(u.pathname) || SUBPAGE.test(l.text)) out.push(key);
-    if (out.length >= limit) break;
   }
-  return out;
+  // The menu first, then contact and hours, then the story, then the rest, so a small page budget goes to what matters most.
+  const rank = (k: string) => {
+    const t = `${new URL(k).pathname} ${links.find((l) => l.href.split("#")[0] === k)?.text ?? ""}`;
+    return /menu/i.test(t) ? 0 : /hours|location|contact|visit|find-us/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience/i.test(t) ? 3 : 4;
+  };
+  return out.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).slice(0, limit).map((x) => x.k);
 }
 
 /** Reads the home page and a few useful pages of the same site. A failing sub-page is skipped; a failing home page is an error. */
@@ -169,6 +189,8 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
     phones: uniq(pages.flatMap((p) => p.phones), (x) => x.replace(/\D/g, "")),
     emails: uniq(pages.flatMap((p) => p.emails), (x) => x.toLowerCase()),
     socials: uniq(pages.flatMap((p) => p.socials), (x) => x.url),
+    // Only the home page's own buttons: other pages repeat the menu bar.
+    actions: first.actions,
     structured: pages.flatMap((p) => p.structured).slice(0, 4),
     images: uniq(pages.flatMap((p) => p.images), (x) => x.src).slice(0, MAX_IMAGES),
   };
