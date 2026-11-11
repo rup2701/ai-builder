@@ -129,4 +129,12 @@ await test("a section drops page furniture and lines that repeat part of a longe
   const s = splitSections({ url: "https://x.example.com/", title: "Home", text: "## Intro\ntop of page\nFrom my London studio I create landscape paintings for calm homes\nFrom my London studio I create\nFree UK delivery" });
   assert.equal(s[0].text, "From my London studio I create landscape paintings for calm homes\nFree UK delivery");
 });
+await test("works that share a price each keep their price line, and stock buttons are kept as words", () => {
+  const p = extractPage(html('<div><p>Sunshine -abstract painting</p><p>Price£2,250.00</p><button>Out of Stock</button></div><div><p>Pocket Full Of Sunshine - abstract painting</p><p>Price£2,250.00</p><button>Add to Cart</button></div><div><p>Gimme All Your Love -abstract painting</p><p>Price£2,250.00</p><button>Add to Cart</button></div><button>Menu</button>'), "https://x.example.com/");
+  const lines = p.page.text.split("\n");
+  assert.equal(lines.filter((l) => l === "Price£2,250.00").length, 3);
+  assert.equal(lines.filter((l) => l === "Add to Cart").length, 2);
+  assert.ok(lines.includes("Out of Stock"));
+  assert.ok(!lines.includes("Menu"));
+});
 if (failed) process.exit(1);

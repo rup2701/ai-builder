@@ -118,6 +118,11 @@ export function extractPage(html: string, pageUrl: string): Page {
     addImage(abs($(el).attr("src") ?? $(el).attr("data-src"), pageUrl), $(el).attr("alt") ?? "");
   });
 
+  // Stock buttons (Add to Cart, Out of Stock, Sold) say whether a work can be bought, so their words are kept as plain text before buttons are removed.
+  $("button, [role='button']").each((_, el) => {
+    const t = $(el).text().replace(/\s+/g, " ").trim();
+    if (/^(add to (cart|bag|basket)|out of stock|sold( out)?|buy now|enquire|inquire)$/i.test(t)) $(el).replaceWith($("<p>").text(t));
+  });
   const signup = $('input[type="email"]').length > 0 || /subscribe|newsletter|mailing list/i.test($("form").text());
   $("script, style, noscript, iframe, svg, nav, form, select, button").remove();
   const seen = new Set<string>();
@@ -126,7 +131,8 @@ export function extractPage(html: string, pageUrl: string): Page {
     // Only leaf-ish text: skip containers whose children carry the same text.
     if ($(el).children("p,li,div,h1,h2,h3,h4,h5,td,th,address").length) return;
     const t = $(el).text().replace(/\s+/g, " ").trim();
-    if (t.length < 2 || t.length > 400 || seen.has(t)) return;
+    // A repeated line is dropped (menus and footers repeat), except prices and stock words: many works share the same price.
+    if (t.length < 2 || t.length > 400 || (seen.has(t) && !KEEP_REPEATS.test(t))) return;
     seen.add(t);
     // Headings are marked so each block of text can be matched to what it is (Commissions, FAQ, Exhibitions).
     lines.push(/^h[1-4]$/i.test(el.tagName) ? `## ${t}` : t);
@@ -141,6 +147,8 @@ export function extractPage(html: string, pageUrl: string): Page {
   }
   return { signup, page: { url: pageUrl, title, text: lines.join("\n") }, actions: actions.slice(0, 8), links, phones: [...phones], emails: [...emails], socials, structured, images, description };
 }
+
+const KEEP_REPEATS = /[£$€]\s?\d|^price\b|^(add to (cart|bag|basket)|out of stock|sold( out)?)$/i;
 
 export type Section = { id: number; url: string; heading: string; text: string };
 export const MAX_SECTIONS = 40;

@@ -76,4 +76,9 @@ await test("the sample studio name never reaches the owner brief", () => {
   assert.match(text, /Simone Russell by|Simone Russell Art by/);
   assert.equal((brief as any).store.artist.name, "Simone Russell");
 });
+await test("the real shop page layout: shared prices and stock words give every work its price and status", () => {
+  const text = ["Sunshine Of Your Love -abstract landscape painting", "Price£2,250.00", "Out of Stock", "Pocket Full Of Sunshine - abstract landscape painting", "Price£2,250.00", "Add to Cart", "Gimme All Your Love -abstract landscape painting", "Price£2,250.00", "Add to Cart", "I Found You - abstract landscape painting", "Price£1,850.00", "Add to Cart", "Beautiful Day - abstract landscape painting", "Price£1,850.00", "Out of Stock"].join("\n");
+  const w = fillFromPage(["Sunshine Of Your Love", "Pocket Full Of Sunshine", "Gimme All Your Love", "I Found You", "Beautiful Day"].map((title) => ({ title })), { pages: [{ url: "u", title: "t", text }] } as unknown as SiteSnapshot);
+  assert.deepEqual(w.map((x) => [x.price, x.status]), [["£2,250.00", "Sold"], ["£2,250.00", "Available"], ["£2,250.00", "Available"], ["£1,850.00", "Available"], ["£1,850.00", "Sold"]]);
+});
 if (failed) process.exit(1);
