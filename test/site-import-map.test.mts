@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { attachImages, dedupeExtras, groundTestimonials, coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
-import type { SiteSnapshot } from "../src/lib/builder/site-extract";
+import { chooseSections, attachImages, dedupeExtras, groundTestimonials, coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
+import { splitSections, type SiteSnapshot } from "../src/lib/builder/site-extract";
 
 let failed = 0;
 async function test(name: string, fn: () => Promise<void> | void) {
@@ -64,7 +64,7 @@ await test("the menu comes from its own call, and a failed menu call keeps the b
   const both = await mapSnapshot(async (req) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Drinks", items: [{ name: "Latte", price: "5" }, { name: "Croissant", price: "4.50" }] }] } : { name: "Luna Cafe" }, usage: u }), snap);
   assert.equal(both.result.name, "Luna Cafe");
   assert.equal(both.result.menu?.[0].items.length, 2);
-  assert.equal(both.usage?.inputTokens, 4); // four calls: details, menu, other pages, works
+  assert.equal(both.usage?.inputTokens, 5); // five calls: details, menu, sections, works, testimonials
   const menuDown = await mapSnapshot(async (req) => { if (req.tool.name === "save_menu") throw new Error("cut off at 8000 tokens"); return { input: { name: "Luna Cafe" }, usage: u }; }, snap);
   assert.equal(menuDown.result.name, "Luna Cafe");
   assert.equal(menuDown.result.menu, undefined);
@@ -92,7 +92,8 @@ await test("other pages are described, and invented descriptions are dropped", (
 });
 await test("a result carries the other pages", async () => {
   const withPages: SiteSnapshot = { ...snap, pages: [...snap.pages, { url: "https://lunacafe.com/catering", title: "Catering", text: "We cater parties of twenty to two hundred guests. Choose trays of pastries and coffee delivered to your office." }] };
-  const { result } = await mapSnapshot(async (req) => ({ input: req.tool.name === "save_pages" ? { pages: [{ title: "Catering", body: "We cater parties of twenty to two hundred guests with trays of pastries and coffee delivered." }] } : {}, usage: u }), withPages);
+  const { result } = await mapSnapshot(async (req) => ({ input: req.tool.name === "label_sections" ? { keep: [{ id: 2, title: "Catering" }] } : {}, usage: u }), withPages);
+  assert.equal(result.extras[0].body, "We cater parties of twenty to two hundred guests. Choose trays of pastries and coffee delivered to your office.");
   assert.equal(result.extras[0].title, "Catering");
 });
 await test("a site with almost no text says so", async () => {
@@ -150,5 +151,23 @@ await test("a work gets the picture whose description starts with its title", ()
 await test("a section that repeats the about text is dropped", () => {
   const kept = dedupeExtras([{ title: "About", body: "I am Simone Russell, a contemporary landscape artist based in London studying textiles." }, { title: "Exhibitions", body: "Affordable Art Fair, Battersea, London, Oct 2026 and JM Gallery, Portobello Road." }], ["I am Simone Russell, a contemporary landscape artist based in London. I studied textiles in Glasgow."]);
   assert.deepEqual(kept.map((e) => e.title), ["Exhibitions"]);
+});
+await test("a section keeps the page words exactly, whatever the model says", () => {
+  const page = { url: "https://a.example.com/help", title: "Help", text: "## Returns\nThere is a 14-day return policy from receipt of the item, provided it is undamaged.\n## Shipping\nOrders are dispatched within 3-5 working days by insured courier." };
+  const sections = splitSections(page).map((s, i) => ({ ...s, id: i + 1 }));
+  assert.equal(sections.length, 2);
+  const kept = chooseSections({ keep: [{ id: 1, title: "Returns", body: "30 days, no questions asked" }, { id: 9, title: "Ghost" }, { id: 1, title: "again" }] }, sections);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].body, "There is a 14-day return policy from receipt of the item, provided it is undamaged.");
+});
+await test("a page with no headings is one section named after the page", () => {
+  const s = splitSections({ url: "https://a.example.com/about", title: "About Simone", text: "I studied Printed Textiles at Glasgow School of Art and paint landscapes." });
+  assert.deepEqual(s.map((x) => x.heading), ["About Simone"]);
+});
+await test("a cut-off sections call loses only the sections, not the testimonials or works", async () => {
+  const complete = async (req: { tool: { name: string } }) => { if (req.tool.name === "label_sections") throw new Error("cut off"); return { input: req.tool.name === "save_works" ? { works: [{ title: "Low Tide, Morning" }] } : {}, usage: u }; };
+  const { result } = await mapSnapshot(complete as never, gallery);
+  assert.equal(result.catalog.length, 1);
+  assert.ok(result.warnings.some((w) => w.includes("other sections")));
 });
 if (failed) process.exit(1);

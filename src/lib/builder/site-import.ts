@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Complete, Tool } from "@/lib/agents/model-interviewer";
-import type { SiteSnapshot } from "./site-extract";
+import { splitSections, MAX_SECTIONS, type Section, type SiteSnapshot } from "./site-extract";
 
 /**
  * From the text of someone's existing website to a draft for the interview. The model only copies what the pages say into a fixed shape;
@@ -117,7 +117,7 @@ const Basics = z.object({
 export const ImportedSite = Basics.extend({ menu: Menu.optional() });
 export type ImportedSiteT = z.infer<typeof ImportedSite>;
 /** A page of the old site other than the menu, in a few words: Catering, Our story, Services. */
-export type ExtraPage = { title: string; body: string };
+export type ExtraPage = { title: string; body: string; url?: string };
 export type ImportResult = ImportedSiteT & {
   socials: SiteSnapshot["socials"];
   images: SiteSnapshot["images"];
@@ -204,29 +204,27 @@ const CATALOG_TOOL: Tool = {
   },
 };
 
-const EXTRAS_TOOL: Tool = {
-  name: "save_pages",
-  description: "Save the other parts of this business's website (not the menu, not the list of works), and any customer testimonials it shows.",
+const LABEL_TOOL: Tool = {
+  name: "label_sections",
+  description: "Choose which numbered sections of this website are worth keeping, and name each. You do not write any text: the section's own words are kept as they are.",
   input_schema: {
     type: "object",
     properties: {
-      testimonials: {
+      keep: {
         type: "array",
-        description: "Quotes from customers or press that the site shows, copied exactly, with who said it if the site says. Never write one.",
-        items: { type: "object", properties: { quote: { type: "string" }, author: { type: "string" } } },
-      },
-      pages: {
-        type: "array",
-        description: "One entry per part of the site, from any page including the home page: a page such as Catering, Services, Our story, or a section under a heading such as Commissions, Exhibitions, FAQ, Where else to buy, Delivery. Use the site's own heading as the title. Skip contact, ordering and reservation, and skip testimonials (they go in the other list).",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "The page's name, such as Catering." },
-            body: { type: "string", description: "Two to four sentences copied or closely shortened from that page's own text, at most 450 characters. No claims the page does not make." },
-          },
-        },
+        description: "The sections to keep, such as Commissions, Exhibitions, FAQ, Shipping, Returns, Materials, Our story, Delivery, Catering. Skip the menu, lists of works or products, testimonials, contact details, navigation, cookie notices, newsletter boxes and copyright lines.",
+        items: { type: "object", properties: { id: { type: "number" }, title: { type: "string", description: "A short name for the section, at most five words." } } },
       },
     },
+  },
+};
+
+const TESTIMONIAL_TOOL: Tool = {
+  name: "save_testimonials",
+  description: "Save the customer testimonials this website shows, copied exactly, with who said each if the site says. Never write one.",
+  input_schema: {
+    type: "object",
+    properties: { testimonials: { type: "array", items: { type: "object", properties: { quote: { type: "string" }, author: { type: "string" } } } } },
   },
 };
 
@@ -322,6 +320,22 @@ export function groundTestimonials(input: unknown, snap: SiteSnapshot): { kept: 
   return { kept, dropped };
 }
 
+/** The sections the model chose, each with the page's own words. The model only gives an id and a short name. */
+export function chooseSections(input: unknown, sections: Section[]): ExtraPage[] {
+  const raw = (input as { keep?: unknown } | null)?.keep;
+  const out: ExtraPage[] = [];
+  const used = new Set<number>();
+  for (const k of Array.isArray(raw) ? raw : []) {
+    const id = typeof k?.id === "number" ? k.id : Number(k?.id);
+    const s = sections.find((x) => x.id === id);
+    if (!s || used.has(id)) continue;
+    used.add(id);
+    const title = typeof k?.title === "string" ? k.title.replace(/\s+/g, " ").trim().slice(0, 50) : "";
+    out.push({ title: title || s.heading.slice(0, 50), body: s.text, url: s.url });
+  }
+  return out;
+}
+
 /** Keeps a page description only when most of its words are on the pages that were read. */
 export function groundExtras(extras: ExtraPage[], snap: SiteSnapshot): { kept: ExtraPage[]; dropped: string[] } {
   const corpus = new Set(norm(snap.pages.map((p) => p.text).join(" ")).split(" "));
@@ -379,7 +393,16 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
     .filter(Boolean)
     .join("\n\n");
   const warnings: string[] = [];
-  const [basics, menu, other, works] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings), ask(complete, EXTRAS_TOOL, body, "other pages", warnings), ask(menuComplete, CATALOG_TOOL, body, "works", warnings)]);
+  // The sections are cut by code, so their words are the page's own. The model only picks which ones to keep and names them.
+  const sections: Section[] = snap.pages.flatMap((p) => splitSections(p)).slice(0, MAX_SECTIONS).map((s, i) => ({ ...s, id: i + 1 }));
+  const outline = sections.map((s) => `[${s.id}] (${new URL(s.url).pathname}) ${s.heading}: ${s.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n");
+  const [basics, menu, other, works, quotesAnswer] = await Promise.all([
+    ask(complete, BASICS_TOOL, body, "business details", warnings),
+    ask(menuComplete, MENU_TOOL, body, "menu", warnings),
+    sections.length ? ask(menuComplete, LABEL_TOOL, `Website: ${snap.rootUrl}\n\nSections:\n${outline}`, "other sections", warnings) : Promise.resolve(null),
+    ask(menuComplete, CATALOG_TOOL, body, "works", warnings),
+    ask(menuComplete, TESTIMONIAL_TOOL, body, "testimonials", warnings),
+  ]);
   const menuItems = menu ? coerceMenu(menu.input) : [];
   // A site with a menu is a restaurant: its list is the menu, not a catalog, so the two never double up.
   const grounded2 = menuItems.length ? { kept: [] as Work[], dropped: [] as string[] } : groundCatalog(works ? coerceCatalog(works.input) : [], snap);
@@ -387,9 +410,9 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   // Said out loud, so an empty menu next to a long menu page is never a mystery.
   const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
   if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
-  const grounded = groundExtras(other ? coerceExtras(other.input) : [], snap);
-  const quotes = groundTestimonials(other?.input, snap);
-  const used = [basics?.usage, menu?.usage, other?.usage, works?.usage].filter((u): u is Usage => !!u);
+  const grounded = { kept: other ? chooseSections(other.input, sections) : [], dropped: [] as string[] };
+  const quotes = groundTestimonials(quotesAnswer?.input, snap);
+  const used = [basics?.usage, menu?.usage, other?.usage, works?.usage, quotesAnswer?.usage].filter((u): u is Usage => !!u);
   const usage = used.length ? used.reduce((a, b) => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd })) : null;
   const { site, dropped: droppedFacts } = groundCheck(draft, snap);
   const dropped = [...droppedFacts, ...grounded.dropped, ...grounded2.dropped, ...quotes.dropped];

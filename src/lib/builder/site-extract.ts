@@ -142,6 +142,30 @@ export function extractPage(html: string, pageUrl: string): Page {
   return { signup, page: { url: pageUrl, title, text: lines.join("\n") }, actions: actions.slice(0, 8), links, phones: [...phones], emails: [...emails], socials, structured, images, description };
 }
 
+export type Section = { id: number; url: string; heading: string; text: string };
+export const MAX_SECTIONS = 40;
+export const MAX_SECTION_CHARS = 2500;
+
+/**
+ * Splits a page's text at its marked headings into sections, keeping each section's words exactly as the page has them.
+ * A page with no headings becomes one section named after the page. Very short sections (a lone button label) are skipped.
+ */
+export function splitSections(page: PageText): Omit<Section, "id">[] {
+  const out: Omit<Section, "id">[] = [];
+  let heading = "";
+  let body: string[] = [];
+  const flush = () => {
+    const text = body.join("\n").trim();
+    if (text.length >= 40) out.push({ url: page.url, heading: heading || page.title, text: text.slice(0, MAX_SECTION_CHARS) });
+    body = [];
+  };
+  for (const line of page.text.split("\n")) {
+    if (line.startsWith("## ")) { flush(); heading = line.slice(3).trim(); } else body.push(line);
+  }
+  flush();
+  return out;
+}
+
 /** Which same-site pages are worth reading for a local business: menu, about, contact, hours. */
 export function pickSubpages(links: { href: string; text: string }[], rootUrl: string, limit = MAX_PAGES - 1): string[] {
   const root = new URL(rootUrl);
