@@ -36,7 +36,7 @@ export function coerceMenu(input: unknown): NonNullable<ImportedSiteT["menu"]> {
 export const MAX_WORKS = 40;
 /** What a visitor is told about a work or product. Status is one of the words the store pack uses, and only when the page says it. */
 export const WORK_STATUSES = ["Available", "Sold", "Private collection", "Not for sale"] as const;
-export type Work = { title: string; year?: string; medium?: string; size?: string; price?: string; status?: (typeof WORK_STATUSES)[number] };
+export type Work = { image?: string; title: string; year?: string; medium?: string; size?: string; price?: string; status?: (typeof WORK_STATUSES)[number] };
 
 /** The works from the model's answer, trimmed to fit instead of rejected. */
 export function coerceCatalog(input: unknown): Work[] {
@@ -57,6 +57,27 @@ export function coerceCatalog(input: unknown): Work[] {
   return out;
 }
 
+const MATERIAL = /\b(oil|acrylic|watercolou?r|gouache|ink|charcoal|pastel|graphite|pencil|canvas|paper|board|panel|linen|giclee|giclée|lithograph|etching|screen ?print|mixed media|collage|bronze|clay|ceramic|wood|glass)\b/i;
+
+/** Pairs a work with a picture whose description starts with its title. */
+export function attachImages(works: Work[], images: SiteSnapshot["images"]): Work[] {
+  return works.map((w) => {
+    const t = norm(w.title);
+    const img = images.find((i) => i.alt && norm(i.alt).startsWith(t));
+    return img ? { ...w, image: img.src } : w;
+  });
+}
+
+/** Drops a section that only repeats the tagline or the about text the result already has. */
+export function dedupeExtras(extras: ExtraPage[], already: string[]): ExtraPage[] {
+  const words = (s: string) => norm(s).split(" ").filter((w) => w.length > 3);
+  return extras.filter((e) => {
+    const mine = words(e.body);
+    if (!mine.length) return false;
+    return !already.some((a) => { const theirs = new Set(words(a)); return mine.filter((w) => theirs.has(w)).length / mine.length >= 0.6; });
+  });
+}
+
 /** Keeps a work only when its title is on the pages, and each detail only when it is too. A status is kept only when its word is near the title. */
 export function groundCatalog(works: Work[], snap: SiteSnapshot): { kept: Work[]; dropped: string[] } {
   const text = snap.pages.map((p) => p.text).join("\n");
@@ -68,7 +89,8 @@ export function groundCatalog(works: Work[], snap: SiteSnapshot): { kept: Work[]
     if (!corpus.includes(norm(w.title))) { dropped.push(`work ${w.title}`); continue; }
     const out: Work = { title: w.title };
     if (w.year && corpus.includes(w.year)) out.year = w.year;
-    if (w.medium && corpus.includes(norm(w.medium))) out.medium = w.medium;
+    // A style ("abstract landscape painting") is not a material, so only real materials are kept.
+    if (w.medium && MATERIAL.test(w.medium) && corpus.includes(norm(w.medium))) out.medium = w.medium;
     if (w.size && corpus.includes(norm(w.size))) out.size = w.size;
     if (w.price) { if (digits(w.price) && corpus.includes(norm(w.price))) out.price = w.price; else dropped.push(`price of ${w.title}`); }
     if (w.status) {
@@ -376,5 +398,5 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, catalog: grounded2.kept, testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? ""]), catalog: attachImages(grounded2.kept, snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }

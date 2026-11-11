@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { groundTestimonials, coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
+import { attachImages, dedupeExtras, groundTestimonials, coerceCatalog, coerceExtras, coerceMenu, groundCatalog, groundCheck, groundExtras, mapSnapshot } from "../src/lib/builder/site-import";
 import type { SiteSnapshot } from "../src/lib/builder/site-extract";
 
 let failed = 0;
@@ -136,5 +136,19 @@ await test("testimonials are kept only when the exact words are on the page", ()
   assert.equal(kept.length, 1);
   assert.equal(kept[0].author, "Anna P.");
   assert.deepEqual(dropped, ["a testimonial"]);
+});
+await test("a style is not a medium, but a material is", () => {
+  const { kept } = groundCatalog([{ title: "Low Tide, Morning", medium: "abstract landscape painting" }, { title: "Salt Flats at Dusk", medium: "oil on canvas" }], { ...gallery, pages: [{ url: gallery.rootUrl, title: "s", text: "Low Tide, Morning\nabstract landscape painting\nSalt Flats at Dusk\noil on canvas" }] });
+  assert.equal(kept[0].medium, undefined);
+  assert.equal(kept[1].medium, "oil on canvas");
+});
+await test("a work gets the picture whose description starts with its title", () => {
+  const w = attachImages([{ title: "Gimme All Your Love" }, { title: "Rapture" }], [{ src: "https://x/a.jpg", alt: "Gimme All Your Love - green waterfall painting" }, { src: "https://x/b.jpg", alt: "" }]);
+  assert.equal(w[0].image, "https://x/a.jpg");
+  assert.equal(w[1].image, undefined);
+});
+await test("a section that repeats the about text is dropped", () => {
+  const kept = dedupeExtras([{ title: "About", body: "I am Simone Russell, a contemporary landscape artist based in London studying textiles." }, { title: "Exhibitions", body: "Affordable Art Fair, Battersea, London, Oct 2026 and JM Gallery, Portobello Road." }], ["I am Simone Russell, a contemporary landscape artist based in London. I studied textiles in Glasgow."]);
+  assert.deepEqual(kept.map((e) => e.title), ["Exhibitions"]);
 });
 if (failed) process.exit(1);

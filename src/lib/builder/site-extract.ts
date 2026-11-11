@@ -31,7 +31,7 @@ export type SiteSnapshot = {
 
 export const MAX_PAGES = 7;
 export const MAX_TEXT_CHARS = 40_000;
-const MAX_IMAGES = 12;
+const MAX_IMAGES = 30;
 const SOCIAL: [string, RegExp][] = [
   ["instagram", /(^|\.)instagram\.com$/],
   ["facebook", /(^|\.)facebook\.com$/],
@@ -41,9 +41,9 @@ const SOCIAL: [string, RegExp][] = [
   ["tiktok", /(^|\.)tiktok\.com$/],
   ["yelp", /(^|\.)yelp\.com$/],
 ];
-const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book|catering|events?|experience|gallery|special|shop|store|paintings?|originals?|prints?|collections?|portfolio|work|commission|artworks?|exhibitions?|press|projects?|pricing|packages?|areas?|testimonials?/i;
+const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book|catering|events?|experience|gallery|special|shop|store|paintings?|originals?|prints?|collections?|portfolio|work|commission|artworks?|exhibitions?|press|projects?|pricing|packages?|areas?|testimonials?|faqs?|shipping|returns|delivery/i;
 /** Words on a button or link that say what a visitor can do here. Their addresses become the new site's buttons. */
-const ACTION = /order|reserv|book|menu|catering|call us|get directions|appointment|buy/i;
+const ACTION = /order|reserv|book|menu|catering|call us|get directions|appointment|buy|purchase|commission|enquir|inquir|subscribe/i;
 const BUSINESS_TYPES = /(LocalBusiness|Restaurant|CafeOrCoffeeShop|Bakery|BarOrPub|FoodEstablishment|Store|HealthAndBeautyBusiness|Organization|ProfessionalService)/;
 
 type Page = { signup: boolean; page: PageText; actions: SiteAction[]; links: { href: string; text: string }[]; phones: string[]; emails: string[]; socials: { network: string; url: string }[]; structured: unknown[]; images: SiteImage[]; description: string };
@@ -168,7 +168,7 @@ export function pickSubpages(links: { href: string; text: string }[], rootUrl: s
   // The menu first, then contact and hours, then the story, then the rest, so a small page budget goes to what matters most.
   const rank = (k: string) => {
     const t = `${new URL(k).pathname} ${links.find((l) => l.href.split("#")[0] === k)?.text ?? ""}`;
-    return /menu|shop|store|paintings?|originals?|collections?|portfolio|artworks?|work|projects?/i.test(t) ? 0 : /hours|location|contact|visit|find-us|commission/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience|prints?|pricing|packages?|areas?|exhibition/i.test(t) ? 3 : 4;
+    return /menu|shop|store|paintings?|originals?|collections?|portfolio|artworks?|work|projects?/i.test(t) ? 0 : /hours|location|contact|visit|find-us|commission/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience|prints?|pricing|packages?|areas?|exhibition|faq|shipping|returns|delivery/i.test(t) ? 3 : 4;
   };
   return out.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).slice(0, limit).map((x) => x.k);
 }
