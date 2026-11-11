@@ -55,9 +55,19 @@ await test("a model failure is reported, not hidden", async () => {
 await test("a missed tool call is tried once more", async () => {
   let calls = 0;
   const { result } = await mapSnapshot(async () => { if (++calls === 1) throw new Error("no tool call"); return { input: { name: "Luna Cafe" }, usage: u }; }, snap);
-  assert.equal(calls, 2);
+  assert.ok(calls >= 3); // the basics and the menu both asked, and the first one that failed asked again
   assert.equal(result.name, "Luna Cafe");
   assert.ok(!result.warnings.some((w) => w.includes("model failed")));
+});
+await test("the menu comes from its own call, and a failed menu call keeps the basics", async () => {
+  const both = await mapSnapshot(async (req) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Drinks", items: [{ name: "Latte", price: "5" }, { name: "Croissant", price: "4.50" }] }] } : { name: "Luna Cafe" }, usage: u }), snap);
+  assert.equal(both.result.name, "Luna Cafe");
+  assert.equal(both.result.menu?.[0].items.length, 2);
+  assert.equal(both.usage?.inputTokens, 2);
+  const menuDown = await mapSnapshot(async (req) => { if (req.tool.name === "save_menu") throw new Error("cut off at 8000 tokens"); return { input: { name: "Luna Cafe" }, usage: u }; }, snap);
+  assert.equal(menuDown.result.name, "Luna Cafe");
+  assert.equal(menuDown.result.menu, undefined);
+  assert.ok(menuDown.result.warnings.some((w) => w.includes("menu") && w.includes("cut off")));
 });
 await test("a site with almost no text says so", async () => {
   const thin: SiteSnapshot = { ...snap, pages: [{ url: "https://x.com/", title: "x", text: "Welcome" }] };

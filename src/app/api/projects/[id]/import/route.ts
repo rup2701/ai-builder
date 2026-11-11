@@ -40,8 +40,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const snap = await crawlSite(body.url);
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return fail("Reading websites is not switched on yet.", 503);
-    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 3000 }), snap);
+    // Copying facts out of text does not need the big model: a fast one is cheaper and finishes a long menu in time.
+    const model = process.env.ANTHROPIC_IMPORT_MODEL || "claude-haiku-5-5";
+    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }));
     if (usage) await logUsage({ projectId: p.id, step: "site_import_map", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     return NextResponse.json(result);
   } catch (e) {
