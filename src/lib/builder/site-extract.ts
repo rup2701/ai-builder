@@ -37,7 +37,7 @@ const SOCIAL: [string, RegExp][] = [
   ["tiktok", /(^|\.)tiktok\.com$/],
   ["yelp", /(^|\.)yelp\.com$/],
 ];
-const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book|catering|events?|experience|gallery|special/i;
+const SUBPAGE = /menu|about|story|contact|hours|location|visit|find-us|services|order|reserv|book|catering|events?|experience|gallery|special|shop|store|paintings?|originals?|prints?|collections?|portfolio|work|commission|artworks?|exhibitions?|press|projects?|pricing|packages?|areas?|testimonials?/i;
 /** Words on a button or link that say what a visitor can do here. Their addresses become the new site's buttons. */
 const ACTION = /order|reserv|book|menu|catering|call us|get directions|appointment|buy/i;
 const BUSINESS_TYPES = /(LocalBusiness|Restaurant|CafeOrCoffeeShop|Bakery|BarOrPub|FoodEstablishment|Store|HealthAndBeautyBusiness|Organization|ProfessionalService)/;
@@ -102,7 +102,10 @@ export function extractPage(html: string, pageUrl: string): Page {
     const size = /[/,_]w_(\d+),h_(\d+)/.exec(src);
     if (size && Number(size[1]) < 300) return;
     if (wix && /w_(\d+),h_(\d+)/.test(raw) && Number(/w_(\d+)/.exec(raw)?.[1]) < 100) return; // an icon-sized thumbnail, not a photo
-    images.push({ src, alt: alt.replace(/\.(jpe?g|png|webp|gif|avif)\b/gi, "").replace(/\s+/g, " ").trim().slice(0, 140) });
+    // A camera or editor file name is not a description, so it becomes empty (the owner or the agent writes a real one).
+    let text = alt.replace(/\.(jpe?g|png|webp|gif|avif)\b/gi, "").replace(/\s+/g, " ").trim();
+    if (/^(img|dsc|dscn|pxl|image|photo|screenshot|copy of)?[\s_-]*\d[\w -]*(edited|copy)?$/i.test(text) || /^\d{4,}[\w_-]*$/.test(text) || /_edited|^img_?\d/i.test(text) || /\w+_\w*\d{3,}/.test(text)) text = "";
+    images.push({ src, alt: text.slice(0, 140) });
   };
   addImage(ogImage, "");
   $("img").each((_, el) => {
@@ -153,7 +156,7 @@ export function pickSubpages(links: { href: string; text: string }[], rootUrl: s
   // The menu first, then contact and hours, then the story, then the rest, so a small page budget goes to what matters most.
   const rank = (k: string) => {
     const t = `${new URL(k).pathname} ${links.find((l) => l.href.split("#")[0] === k)?.text ?? ""}`;
-    return /menu/i.test(t) ? 0 : /hours|location|contact|visit|find-us/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience/i.test(t) ? 3 : 4;
+    return /menu|shop|store|paintings?|originals?|collections?|portfolio|artworks?|work|projects?/i.test(t) ? 0 : /hours|location|contact|visit|find-us|commission/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience|prints?|pricing|packages?|areas?|exhibition/i.test(t) ? 3 : 4;
   };
   return out.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).slice(0, limit).map((x) => x.k);
 }

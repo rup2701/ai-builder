@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, count, eq, gte } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { allowedEmails } from "@/auth";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import { anthropicComplete } from "@/lib/agents/anthropic";
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const PER_HOUR = 5;
+/** Tries per project per hour. Set SITE_IMPORT_LIMIT_PER_HOUR to change it; the people who run the builder are not limited. */
+const PER_HOUR = Number(process.env.SITE_IMPORT_LIMIT_PER_HOUR) > 0 ? Number(process.env.SITE_IMPORT_LIMIT_PER_HOUR) : 5;
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
 /**
@@ -33,7 +35,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // Every attempt counts, so a stranger cannot use this to read the web for free.
   const since = new Date(Date.now() - 3_600_000);
   const [{ n }] = await db.select({ n: count() }).from(schema.usage).where(and(eq(schema.usage.projectId, p.id), eq(schema.usage.step, "site_import"), gte(schema.usage.createdAt, since)));
-  if (n >= PER_HOUR) return fail("That is a lot of tries in a short time. Please wait a little and try again.", 429);
+  const admin = allowedEmails().includes((user.email ?? "").toLowerCase());
+  if (!admin && n >= PER_HOUR) return fail("That is a lot of tries in a short time. Please wait a little and try again.", 429);
   await logUsage({ projectId: p.id, step: "site_import", model: "none" }).catch(() => {});
 
   try {

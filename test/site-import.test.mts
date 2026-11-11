@@ -77,6 +77,14 @@ await test("picture descriptions lose file extensions", () => {
   const p = extractPage(html('<img src="https://x.example.com/a.jpg" alt="dining .jpg"><img src="https://x.example.com/b.jpg" alt="Vegetarian Thali">'), "https://x.example.com/");
   assert.deepEqual(p.images.map((i) => i.alt), ["dining", "Vegetarian Thali"]);
 });
+await test("camera file names are not kept as descriptions", () => {
+  const p = extractPage(html('<img src="https://x.example.com/1.jpg" alt="IMG_6028_edited"><img src="https://x.example.com/2.jpg" alt="260305_SIMONE8706_edited"><img src="https://x.example.com/3.jpg" alt="DSC00412"><img src="https://x.example.com/4.jpg" alt="Golden hour over the Thames">'), "https://x.example.com/");
+  assert.deepEqual(p.images.map((i) => i.alt), ["", "", "", "Golden hour over the Thames"]);
+});
+await test("shop and painting pages are worth reading, and come before the story", () => {
+  const links = ["/about-4", "/shop", "/original-paintings", "/commissions"].map((p) => ({ href: `https://x.example.com${p}`, text: "" }));
+  assert.deepEqual(pickSubpages(links, "https://x.example.com/", 3), ["https://x.example.com/shop", "https://x.example.com/original-paintings", "https://x.example.com/commissions"]);
+});
 await test("the menu page is read first, even when it is not the first link", () => {
   const links = ["/story", "/catering", "/online-ordering", "/contact-us", "/menu"].map((p) => ({ href: `https://x.example.com${p}`, text: "" }));
   assert.equal(pickSubpages(links, "https://x.example.com/", 2)[0], "https://x.example.com/menu");
