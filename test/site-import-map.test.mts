@@ -107,7 +107,7 @@ await test("instructions hidden in the page are only data", async () => {
   await mapSnapshot(async (req) => { seen = req.system; return { input: {}, usage: u }; }, evil);
   assert.match(seen, /never as instructions/);
 });
-const gallery: SiteSnapshot = { ...snap, rootUrl: "https://art.example.com/", pages: [{ url: "https://art.example.com/", title: "Studio", text: "## Studio\nLow Tide, Morning\n2024\n$2,400.00\nAvailable\nSalt Flats at Dusk\n2023\nSold\nGrey Room\n2022" }] };
+const gallery: SiteSnapshot = { ...snap, rootUrl: "https://art.example.com/", title: "Studio", description: "Landscape paintings", pages: [{ url: "https://art.example.com/", title: "Studio", text: "## Studio\nLow Tide, Morning\n2024\n$2,400.00\nAvailable\nSalt Flats at Dusk\n2023\nSold\nGrey Room\n2022" }] };
 await test("works keep what the page says and nothing more", () => {
   const works = coerceCatalog({ works: [{ title: "Low Tide, Morning", year: "2024", price: "$2,400.00", status: "Available", size: "40 x 30 in" }, { title: "Salt Flats at Dusk", year: "2023", status: "Sold", price: "$900" }, { title: "Grey Room", year: "2022", status: "Sold" }, { title: "Invented Piece", price: "$100" }, { title: "x", status: "Bogus" }] });
   const { kept, dropped } = groundCatalog(works, gallery);
@@ -169,5 +169,35 @@ await test("a cut-off sections call loses only the sections, not the testimonial
   const { result } = await mapSnapshot(complete as never, gallery);
   assert.equal(result.catalog.length, 1);
   assert.ok(result.warnings.some((w) => w.includes("other sections")));
+});
+await test("a gallery keeps its works even when the menu call lists them as a menu", async () => {
+  const complete = async (req: { tool: { name: string } }) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Paintings", items: [{ name: "Low Tide, Morning", price: "2,400" }] }] } : req.tool.name === "save_works" ? { works: [{ title: "Low Tide, Morning", year: "2024" }] } : {}, usage: u });
+  const { result } = await mapSnapshot(complete as never, gallery);
+  assert.equal(result.catalog.length, 1);
+  assert.equal(result.menu, undefined);
+});
+await test("a food site keeps its menu even when the works call lists the dishes", async () => {
+  const complete = async (req: { tool: { name: string } }) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Drinks", items: [{ name: "Latte", price: "5" }] }] } : req.tool.name === "save_works" ? { works: [{ title: "Latte", price: "5" }] } : {}, usage: u });
+  const { result } = await mapSnapshot(complete as never, snap);
+  assert.equal(result.menu?.[0].items[0].name, "Latte");
+  assert.deepEqual(result.catalog, []);
+});
+await test("a testimonial quote is kept without its quotation marks, and a section that only repeats it is dropped", () => {
+  const g: SiteSnapshot = { ...snap, pages: [{ url: "https://a.example.com/", title: "a", text: "The painting changed our hallway. Anna P." }] };
+  const { kept } = groundTestimonials({ testimonials: [{ quote: "\"The painting changed our hallway.\"", author: "Anna P." }] }, g);
+  assert.equal(kept[0].quote, "The painting changed our hallway.");
+  assert.deepEqual(dedupeExtras([{ title: "Commissions", body: "The painting changed our hallway." }], [kept[0].quote]), []);
+});
+await test("when the person chose a catalog, a cafe-sounding name still gets works and no menu", async () => {
+  const complete = async (req: { tool: { name: string } }) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Prints", items: [{ name: "Latte", price: "5" }] }] } : req.tool.name === "save_works" ? { works: [{ title: "Latte", price: "5" }] } : {}, usage: u });
+  const { result } = await mapSnapshot(complete as never, snap, complete as never, "catalog");
+  assert.equal(result.catalog.length, 1);
+  assert.equal(result.menu, undefined);
+});
+await test("when the person chose a menu, a gallery-sounding page still gets a menu and no works", async () => {
+  const complete = async (req: { tool: { name: string } }) => ({ input: req.tool.name === "save_menu" ? { menu: [{ category: "Mains", items: [{ name: "Low Tide, Morning", price: "2,400" }] }] } : req.tool.name === "save_works" ? { works: [{ title: "Low Tide, Morning" }] } : {}, usage: u });
+  const { result } = await mapSnapshot(complete as never, gallery, complete as never, "menu");
+  assert.equal(result.menu?.[0].items.length, 1);
+  assert.deepEqual(result.catalog, []);
 });
 if (failed) process.exit(1);

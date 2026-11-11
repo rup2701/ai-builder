@@ -156,7 +156,7 @@ export function splitSections(page: PageText): Omit<Section, "id">[] {
   let body: string[] = [];
   const flush = () => {
     // Page furniture is dropped, and a line that only repeats part of a longer line in the same section (a Wix habit) is dropped.
-    const kept = body.map((l) => l.replace(/\u200b/g, "").trim()).filter((l) => l && !/^top of page$/i.test(l));
+    const kept = body.map((l) => l.replace(/\u200b/g, "").trim()).filter((l) => l && !/^(top of page|bottom of page)$/i.test(l));
     const text = kept.filter((l, n) => !kept.some((o, m) => m !== n && (o.length > l.length || (o.length === l.length && m < n)) && o.includes(l))).join("\n").trim();
     if (text.length >= 40) out.push({ url: page.url, heading: heading || page.title, text: text.slice(0, MAX_SECTION_CHARS) });
     body = [];

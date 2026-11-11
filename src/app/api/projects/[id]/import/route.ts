@@ -29,7 +29,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const p = await loadOwned(id, user.id);
   if (!p) return fail("Not found.", 404);
   if (p.kind !== "site") return fail("This project is not a website.", 400);
-  const body = (await req.json().catch(() => null)) as { url?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { url?: unknown; expect?: unknown } | null;
   if (typeof body?.url !== "string") return fail("Please paste the address of your website.", 400);
 
   // Every attempt counts, so a stranger cannot use this to read the web for free.
@@ -45,7 +45,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!apiKey) return fail("Reading websites is not switched on yet.", 503);
     // Copying facts out of text does not need the big model: a fast one is cheaper and finishes a long menu in time.
     const model = process.env.ANTHROPIC_IMPORT_MODEL || "claude-haiku-5-5";
-    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }));
+    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }), body.expect === "menu" || body.expect === "catalog" ? body.expect : undefined);
     if (usage) await logUsage({ projectId: p.id, step: "site_import_map", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
     return NextResponse.json(result);
   } catch (e) {

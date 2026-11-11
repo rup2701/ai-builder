@@ -97,6 +97,15 @@ export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
   });
 }
 
+const FOOD = /\b(restaurant|cafe|café|coffee|bakery|bistro|pizzeria|pizza|taqueria|diner|eatery|kitchen|brasserie|bar|pub|grill|deli|catering)\b/i;
+
+/** Is this a food business? Decided from the site itself (its address names, structured data, its words), never from the model's menu answer. */
+export function looksLikeRestaurant(snap: SiteSnapshot, kind?: string): boolean {
+  if (JSON.stringify(snap.structured).match(/Restaurant|CafeOrCoffeeShop|Bakery|BarOrPub|FoodEstablishment/)) return true;
+  if (snap.pages.some((p) => { try { return /^\/(menus?|food|drinks?|brunch|lunch|dinner)(\/|$)/i.test(new URL(p.url).pathname); } catch { return false; } })) return true;
+  return FOOD.test(`${snap.title} ${snap.description} ${kind ?? ""} ${new URL(snap.rootUrl).hostname}`);
+}
+
 /** Pairs a work with a picture whose description starts with its title. */
 export function attachImages(works: Work[], images: SiteSnapshot["images"]): Work[] {
   return works.map((w) => {
@@ -349,7 +358,7 @@ export function groundTestimonials(input: unknown, snap: SiteSnapshot): { kept: 
   const kept: { quote: string; author?: string }[] = [];
   const dropped: string[] = [];
   for (const t of Array.isArray(raw) ? raw.slice(0, 6) : []) {
-    const quote = typeof t?.quote === "string" ? t.quote.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    const quote = typeof t?.quote === "string" ? t.quote.replace(/\s+/g, " ").trim().replace(/^["“”'‘’]+|["“”'‘’]+$/g, "").trim().slice(0, 400) : "";
     const author = typeof t?.author === "string" ? t.author.replace(/\s+/g, " ").trim().slice(0, 60) : "";
     if (quote.length < 10) continue;
     if (!corpus.includes(norm(quote))) { dropped.push("a testimonial"); continue; }
@@ -419,7 +428,10 @@ function lenient<T extends z.ZodRawShape>(schema: z.ZodObject<T>, input: unknown
  * Two small calls in parallel (the basics, and the menu) instead of one big one: a long menu used to fill the reply limit and lose everything.
  * menuComplete can be a different instance with a larger reply limit.
  */
-export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuComplete: Complete = complete): Promise<{ result: ImportResult; usage: Usage | null }> {
+/** What the person is building: a menu (food) or a list of works or products (catalog). When it is not given, the site itself decides. */
+export type Expect = "menu" | "catalog";
+
+export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuComplete: Complete = complete, expect?: Expect): Promise<{ result: ImportResult; usage: Usage | null }> {
   const body = [
     `Website: ${snap.rootUrl}`,
     snap.description ? `Description tag: ${snap.description}` : "",
@@ -441,10 +453,15 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
     ask(menuComplete, CATALOG_TOOL, body, "works", warnings),
     ask(menuComplete, TESTIMONIAL_TOOL, body, "testimonials", warnings),
   ]);
-  const menuItems = menu ? coerceMenu(menu.input) : [];
-  // A site with a menu is a restaurant: its list is the menu, not a catalog, so the two never double up.
-  const grounded2 = menuItems.length ? { kept: [] as Work[], dropped: [] as string[] } : groundCatalog(works ? coerceCatalog(works.input) : [], snap);
-  const draft: ImportedSiteT = { ...(basics ? lenient(Basics, basics.input) : {}), ...(menuItems.length ? { menu: menuItems } : {}) };
+  const basicsDraft = basics ? lenient(Basics, basics.input) : {};
+  // Restaurant or gallery is decided from the site, not from which model answer happened to have items: a painter's price list can come back as a "menu".
+  const foodSite = expect ? expect === "menu" : looksLikeRestaurant(snap, basicsDraft.kind);
+  const catalogTry = foodSite ? { kept: [] as Work[], dropped: [] as string[] } : groundCatalog(works ? coerceCatalog(works.input) : [], snap);
+  const rawMenu = menu ? coerceMenu(menu.input) : [];
+  // A menu is kept for a food site. For a catalog the person chose, there is no menu. When nothing was chosen, a menu is used only if no works were found.
+  const menuItems = foodSite || (!expect && !catalogTry.kept.length) ? rawMenu : [];
+  const grounded2 = catalogTry;
+  const draft: ImportedSiteT = { ...basicsDraft, ...(menuItems.length ? { menu: menuItems } : {}) };
   // Said out loud, so an empty menu next to a long menu page is never a mystery.
   const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
   if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
@@ -459,5 +476,5 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? ""]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? "", ...quotes.kept.map((q) => q.quote)]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }
