@@ -102,7 +102,7 @@ export function extractPage(html: string, pageUrl: string): Page {
     const size = /[/,_]w_(\d+),h_(\d+)/.exec(src);
     if (size && Number(size[1]) < 300) return;
     if (wix && /w_(\d+),h_(\d+)/.test(raw) && Number(/w_(\d+)/.exec(raw)?.[1]) < 100) return; // an icon-sized thumbnail, not a photo
-    images.push({ src, alt: alt.trim().slice(0, 140) });
+    images.push({ src, alt: alt.replace(/\.(jpe?g|png|webp|gif|avif)\b/gi, "").replace(/\s+/g, " ").trim().slice(0, 140) });
   };
   addImage(ogImage, "");
   $("img").each((_, el) => {

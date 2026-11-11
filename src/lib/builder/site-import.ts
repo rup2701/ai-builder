@@ -8,14 +8,31 @@ import type { SiteSnapshot } from "./site-extract";
  * Nothing is invented: a missing fact stays empty and the interview asks for it.
  */
 
-const Menu = z
-  .array(
-    z.object({
-      category: z.string().trim().min(1).max(60),
-      items: z.array(z.object({ name: z.string().trim().min(1).max(80), price: z.string().trim().max(20).optional() })).min(1).max(40),
-    }),
-  )
-  .max(10);
+export const MAX_MENU_CATEGORIES = 20;
+export const MAX_MENU_ITEMS = 60;
+const Menu = z.array(z.object({ category: z.string().min(1), items: z.array(z.object({ name: z.string().min(1), price: z.string().optional() })).min(1) }));
+
+/**
+ * The menu from the model's answer, trimmed to fit instead of rejected: a long menu used to be thrown away whole because one
+ * category had too many items or one price had a long note. Over-long text is shortened, empty entries are skipped.
+ */
+export function coerceMenu(input: unknown): NonNullable<ImportedSiteT["menu"]> {
+  const raw = (input as { menu?: unknown } | null)?.menu;
+  if (!Array.isArray(raw)) return [];
+  const out: NonNullable<ImportedSiteT["menu"]> = [];
+  for (const c of raw.slice(0, MAX_MENU_CATEGORIES)) {
+    const category = typeof c?.category === "string" ? c.category.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+    const items: { name: string; price?: string }[] = [];
+    for (const i of Array.isArray(c?.items) ? c.items.slice(0, MAX_MENU_ITEMS) : []) {
+      const name = typeof i?.name === "string" ? i.name.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+      if (!name) continue;
+      const price = typeof i?.price === "string" ? i.price.replace(/\s+/g, " ").trim().slice(0, 20) : "";
+      items.push(price ? { name, price } : { name });
+    }
+    if (category && items.length) out.push({ category, items });
+  }
+  return out;
+}
 const Basics = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   kind: z.string().trim().min(2).max(80).optional(),
@@ -138,6 +155,8 @@ export function groundCheck(draft: ImportedSiteT, snap: SiteSnapshot): { site: I
       .filter((c) => c.items.length);
     if (menu.length) out.menu = menu;
     else delete out.menu;
+    const lost = out.menu === undefined && draft.menu?.length ? "the whole menu" : "";
+    if (lost) dropped.push(lost);
   }
   return { site: out, dropped };
 }
@@ -186,7 +205,11 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
     .join("\n\n");
   const warnings: string[] = [];
   const [basics, menu] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings)]);
-  const draft: ImportedSiteT = { ...(basics ? lenient(Basics, basics.input) : {}), ...(menu ? lenient(z.object({ menu: Menu.optional() }), menu.input) : {}) };
+  const menuItems = menu ? coerceMenu(menu.input) : [];
+  const draft: ImportedSiteT = { ...(basics ? lenient(Basics, basics.input) : {}), ...(menuItems.length ? { menu: menuItems } : {}) };
+  // Said out loud, so an empty menu next to a long menu page is never a mystery.
+  const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
+  if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
   const used = [basics?.usage, menu?.usage].filter((u): u is Usage => !!u);
   const usage = used.length ? used.reduce((a, b) => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd })) : null;
   const { site, dropped } = groundCheck(draft, snap);

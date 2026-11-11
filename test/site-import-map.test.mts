@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { groundCheck, mapSnapshot } from "../src/lib/builder/site-import";
+import { coerceMenu, groundCheck, mapSnapshot } from "../src/lib/builder/site-import";
 import type { SiteSnapshot } from "../src/lib/builder/site-extract";
 
 let failed = 0;
@@ -69,6 +69,18 @@ await test("the menu comes from its own call, and a failed menu call keeps the b
   assert.equal(menuDown.result.name, "Luna Cafe");
   assert.equal(menuDown.result.menu, undefined);
   assert.ok(menuDown.result.warnings.some((w) => w.includes("menu") && w.includes("cut off")));
+});
+await test("a very long menu is trimmed, not thrown away", () => {
+  const cats = Array.from({ length: 25 }, (_, c) => ({ category: `Category ${c}`, items: Array.from({ length: 80 }, (_, i) => ({ name: `Dish ${c}-${i}`, price: "$12.00 (serves two, add rice for 3)" })) }));
+  const m = coerceMenu({ menu: cats });
+  assert.equal(m.length, 20);
+  assert.equal(m[0].items.length, 60);
+  assert.ok((m[0].items[0].price ?? "").length <= 20);
+});
+await test("junk menu entries are skipped", () => {
+  assert.deepEqual(coerceMenu({ menu: [{ category: "A", items: [{ name: "  " }, { name: "Tea", price: 5 }, null] }, { category: "", items: [{ name: "x" }] }, "no"] }), [{ category: "A", items: [{ name: "Tea" }] }]);
+  assert.deepEqual(coerceMenu(null), []);
+  assert.deepEqual(coerceMenu({ menu: "none" }), []);
 });
 await test("a site with almost no text says so", async () => {
   const thin: SiteSnapshot = { ...snap, pages: [{ url: "https://x.com/", title: "x", text: "Welcome" }] };

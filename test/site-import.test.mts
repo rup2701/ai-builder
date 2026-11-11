@@ -73,6 +73,10 @@ await test("thumbnails, logos and the same picture spelled two ways are skipped"
   assert.deepEqual(p.images.map((i) => i.alt), ["Spices"]);
   assert.equal(p.images[0].src, "https://static.wixstatic.com/media/b~mv2.jpg"); // the original, not the resized copy
 });
+await test("picture descriptions lose file extensions", () => {
+  const p = extractPage(html('<img src="https://x.example.com/a.jpg" alt="dining .jpg"><img src="https://x.example.com/b.jpg" alt="Vegetarian Thali">'), "https://x.example.com/");
+  assert.deepEqual(p.images.map((i) => i.alt), ["dining", "Vegetarian Thali"]);
+});
 await test("the menu page is read first, even when it is not the first link", () => {
   const links = ["/story", "/catering", "/online-ordering", "/contact-us", "/menu"].map((p) => ({ href: `https://x.example.com${p}`, text: "" }));
   assert.equal(pickSubpages(links, "https://x.example.com/", 2)[0], "https://x.example.com/menu");
