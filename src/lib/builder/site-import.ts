@@ -144,7 +144,9 @@ export function groundCatalog(works: Work[], snap: SiteSnapshot): { kept: Work[]
       // Within a few lines after the title on the same page, since a card lists title, year, price, status together.
       const at = lines.findIndex((l) => l.includes(norm(w.title)));
       const near = at >= 0 ? lines.slice(at, at + 6).join(" ") : "";
-      if (near.includes(w.status.toLowerCase())) out.status = w.status; else dropped.push(`status of ${w.title}`);
+      // A shop says "Add to Cart" for Available and "Out of Stock" for Sold, so those count as the page saying it.
+      const says = near.includes(w.status.toLowerCase()) || (w.status === "Available" && /add to (cart|bag|basket)/.test(near)) || (w.status === "Sold" && /out of stock|sold out/.test(near));
+      if (says) out.status = w.status; else dropped.push(`status of ${w.title}`);
     }
     kept.push(out);
   }

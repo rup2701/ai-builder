@@ -200,4 +200,10 @@ await test("when the person chose a menu, a gallery-sounding page still gets a m
   assert.equal(result.menu?.[0].items.length, 1);
   assert.deepEqual(result.catalog, []);
 });
+await test("a shop's Add to Cart and Out of Stock count as the page saying Available and Sold", () => {
+  const g: SiteSnapshot = { ...gallery, pages: [{ url: gallery.rootUrl, title: "s", text: "Windfall - painting\nPrice£900.00\nAdd to Cart\nTide Line - painting\nPrice£400.00\nOut of Stock" }] };
+  const { kept, dropped } = groundCatalog([{ title: "Windfall", status: "Available" }, { title: "Tide Line", status: "Sold" }], g);
+  assert.deepEqual(kept.map((w) => w.status), ["Available", "Sold"]);
+  assert.deepEqual(dropped, []);
+});
 if (failed) process.exit(1);
