@@ -33,6 +33,55 @@ export function coerceMenu(input: unknown): NonNullable<ImportedSiteT["menu"]> {
   }
   return out;
 }
+export const MAX_WORKS = 40;
+/** What a visitor is told about a work or product. Status is one of the words the store pack uses, and only when the page says it. */
+export const WORK_STATUSES = ["Available", "Sold", "Private collection", "Not for sale"] as const;
+export type Work = { title: string; year?: string; medium?: string; size?: string; price?: string; status?: (typeof WORK_STATUSES)[number] };
+
+/** The works from the model's answer, trimmed to fit instead of rejected. */
+export function coerceCatalog(input: unknown): Work[] {
+  const raw = (input as { works?: unknown } | null)?.works;
+  if (!Array.isArray(raw)) return [];
+  const clean = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const out: Work[] = [];
+  for (const w of raw.slice(0, MAX_WORKS)) {
+    const title = clean(w?.title, 90);
+    if (!title) continue;
+    const year = clean(w?.year, 4);
+    const status = WORK_STATUSES.find((s) => s.toLowerCase() === clean(w?.status, 30).toLowerCase());
+    const item: Work = { title };
+    for (const [k, v] of [["year", /^\d{4}$/.test(year) ? year : ""], ["medium", clean(w?.medium, 60)], ["size", clean(w?.size, 40)], ["price", clean(w?.price, 20)]] as const) if (v) item[k] = v;
+    if (status) item.status = status;
+    out.push(item);
+  }
+  return out;
+}
+
+/** Keeps a work only when its title is on the pages, and each detail only when it is too. A status is kept only when its word is near the title. */
+export function groundCatalog(works: Work[], snap: SiteSnapshot): { kept: Work[]; dropped: string[] } {
+  const text = snap.pages.map((p) => p.text).join("\n");
+  const corpus = norm(text);
+  const lines = text.split("\n").map(norm);
+  const kept: Work[] = [];
+  const dropped: string[] = [];
+  for (const w of works) {
+    if (!corpus.includes(norm(w.title))) { dropped.push(`work ${w.title}`); continue; }
+    const out: Work = { title: w.title };
+    if (w.year && corpus.includes(w.year)) out.year = w.year;
+    if (w.medium && corpus.includes(norm(w.medium))) out.medium = w.medium;
+    if (w.size && corpus.includes(norm(w.size))) out.size = w.size;
+    if (w.price) { if (digits(w.price) && corpus.includes(norm(w.price))) out.price = w.price; else dropped.push(`price of ${w.title}`); }
+    if (w.status) {
+      // Within a few lines after the title on the same page, since a card lists title, year, price, status together.
+      const at = lines.findIndex((l) => l.includes(norm(w.title)));
+      const near = at >= 0 ? lines.slice(at, at + 6).join(" ") : "";
+      if (near.includes(w.status.toLowerCase())) out.status = w.status; else dropped.push(`status of ${w.title}`);
+    }
+    kept.push(out);
+  }
+  return { kept, dropped };
+}
+
 const Basics = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   kind: z.string().trim().min(2).max(80).optional(),
@@ -53,6 +102,10 @@ export type ImportResult = ImportedSiteT & {
   sourceUrl: string;
   actions: SiteSnapshot["actions"];
   extras: ExtraPage[];
+  /** Works or products listed on the site (a painter's paintings, a shop's goods). Empty for a restaurant, which has a menu. */
+  catalog: Work[];
+  /** Links the home page offers and whether each was read. */
+  linksSeen: SiteSnapshot["linksSeen"];
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
   dropped: string[];
   /** How much was read, and anything that went wrong on the way, so an empty result can be explained. */
@@ -94,6 +147,30 @@ const MENU_TOOL: Tool = {
           properties: {
             category: { type: "string" },
             items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, price: { type: "string", description: "As written, for example 14 or $14.50." } } } },
+          },
+        },
+      },
+    },
+  },
+};
+
+const CATALOG_TOOL: Tool = {
+  name: "save_works",
+  description: "Save the works or products this website lists for sale or to view (paintings, goods, services with prices). Not a food or drink menu. Leave out anything the pages do not list.",
+  input_schema: {
+    type: "object",
+    properties: {
+      works: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "The work or product name as written." },
+            year: { type: "string", description: "Four digits, only if written." },
+            medium: { type: "string" },
+            size: { type: "string", description: "As written, for example 24 x 36 in." },
+            price: { type: "string", description: "As written, only if shown." },
+            status: { type: "string", enum: [...WORK_STATUSES], description: "Only if the page says so (Available, Sold, Private collection, Not for sale)." },
           },
         },
       },
@@ -255,21 +332,23 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
     .filter(Boolean)
     .join("\n\n");
   const warnings: string[] = [];
-  const [basics, menu, other] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings), ask(complete, EXTRAS_TOOL, body, "other pages", warnings)]);
+  const [basics, menu, other, works] = await Promise.all([ask(complete, BASICS_TOOL, body, "business details", warnings), ask(menuComplete, MENU_TOOL, body, "menu", warnings), ask(complete, EXTRAS_TOOL, body, "other pages", warnings), ask(menuComplete, CATALOG_TOOL, body, "works", warnings)]);
   const menuItems = menu ? coerceMenu(menu.input) : [];
+  // A site with a menu is a restaurant: its list is the menu, not a catalog, so the two never double up.
+  const grounded2 = menuItems.length ? { kept: [] as Work[], dropped: [] as string[] } : groundCatalog(works ? coerceCatalog(works.input) : [], snap);
   const draft: ImportedSiteT = { ...(basics ? lenient(Basics, basics.input) : {}), ...(menuItems.length ? { menu: menuItems } : {}) };
   // Said out loud, so an empty menu next to a long menu page is never a mystery.
   const menuPage = snap.pages.find((p) => /menu/i.test(new URL(p.url).pathname));
   if (menu && !menuItems.length && menuPage && menuPage.text.length > 1500) warnings.push("The menu page has plenty of text, but no menu items came out of it.");
   const grounded = groundExtras(other ? coerceExtras(other.input) : [], snap);
-  const used = [basics?.usage, menu?.usage, other?.usage].filter((u): u is Usage => !!u);
+  const used = [basics?.usage, menu?.usage, other?.usage, works?.usage].filter((u): u is Usage => !!u);
   const usage = used.length ? used.reduce((a, b) => ({ inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd })) : null;
   const { site, dropped: droppedFacts } = groundCheck(draft, snap);
-  const dropped = [...droppedFacts, ...grounded.dropped];
+  const dropped = [...droppedFacts, ...grounded.dropped, ...grounded2.dropped];
   // Contact facts the page links directly are more reliable than the model's copy.
   if (!site.phone && snap.phones[0]) site.phone = snap.phones[0];
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: grounded.kept, catalog: grounded2.kept, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }

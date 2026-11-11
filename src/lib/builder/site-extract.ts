@@ -23,6 +23,8 @@ export type SiteSnapshot = {
   /** schema.org data the site publishes about itself (business name, address, hours). */
   structured: unknown[];
   images: SiteImage[];
+  /** Links the home page offers, and which of them were read, so a missing page can be explained. */
+  linksSeen: { href: string; text: string; read: boolean }[];
 };
 
 export const MAX_PAGES = 7;
@@ -123,7 +125,8 @@ export function extractPage(html: string, pageUrl: string): Page {
     const t = $(el).text().replace(/\s+/g, " ").trim();
     if (t.length < 2 || t.length > 400 || seen.has(t)) return;
     seen.add(t);
-    lines.push(t);
+    // Headings are marked so each block of text can be matched to what it is (Commissions, FAQ, Exhibitions).
+    lines.push(/^h[1-4]$/i.test(el.tagName) ? `## ${t}` : t);
   });
   const title = ($("title").text() || $("h1").first().text()).replace(/\s+/g, " ").trim().slice(0, 160);
   const actions: SiteAction[] = [];
@@ -153,6 +156,12 @@ export function pickSubpages(links: { href: string; text: string }[], rootUrl: s
     if (key === root.toString() || /\.(pdf|jpe?g|png|webp|gif|zip)$/i.test(u.pathname) || out.includes(key)) continue;
     if (SUBPAGE.test(u.pathname) || SUBPAGE.test(l.text)) out.push(key);
   }
+  // A page of one item (/work/low-tide) is skipped when the list it belongs to (/work) is read: the list already shows every item.
+  const parentOf = (k: string) => { const u = new URL(k); const parts = u.pathname.split("/").filter(Boolean); return parts.length > 1 ? `${u.origin}/${parts.slice(0, -1).join("/")}` : null; };
+  for (let i = out.length - 1; i >= 0; i--) {
+    const parent = parentOf(out[i]);
+    if (parent && out.some((o) => o.replace(/\/$/, "") === parent)) out.splice(i, 1);
+  }
   // The menu first, then contact and hours, then the story, then the rest, so a small page budget goes to what matters most.
   const rank = (k: string) => {
     const t = `${new URL(k).pathname} ${links.find((l) => l.href.split("#")[0] === k)?.text ?? ""}`;
@@ -166,7 +175,8 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
   const home = await safeFetchHtml(raw, deps);
   const first = extractPage(home.html, home.url);
   const pages = [first];
-  for (const next of pickSubpages(first.links, home.url)) {
+  const chosen = pickSubpages(first.links, home.url);
+  for (const next of chosen) {
     try {
       const r = await safeFetchHtml(next, deps);
       pages.push(extractPage(r.html, r.url));
@@ -196,5 +206,6 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
     actions: first.actions,
     structured: pages.flatMap((p) => p.structured).slice(0, 4),
     images: uniq(pages.flatMap((p) => p.images), (x) => x.src).slice(0, MAX_IMAGES),
+    linksSeen: uniq(first.links, (x) => x.href).slice(0, 60).map((l) => ({ ...l, read: pages.some((p) => p.page.url.replace(/\/$/, "") === l.href.split("#")[0].replace(/\/$/, "")) })),
   };
 }
