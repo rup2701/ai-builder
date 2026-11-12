@@ -1,5 +1,5 @@
 // Copies each website pack's interview guide and example brief from the runner into the builder as a TypeScript file.
-// The runner's vertical-packs/site (waitlist) and vertical-packs/product-showcase are the single source. Run: npm run sync:site-pack
+// The runner's vertical-packs/site (waitlist), vertical-packs/product-showcase and vertical-packs/local-business are the single source. Run: npm run sync:site-pack
 // RUNNER_DIR defaults to ../appnomics-runner.
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -12,5 +12,9 @@ for (const [pack, prefix] of [["site", "SITE"], ["product-showcase", "SHOWCASE"]
   const example = JSON.stringify(JSON.parse(await read(pack, "brief.example.json")), null, 2);
   out += `export const ${prefix}_INTERVIEW_MD = ${JSON.stringify(interview)};\nexport const ${prefix}_EXAMPLE_BRIEF = ${JSON.stringify(example)};\n`;
 }
+// The local business pack has no interview guide yet (its questions are code: interview/questions.json), so the builder gets the example brief and the question list.
+const localExample = JSON.stringify(JSON.parse(await read("local-business", "brief.example.json")), null, 2);
+const localQuestions = JSON.stringify(JSON.parse(await read("local-business", "interview/questions.json")), null, 2);
+out += `export const LOCAL_EXAMPLE_BRIEF = ${JSON.stringify(localExample)};\nexport const LOCAL_QUESTIONS_JSON = ${JSON.stringify(localQuestions)};\n`;
 await writeFile(path.resolve("src/lib/builder/site-pack.generated.ts"), out);
-console.log(`Synced site and product-showcase packs from ${runner}`);
+console.log(`Synced the site, product-showcase and local-business packs from ${runner}`);

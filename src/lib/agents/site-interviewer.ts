@@ -23,6 +23,12 @@ export type Chat = (req: { system: string; messages: ChatMessage[]; tools: Tool[
 export const SITE_OPENER =
   "Hi! This site has one job: to test whether your idea has legs, so everything on the page will help you find that out.\n\nWhat's your idea about, in one or two sentences? Please include the name if you already have one.";
 
+export const LOCAL_OPENER =
+  "Hi! I'll help you build a website for your restaurant.\n\nDo you have a website now? If so, send me the link and I'll read it and start from what is already there.";
+
+/** Until the local business interview is built, the template cannot start a site, and says so plainly. */
+export const LOCAL_NOT_READY = "The restaurant template is still being finished and cannot build a site yet. Please try again in a few days.";
+
 export const SHOWCASE_OPENER =
   "Hi! I'll help you build a product showcase website.\n\nWhat's your product, in one or two sentences? Please include the name.";
 
@@ -32,7 +38,7 @@ const SAVE_BRIEF: Tool = {
   input_schema: { type: "object", properties: { brief: { type: "object", description: "The complete brief" } }, required: ["brief"] },
 };
 
-function systemFor(pack: SitePack) {
+function systemFor(pack: Exclude<SitePack, "local">) {
   const showcase = pack === "showcase";
   return `You are the interview agent of an AI app builder. You talk with a founder in plain, friendly words and, at the end, save a brief that the builder uses to build their ${showcase ? "product website" : "waitlist website"}. The builder never sees this conversation, only the brief.
 
@@ -83,7 +89,8 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
       let s = pushMsg(prev, { kind: "user", text });
       const saved = prev.site?.brief;
       const pack: SitePack = normalizePack(prev.sitePack);
-      const SYSTEM = systemFor(pack);
+      if (pack === "local") return { state: pushMsg(s, { kind: "bot", text: LOCAL_NOT_READY }), usage: { model: "local-not-ready", inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+      const SYSTEM = systemFor(pack as Exclude<SitePack, "local">);
       const system = saved ? `${SYSTEM}\n\n<saved_brief>\n${JSON.stringify(saved)}\n</saved_brief>\nA brief is already saved. If the person asks for a change, apply it and call save_brief again with the full updated brief.` : SYSTEM;
       const convo = toMessages(s);
       let tokensIn = 0, tokensOut = 0, cost = 0;

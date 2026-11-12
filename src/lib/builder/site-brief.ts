@@ -109,17 +109,66 @@ export const ShowcaseBrief = z
     }
   });
 
-export type SiteBriefT = z.infer<typeof SiteBrief>;
-export type SitePack = "waitlist" | "showcase";
+const Https = z.string().refine((u) => /^https:\/\/\S+$/i.test(u) && u.length < 500, "must start with https://");
 
-/** "saas" is the old name of the showcase pack; projects started under it keep working. */
-export const normalizePack = (p?: string | null): SitePack => (p === "showcase" || p === "saas" || p === "product-showcase" ? "showcase" : "waitlist");
+/**
+ * The local business brief (a restaurant first): the shape the runner's local-business pack builds from. Content comes from the owner or
+ * their own site, so the checks are about safety, not style: a kind and a design the pack has, links that are https, and proof of consent.
+ * A private test must say so and cannot claim the owner agreed; anything else needs the owner's confirmation for the pictures and the text.
+ */
+export const LocalBusinessBrief = z
+  .object({
+    site: z.object({ name: z.string().trim().min(1).max(80), kind: z.literal("local-business"), business_type: z.string().trim().min(1).max(40) }).passthrough(),
+    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex colour like #c2410c").optional() }).passthrough(),
+    contact: z.object({ hours: z.array(z.string()).default([]) }).passthrough(),
+    links: z.object({}).passthrough().optional(),
+    menu: z
+      .object({
+        show_prices: z.boolean().optional(),
+        categories: z.array(z.object({ name: z.string().trim().min(1), items: z.array(z.object({ name: z.string().trim().min(1), price: z.string().optional() }).passthrough()) }).passthrough()),
+      })
+      .passthrough(),
+    images: z.object({ use_photos: z.boolean(), owner_confirmed: z.boolean() }).passthrough(),
+    testimonials: z.array(z.object({ quote: z.string().trim().min(1) }).passthrough()).default([]),
+    socials: z.array(z.object({ label: z.string().min(1), url: Https }).passthrough()).default([]),
+    story: z.object({ body: z.string().trim().min(1) }).passthrough().nullable().optional(),
+    private_test: z.boolean().optional(),
+    consent: z.object({ by: z.string().trim().min(1) }).passthrough(),
+  })
+  .passthrough()
+  .superRefine((b, ctx) => {
+    const c = b.consent as Record<string, unknown>;
+    if (b.private_test === true) {
+      if (c.private_test !== true) ctx.addIssue({ code: "custom", path: ["consent"], message: "a private test must carry consent.private_test true" });
+    } else {
+      if (c.owner_confirmed !== true) ctx.addIssue({ code: "custom", path: ["consent"], message: "the owner has not confirmed that this site and its pictures can be used (consent.owner_confirmed must be true)" });
+      if (b.images.owner_confirmed !== true) ctx.addIssue({ code: "custom", path: ["images", "owner_confirmed"], message: "must be true once the owner confirmed" });
+    }
+    for (const [k, v] of Object.entries((b.links ?? {}) as Record<string, unknown>)) {
+      if (typeof v === "string" && !Https.safeParse(v).success) ctx.addIssue({ code: "custom", path: ["links", k], message: "the link must start with https://" });
+    }
+  });
+
+export type SiteBriefT = z.infer<typeof SiteBrief>;
+export type SitePack = "waitlist" | "showcase" | "local";
+
+/** "saas" is the old name of the showcase pack; projects started under it keep working. "local" is the local business pack (a restaurant first). */
+export const normalizePack = (p?: string | null): SitePack =>
+  p === "showcase" || p === "saas" || p === "product-showcase" ? "showcase" : p === "local" || p === "local-business" ? "local" : "waitlist";
+
+/** The value to carry in a link (?pack=...) for a pack other than the waitlist one, or nothing. */
+export const packParam = (p?: string | null): "showcase" | "local" | undefined => {
+  const n = normalizePack(p);
+  return n === "waitlist" ? undefined : n;
+};
+export const isLocal = (p?: string | null) => normalizePack(p) === "local";
 
 /** A link asked for the product showcase pack (pack=showcase, product-showcase or the old saas). */
 export const isShowcase = (p?: string | null) => normalizePack(p) === "showcase";
 
 export function validateSiteBrief(input: unknown, pack: SitePack | "saas" = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
-  const r = (normalizePack(pack) === "showcase" ? ShowcaseBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
+  const n = normalizePack(pack);
+  const r = (n === "showcase" ? ShowcaseBrief : n === "local" ? LocalBusinessBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };
   const lines = r.error.issues.slice(0, 6).map((i) => `${i.path.join(".") || "brief"}: ${i.message}`);
   return { ok: false, error: `The brief is not valid. Fix these and call save_brief again:\n${lines.join("\n")}` };

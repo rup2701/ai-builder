@@ -61,7 +61,7 @@ export type Template = {
   /** Live example sites: label and address. */
   demos?: { label: string; url: string }[];
   /** Opens this pack instead of the waitlist one (sent to /new as pack=...). */
-  pack?: "showcase";
+  pack?: "showcase" | "local";
   /** Not available yet. */
   soon?: boolean;
 };
@@ -96,17 +96,26 @@ export const SITE_TEMPLATES: Template[] = [
     caption: "Product showcase",
     text: "A product website for ___, with features, pricing and how it works.",
     pack: "showcase",
-    demos: [
-      { label: "Ledgerline", url: "https://ledgerline.appnomics.live" },
-      { label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live" },
-      { label: "InstaRoom", url: "https://instaroom.appnomics.live" }
-
-    ],
+    demos: [{ label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live" }],
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-indigo-50 p-5 text-indigo-950 sm:p-8">
         <span className="font-mono text-[10px]">YOUR PRODUCT</span>
         <span className="text-lg leading-tight sm:text-2xl">Get started<br />in minutes.</span>
         <span className="h-6 w-3/4 rounded-full bg-white" />
+      </div>
+    ),
+  },
+  {
+    id: "website-restaurant",
+    caption: "Restaurant site",
+    text: "A website for my restaurant, with the menu, our story, a gallery and ways to book or order.",
+    pack: "local",
+    soon: true,
+    art: (
+      <div className="flex h-full flex-col justify-center gap-3 bg-orange-50 p-5 text-orange-950 sm:p-8">
+        <span className="font-mono text-[10px]">YOUR RESTAURANT</span>
+        <span className="text-lg leading-tight sm:text-2xl">Good food,<br />well told.</span>
+        <span className="h-6 w-1/2 rounded bg-orange-700" />
       </div>
     ),
   },
