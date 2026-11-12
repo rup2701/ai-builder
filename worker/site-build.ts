@@ -70,11 +70,33 @@ export function nameCandidates(siteName: string, rand: () => string = () => rand
   return [padded, `${padded}-${rand()}`, `${padded}-${rand()}`, `${padded}-${rand()}`];
 }
 
+/**
+ * What a brief's kind means for the build: which pack's specs the runner uses, what the sentence it is given says,
+ * and whether the site is static (no owner area, so no sign-in and no password at deploy).
+ */
+export function packFor(brief: Record<string, unknown>): { id: "waitlist" | "showcase" | "local"; specs: string; label: string; static: boolean } {
+  const kind = (brief.site as { kind?: string } | undefined)?.kind;
+  if (kind === "product-showcase" || kind === "saas-showcase") return { id: "showcase", specs: "vertical-packs/product-showcase/specs", label: "product showcase", static: true };
+  if (kind === "local-business") {
+    const type = (brief.site as { business_type?: string } | undefined)?.business_type;
+    return { id: "local", specs: "vertical-packs/local-business/specs", label: type && /^[a-z ]{3,30}$/i.test(type) ? type.toLowerCase() : "local business", static: true };
+  }
+  return { id: "waitlist", specs: "vertical-packs/site/specs", label: "waitlist", static: false };
+}
+
 /** The "Check these before you share it" list, built from the brief by code, not by the model. */
 export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
   const items = c.unconfirmed.map((u) => `Make sure this is true before you publish it: "${u}"`);
   const kind = (brief.site as { kind?: string } | undefined)?.kind;
+  if (kind === "local-business") {
+    // A restaurant site is made from the owner's own website: the list is what that site did not give, and what was chosen for them.
+    const nf = (brief.not_found as string[] | undefined) ?? [];
+    for (const n of nf) items.push(`Your website did not give this, so it is left out: ${n}.`);
+    for (const a of (brief.assumptions as string[] | undefined) ?? []) items.push(a);
+    items.push("The menu, hours, text and pictures were copied from your website. Read the menu and prices once against your own copy before you share it.");
+    return items;
+  }
   if (kind === "product-showcase" || kind === "saas-showcase") {
     // A showcase has no sign-ups and no owner area: the list is its placeholders and drafted wording.
     const ph = (brief.placeholders as { what?: string; fix?: string }[] | undefined) ?? [];
@@ -211,11 +233,10 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       }
     }, Number(env.WORKER_FILES_MS ?? 6000));
 
-    const siteKind = (brief.site as { kind?: string } | undefined)?.kind;
-    const showcasePack = siteKind === "product-showcase" || siteKind === "saas-showcase";
+    const pack = packFor(brief);
     const created = await runProcess(
       "npm",
-      ["run", "create", "--", `A ${showcasePack ? "product showcase" : "waitlist"} website for ${siteName}`, "--specs", `vertical-packs/${showcasePack ? "product-showcase" : "site"}/specs`, "--brief", path.relative(runner, briefFile)],
+      ["run", "create", "--", `A ${pack.label} website for ${siteName}`, "--specs", pack.specs, "--brief", path.relative(runner, briefFile)],
       {
         cwd: runner,
         env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_BUILD_MAX_USD ?? "8" },
@@ -272,8 +293,8 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   const { runner, runDir, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild } = c;
   // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
   setStage(4);
-  const staticSite = ["product-showcase", "saas-showcase"].includes((brief.site as { kind?: string } | undefined)?.kind ?? "");
-  // A showcase has no owner area, so no sign-in email and no password.
+  const staticSite = packFor(brief).static;
+  // A showcase or a restaurant site has no owner area, so no sign-in email and no password.
   const password = staticSite ? "" : randomBytes(12).toString("base64url");
   let url: string | null = null;
   let lastOut = "";
@@ -307,7 +328,9 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     msgs: [
       ...s.msgs,
       { id: s.nextId, kind: "site_ready", name: siteName, url: url!, ...(staticSite ? {} : { adminUrl: build.adminUrl!, ownerEmail, password }), checks: checklist(brief) },
-      { id: s.nextId + 1, kind: "bot", text: "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
+      { id: s.nextId + 1, kind: "bot", text: packFor(brief).id === "local"
+        ? "Your site is live. Read the list under it, check the menu and prices against your own copy, then share it. Changing the site from this chat is not ready for restaurant sites yet."
+        : "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
     ],
     nextId: s.nextId + 2,
     site: { brief: s.site!.brief, build },

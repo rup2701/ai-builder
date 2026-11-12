@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { checklist, nameCandidates, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
+import { checklist, nameCandidates, packFor, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
@@ -47,7 +47,7 @@ await test("checklist is built from the brief's unconfirmed claims", () => {
 });
 
 // ---- the whole worker path against a stand-in runner ----
-async function makeRunner(opts: { checks?: boolean; takenBase?: string }) {
+async function makeRunner(opts: { checks?: boolean; takenBase?: string; static?: boolean }) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "runner-"));
   await mkdir(path.join(dir, "runs", "r1", "app"), { recursive: true });
   await writeFile(path.join(dir, "runs", "r1", "transcript.jsonl"), '{"turn":1,"tool":"write_file"}\n{"turn":2,"tool":"write_file"}\n{"turn":3,"tool":"run_command"}\n');
@@ -57,7 +57,9 @@ async function makeRunner(opts: { checks?: boolean; takenBase?: string }) {
   );
   await writeFile(
     path.join(dir, "create.mjs"),
-    `console.log("1/4 Writing the brief…");
+    `import { writeFileSync } from "node:fs";
+writeFileSync(new URL("./create-args.json", import.meta.url), JSON.stringify(process.argv.slice(2)));
+console.log("1/4 Writing the brief…");
 console.log("2/4 Setting up a fresh folder and database…");
 console.log("    ${dir}/runs/r1/app\\n    database run_x");
 console.log("3/4 Agent is building…");
@@ -71,15 +73,15 @@ console.log("\\n" + JSON.stringify({ runId: "r1", stopReason: "finished", estima
     `const name = process.argv[process.argv.indexOf("--name") + 1];
 if (name === ${JSON.stringify(opts.takenBase ?? "")}) { console.log('A Vercel project named "' + name + '" already exists in this account. Nothing was changed.'); process.exit(1); }
 for (let i = 1; i <= 7; i++) console.log(i + "/7 step");
-if (!process.env.ADMIN_PASSWORD) process.exit(2);
+${opts.static ? 'if (process.env.ADMIN_PASSWORD || process.argv.includes("--email")) process.exit(3);' : 'if (!process.env.ADMIN_PASSWORD) process.exit(2);'}
 console.log("Live: https://" + name + ".appnomics.live");
 `,
   );
   return dir;
 }
 
-function fakeDb(email = "owner@example.com") {
-  const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief: JSON.parse(SITE_EXAMPLE_BRIEF), build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
+function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF)) {
+  const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief, build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
   const rec = { state: st, usage: [] as unknown[][], status: "building" };
   const db: Db = {
     async query(text, params = []) {
@@ -124,6 +126,49 @@ await test("a good build ends Ready with the address, the password and the check
   assert.ok(b.files >= 2, `files counted: ${b.files}`);
   const written = await readFile(path.join(dir, "briefs", (await readdir(path.join(dir, "briefs")))[0]), "utf8");
   assert.ok(JSON.parse(written).site.name);
+});
+
+// ---- the restaurant pack ----
+const localBrief = (): Record<string, unknown> => ({
+  site: { name: "Test Kitchen", kind: "local-business", business_type: "restaurant" },
+  not_found: ["customer reviews", "booking link"],
+  assumptions: ["Prices are shown exactly as the site wrote them."],
+  consent: { owner_confirmed: true, by: "owner@example.com" },
+});
+
+await test("packFor picks the specs, the words and whether the site is static", () => {
+  assert.deepEqual(packFor(localBrief()), { id: "local", specs: "vertical-packs/local-business/specs", label: "restaurant", static: true });
+  assert.equal(packFor({ site: { kind: "product-showcase" } }).specs, "vertical-packs/product-showcase/specs");
+  assert.equal(packFor({ site: { kind: "saas-showcase" } }).static, true);
+  assert.deepEqual(packFor(JSON.parse(SITE_EXAMPLE_BRIEF)), { id: "waitlist", specs: "vertical-packs/site/specs", label: "waitlist", static: false });
+  assert.equal(packFor({ site: { kind: "local-business", business_type: "x; rm -rf" } }).label, "local business");
+});
+
+await test("a restaurant build uses the local specs, deploys without an owner area, and ends with a checklist and no sign-in", async () => {
+  const dir = await makeRunner({ static: true });
+  const { db, rec } = fakeDb("owner@example.com", localBrief());
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  assert.ok(args.includes("vertical-packs/local-business/specs"), args.join(" "));
+  assert.equal(args[0], "A restaurant website for Test Kitchen");
+  const b = rec.state.site!.build!;
+  assert.equal(b.stage, DONE_STAGE);
+  assert.match(b.url!, /^https:\/\/test-kitchen\.appnomics\.live$/);
+  assert.equal(b.adminUrl, undefined);
+  const card = rec.state.msgs.find((m) => m.kind === "site_ready");
+  assert.ok(card && card.kind === "site_ready" && card.password === undefined && card.adminUrl === undefined);
+  assert.ok(card.kind === "site_ready" && card.checks.some((c) => c.includes("customer reviews")) && card.checks.some((c) => /against your own copy/.test(c)));
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /not ready for restaurant sites/.test(last.text));
+});
+
+await test("the waitlist build still uses the waitlist specs", async () => {
+  const dir = await makeRunner({});
+  const { db } = fakeDb();
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  assert.ok(args.includes("vertical-packs/site/specs"));
+  assert.equal(args[0], "A waitlist website for Mealwise");
 });
 
 await test("a taken name is skipped and the next candidate is used", async () => {
