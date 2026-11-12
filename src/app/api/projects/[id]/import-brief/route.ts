@@ -10,6 +10,7 @@ import { ImportError } from "@/lib/builder/safe-fetch";
 import { crawlSite } from "@/lib/builder/site-extract";
 import { mapSnapshot } from "@/lib/builder/site-import";
 import { importToBrief } from "@/lib/builder/import-to-brief";
+import { importToLocalBrief } from "@/lib/builder/import-to-local-brief";
 import baseBrief from "@/lib/builder/artist-base-brief.json";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ const PER_HOUR = Number(process.env.SITE_IMPORT_LIMIT_PER_HOUR) > 0 ? Number(pro
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
 /**
- * "Make a draft store brief from this artist's website": POST { url, ownerConfirmed: true }.
+ * "Make a draft brief from this website": POST { url, ownerConfirmed: true | privateTest: true, pack?: "local-business" (default: the artist store), accent?: "#rrggbb" }.
  * Only for the people who run the builder for now. Nothing is saved or built: it returns the brief for the runner to build privately,
  * and the list of what the site did not give. It refuses unless the caller says the owner agreed to this site and its pictures being used.
  */
@@ -31,8 +32,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const p = await loadOwned(id, user.id);
   if (!p) return fail("Not found.", 404);
   if (!allowedEmails().includes((user.email ?? "").toLowerCase())) return fail("This is not switched on for your account.", 403);
-  const body = (await req.json().catch(() => null)) as { url?: unknown; ownerConfirmed?: unknown; privateTest?: unknown; debugAround?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { url?: unknown; ownerConfirmed?: unknown; privateTest?: unknown; debugAround?: unknown; pack?: unknown; accent?: unknown } | null;
   if (typeof body?.url !== "string") return fail("Please give the address of the website.", 400);
+  const pack = body.pack === "local-business" ? "local-business" : "artist-store";
   if (body.ownerConfirmed !== true && body.privateTest !== true) return fail("Say either that the owner agreed (ownerConfirmed: true) or that this is a private test (privateTest: true).", 400);
 
   const since = new Date(Date.now() - 3_600_000);
@@ -45,9 +47,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return fail("Reading websites is not switched on yet.", 503);
     const model = process.env.ANTHROPIC_IMPORT_MODEL || "claude-haiku-5-5";
-    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }), "catalog");
+    const { result, usage } = await mapSnapshot(anthropicComplete({ apiKey, model, timeoutMs: 40_000, maxTokens: 2000 }), snap, anthropicComplete({ apiKey, model, timeoutMs: 50_000, maxTokens: 8000 }), pack === "local-business" ? "menu" : "catalog");
     if (usage) await logUsage({ projectId: p.id, step: "site_import_map", model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd }).catch(() => {});
-    const { brief, notFound } = importToBrief(baseBrief as Record<string, unknown>, result, body.ownerConfirmed === true ? { ownerConfirmed: true, confirmedBy: user.email ?? "builder admin" } : { privateTest: true, by: user.email ?? "builder admin" });
+    const consent = body.ownerConfirmed === true ? ({ ownerConfirmed: true, confirmedBy: user.email ?? "builder admin" } as const) : ({ privateTest: true, by: user.email ?? "builder admin" } as const);
+    const { brief, notFound } = pack === "local-business"
+      ? importToLocalBrief(result, consent, { accent: typeof body.accent === "string" ? body.accent : undefined })
+      : importToBrief(baseBrief as Record<string, unknown>, result, consent);
     // Admin-only help for a page whose prices do not come out: the page's own extracted lines around a title, so the reading can be fixed from facts.
     const around = typeof body.debugAround === "string" && body.debugAround.trim()
       ? snap.pages.map((pg) => {
@@ -56,7 +61,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           return { url: pg.url, hits: at.slice(0, 3).map((n) => lines.slice(Math.max(0, n - 4), n + 10)) };
         }).filter((x) => x.hits.length)
       : undefined;
-    return NextResponse.json({ ...(around ? { around } : {}), brief, notFound, warnings: result.warnings, dropped: result.dropped, works: result.catalog.length, pagesRead: result.pagesRead });
+    return NextResponse.json({ ...(around ? { around } : {}), brief, notFound, warnings: result.warnings, dropped: result.dropped, pack, ...(pack === "local-business" ? { dishes: (result.menu ?? []).reduce((n, c) => n + c.items.length, 0) } : { works: result.catalog.length }), pagesRead: result.pagesRead });
   } catch (e) {
     if (e instanceof ImportError || (e as Error)?.name === "ImportError") return fail((e as Error).message, 422);
     if (e instanceof Error && /confirm|gave no name/i.test(e.message)) return fail(e.message, 422);

@@ -450,9 +450,10 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   const outline = sections.map((s) => `[${s.id}] (${new URL(s.url).pathname}) ${s.heading}: ${s.text.replace(/\s+/g, " ").slice(0, 160)}`).join("\n");
   const [basics, menu, other, works, quotesAnswer] = await Promise.all([
     ask(complete, BASICS_TOOL, body, "business details", warnings),
-    ask(menuComplete, MENU_TOOL, body, "menu", warnings),
+    // The chosen template decides what is worth asking: a menu site has no works to read, and a gallery or shop has no menu.
+    expect === "catalog" ? Promise.resolve(null) : ask(menuComplete, MENU_TOOL, body, "menu", warnings),
     sections.length ? ask(menuComplete, LABEL_TOOL, `Website: ${snap.rootUrl}\n\nSections:\n${outline}`, "other sections", warnings) : Promise.resolve(null),
-    ask(menuComplete, CATALOG_TOOL, body, "works", warnings),
+    expect === "menu" ? Promise.resolve(null) : ask(menuComplete, CATALOG_TOOL, body, "works", warnings),
     ask(menuComplete, TESTIMONIAL_TOOL, body, "testimonials", warnings),
   ]);
   const basicsDraft = basics ? lenient(Basics, basics.input) : {};
