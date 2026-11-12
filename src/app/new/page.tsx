@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { allowedEmails } from "@/auth";
 import { getUser } from "@/lib/session";
 import { initialState, pushMsg } from "@/lib/workspace/state";
 import { getSiteInterviewer } from "@/lib/agents/interviewer";
@@ -47,7 +48,7 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
     // The idea from the home page is the first answer.
     const ai = getSiteInterviewer();
     if (ai) {
-      const r = await ai.turn(state, idea, { userEmail: user.email ?? undefined });
+      const r = await ai.turn(state, idea, { userEmail: user.email ?? undefined, isAdmin: allowedEmails().includes((user.email ?? "").toLowerCase()) });
       state = { ...r.state, firstIdea: idea };
       usage = r.usage;
     }

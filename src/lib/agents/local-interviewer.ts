@@ -29,6 +29,12 @@ const CONFIRM: Tool = {
   input_schema: { type: "object", properties: { quote: { type: "string", description: "The person's own words, copied exactly from their latest message" } }, required: ["quote"] },
 };
 
+const PRIVATE: Tool = {
+  name: "confirm_private_test",
+  description: "Record that the person is running a private test of the builder with a site that is not theirs. Call only when their latest message says so in plain words (for example: this is a private test). Pass their own words, copied exactly.",
+  input_schema: { type: "object", properties: { quote: { type: "string", description: "The person's own words, copied exactly from their latest message" } }, required: ["quote"] },
+};
+
 const SYSTEM = `You are the interview agent of an AI website builder, helping a restaurant owner. Talk in plain, friendly words. You have two tools and nothing else: read_website and confirm_ownership. You cannot write the brief yourself; the builder makes it from what the website says.
 
 The flow:
@@ -68,6 +74,15 @@ const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/\
 const YES = /\b(yes|yeah|yep|yup|i am|i'm|i own|i run|we own|we run|mine|ours|my restaurant|our restaurant|owner|confirm(ed)?)\b/i;
 const NO = /\b(not|no|nope|never|dont|cannot|cant|wont)\b|n't/i;
 
+const TEST = /\b(private test|just a test|only a test|for testing|testing the builder)\b/i;
+
+/** For allow-listed people only: the quote must be their own words from their latest message and say it is a private test, and not say no. */
+export function saidPrivateTest(quote: unknown, latestUserText: string): boolean {
+  if (typeof quote !== "string" || quote.trim().length < 2 || quote.length > 400) return false;
+  const q = norm(quote);
+  return norm(latestUserText).includes(q) && TEST.test(q) && !NO.test(q);
+}
+
 /** The quote must be the person's own words from their latest message, say yes to ownership, and not say no. */
 export function ownerSaidYes(quote: unknown, latestUserText: string): boolean {
   if (typeof quote !== "string" || quote.trim().length < 2 || quote.length > 400) return false;
@@ -90,6 +105,7 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
       const saved = prev.site?.brief;
       const readBefore = Boolean(prev.local?.read); // a site read in an EARLIER turn: the person has been asked about it
       let system = SYSTEM;
+      if (ctx?.isAdmin) system += `\n\nThis person runs the builder and may be testing it. In step 2, ask whether this is their restaurant's website or a private test. If they say it is a private test, call confirm_private_test with their words instead of confirm_ownership. Never suggest a private test to someone who says the site is theirs.`;
       if (prev.local?.read) system += `\n\n<site_read>\n${JSON.stringify(summarizeRead(prev.local.read as unknown as ImportResult, prev.local.notFound ?? []))}\n</site_read>\nThis is what was read earlier from ${prev.local.url}.`;
       if (saved) system += `\n\nThe brief is already saved. Answer questions about it. Changing its text or pictures is not possible in this chat yet; say so and that it will be possible after the site is built.`;
       const convo: ChatMessage[] = toMessages(s);
@@ -97,7 +113,7 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
       const usage = () => ({ model, inputTokens: tokensIn, outputTokens: tokensOut, costUsd: cost });
       try {
         for (let step = 0; step < MAX_STEPS; step++) {
-          const r = await chat({ system, messages: convo, tools: saved ? [] : [READ, CONFIRM] });
+          const r = await chat({ system, messages: convo, tools: saved ? [] : ctx?.isAdmin ? [READ, CONFIRM, PRIVATE] : [READ, CONFIRM] });
           tokensIn += r.usage.inputTokens; tokensOut += r.usage.outputTokens; cost += r.usage.costUsd;
           if (!r.toolUses.length) {
             if (!r.text) throw new Error("The model sent an empty reply.");
@@ -105,7 +121,7 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
             return { state: { ...s, local, phase: saved ? "summary" : "intake" }, usage: usage() };
           }
           const results: unknown[] = [];
-          let savedNow: { brief: Record<string, unknown>; summary: ReturnType<typeof summarizeRead> } | null = null;
+          let savedNow: { brief: Record<string, unknown>; summary: ReturnType<typeof summarizeRead>; test?: boolean } | null = null;
           for (const tu of r.toolUses) {
             const input = (tu.input ?? {}) as { url?: unknown; quote?: unknown };
             const reply = (content: string, error = false) => results.push({ type: "tool_result", tool_use_id: tu.id, content, ...(error ? { is_error: true } : {}) });
@@ -138,6 +154,18 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
                 savedNow = { brief: v.brief as unknown as Record<string, unknown>, summary: summarizeRead(res, notFound) };
                 reply("Saved.");
               } catch (e) { reply(e instanceof Error ? e.message : "The brief could not be made.", true); }
+            } else if (tu.name === PRIVATE.name && ctx?.isAdmin) {
+              if (!readBefore || !prev.local?.read) { reply("No website has been read and shown to the person yet, so there is nothing to confirm. Read it and ask first.", true); continue; }
+              if (!saidPrivateTest(input.quote, text)) { reply("Their latest message does not clearly say this is a private test, or the quote is not their exact words. Ask again, in one short question.", true); continue; }
+              try {
+                const res = prev.local.read as unknown as ImportResult;
+                const { brief, notFound } = importToLocalBrief(res, { privateTest: true, by: ctx?.userEmail || "builder admin" });
+                brief.consent = { ...(brief.consent as Record<string, unknown>), quote: String(input.quote).trim(), at: new Date().toISOString() };
+                const v = validateSiteBrief(brief, "local");
+                if (!v.ok) { reply(v.error, true); continue; }
+                savedNow = { brief: v.brief as unknown as Record<string, unknown>, summary: summarizeRead(res, notFound), test: true };
+                reply("Saved as a private test.");
+              } catch (e) { reply(e instanceof Error ? e.message : "The brief could not be made.", true); }
             } else reply("Unknown tool.", true);
           }
           if (savedNow) {
@@ -145,7 +173,9 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
             const d = savedNow.summary;
             s = pushMsg({ ...s, phase: "summary", site: { brief: savedNow.brief }, local }, {
               kind: "bot",
-              text: `Thank you. Your brief is saved: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}, all taken from your website. You can read it next to this chat and download it. When it looks right, press Build my site.`,
+              text: savedNow.test
+                ? `Saved as a private test: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}. It will be built and put behind a login, and it is never published. Press Build my site when you are ready.`
+                : `Thank you. Your brief is saved: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}, all taken from your website. You can read it next to this chat and download it. When it looks right, press Build my site.`,
             });
             return { state: s, usage: usage() };
           }

@@ -84,11 +84,21 @@ export function packFor(brief: Record<string, unknown>): { id: "waitlist" | "sho
   return { id: "waitlist", specs: "vertical-packs/site/specs", label: "waitlist", static: false };
 }
 
+/** A brief marked as a private test is built and deployed only behind protection (the runner's --private), and never published for everyone. */
+export const isPrivateTest = (brief: Record<string, unknown>): boolean => packFor(brief).static && brief.private_test === true;
+
 /** The "Check these before you share it" list, built from the brief by code, not by the model. */
 export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
   const items = c.unconfirmed.map((u) => `Make sure this is true before you publish it: "${u}"`);
   const kind = (brief.site as { kind?: string } | undefined)?.kind;
+  if (isPrivateTest(brief)) {
+    return [
+      "This is a private test. It was built from a public website without the owner's go-ahead, and it is behind a login so only you can open it.",
+      "It is not published. To publish it for the owner, they must agree first, and it needs a new build from a brief they confirmed.",
+      "When you are done, delete the Vercel project it created (its name starts with private-).",
+    ];
+  }
   if (kind === "local-business") {
     // A restaurant site is made from the owner's own website: the list is what that site did not give, and what was chosen for them.
     const nf = (brief.not_found as string[] | undefined) ?? [];
@@ -294,12 +304,13 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
   setStage(4);
   const staticSite = packFor(brief).static;
+  const privateTest = isPrivateTest(brief);
   // A showcase or a restaurant site has no owner area, so no sign-in email and no password.
   const password = staticSite ? "" : randomBytes(12).toString("base64url");
   let url: string | null = null;
   let lastOut = "";
-  for (const name of nameCandidates(siteName)) {
-    const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, ...(staticSite ? [] : ["--email", ownerEmail])], {
+  for (const name of privateTest ? nameCandidates(siteName).map((n) => `private-${n}`.slice(0, 40).replace(/-+$/g, "")) : nameCandidates(siteName)) {
+    const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, ...(privateTest ? ["--private"] : []), ...(staticSite ? [] : ["--email", ownerEmail])], {
       cwd: runner,
       env: staticSite ? env : { ...env, ADMIN_PASSWORD: password },
       onLine: (line) => {
@@ -317,7 +328,8 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   if (!url) await stop(4, `Publishing did not work. ${tail(password ? lastOut.split(password).join("***") : lastOut)}`);
 
   // 4. Done: take a picture of the top of the live site for the ready panel, write the result and tell the person in the chat.
-  const heroOk = await heroShot(db, job, runDir, url!, env);
+  // A private test is behind a login, so a picture of its address would only show the login page.
+  const heroOk = privateTest ? false : await heroShot(db, job, runDir, url!, env);
   const { rows: now } = await db.query(`SELECT state FROM projects WHERE id = $1`, [job.project_id]);
   const s = now[0].state as WorkspaceState;
   const build: SiteBuild = { ...(s.site?.build ?? fallbackBuild), stage: DONE_STAGE, finishedAt: new Date().toISOString(), url: url!, ...(heroOk ? { heroJobId: job.id } : {}), ...(staticSite ? {} : { adminUrl: `${url}/admin/sign-in`, ownerEmail }) };
@@ -328,7 +340,9 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     msgs: [
       ...s.msgs,
       { id: s.nextId, kind: "site_ready", name: siteName, url: url!, ...(staticSite ? {} : { adminUrl: build.adminUrl!, ownerEmail, password }), checks: checklist(brief) },
-      { id: s.nextId + 1, kind: "bot", text: packFor(brief).id === "local"
+      { id: s.nextId + 1, kind: "bot", text: privateTest
+        ? "The private test is built and deployed behind a login. It is not published. Open it after signing in, and delete it when you are done."
+        : packFor(brief).id === "local"
         ? "Your site is live. Read the list under it, check the menu and prices against your own copy, then share it. Changing the site from this chat is not ready for restaurant sites yet."
         : "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
     ],

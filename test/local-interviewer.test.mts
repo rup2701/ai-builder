@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { makeLocalInterviewer, ownerSaidYes, summarizeRead } from "../src/lib/agents/local-interviewer";
+import { makeLocalInterviewer, ownerSaidYes, saidPrivateTest, summarizeRead } from "../src/lib/agents/local-interviewer";
 import { LOCAL_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
 import { localCard, validateSiteBrief } from "../src/lib/builder/site-brief";
 import { emptyState, pushMsg } from "../src/lib/workspace/state";
@@ -230,6 +230,37 @@ await test("summarizeRead is counts and names only", () => {
   const sum = summarizeRead(site, ["tagline"]);
   assert.equal(sum.menu_sections.length, 2);
   assert.ok(!JSON.stringify(sum).includes("We cook food"));
+});
+
+await test("saidPrivateTest needs their exact words about a private test", () => {
+  assert.equal(saidPrivateTest("this is a private test", "this is a private test"), true);
+  assert.equal(saidPrivateTest("this is a private test", "yes"), false);
+  assert.equal(saidPrivateTest("it is not a private test", "it is not a private test"), false);
+  assert.equal(saidPrivateTest("yes", "yes"), false);
+});
+
+await test("an admin can save a private test: marked, in their name, no ownership claim", async () => {
+  const s0 = await afterRead();
+  const { chat, calls } = script({ tools: [{ name: "confirm_private_test", input: { quote: "private test" } }] });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "It is a private test", { userEmail: "rp@example.com", isAdmin: true });
+  const brief = out.state.site!.brief as Record<string, any>;
+  assert.equal(validateSiteBrief(brief, "local").ok, true);
+  assert.equal(brief.private_test, true);
+  assert.equal(brief.consent.private_test, true);
+  assert.equal(brief.consent.owner_confirmed, undefined);
+  assert.equal(brief.images.owner_confirmed, false);
+  assert.equal(brief.consent.by, "rp@example.com");
+  assert.ok(calls[0].tools.some((t) => t.name === "confirm_private_test"));
+  assert.match(calls[0].system, /private test/);
+  assert.match(bots(out.state).at(-1)!, /never published/);
+});
+
+await test("someone who is not an admin has no private-test tool, and calling it saves nothing", async () => {
+  const s0 = await afterRead();
+  const { chat, calls } = script({ tools: [{ name: "confirm_private_test", input: { quote: "private test" } }] }, { text: "Is it yours?" });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "It is a private test", { userEmail: "x@example.com" });
+  assert.ok(!calls[0].tools.some((t) => t.name === "confirm_private_test"));
+  assert.equal(out.state.site, undefined);
 });
 
 if (failed) { console.log(`${failed} FAILED`); process.exit(1); }

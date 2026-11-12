@@ -70,7 +70,9 @@ console.log("\\n" + JSON.stringify({ runId: "r1", stopReason: "finished", estima
   );
   await writeFile(
     path.join(dir, "deploy.mjs"),
-    `const name = process.argv[process.argv.indexOf("--name") + 1];
+    `import { writeFileSync } from "node:fs";
+writeFileSync(new URL("./deploy-args.json", import.meta.url), JSON.stringify(process.argv.slice(2)));
+const name = process.argv[process.argv.indexOf("--name") + 1];
 if (name === ${JSON.stringify(opts.takenBase ?? "")}) { console.log('A Vercel project named "' + name + '" already exists in this account. Nothing was changed.'); process.exit(1); }
 for (let i = 1; i <= 7; i++) console.log(i + "/7 step");
 ${opts.static ? 'if (process.env.ADMIN_PASSWORD || process.argv.includes("--email")) process.exit(3);' : 'if (!process.env.ADMIN_PASSWORD) process.exit(2);'}
@@ -160,6 +162,33 @@ await test("a restaurant build uses the local specs, deploys without an owner ar
   assert.ok(card.kind === "site_ready" && card.checks.some((c) => c.includes("customer reviews")) && card.checks.some((c) => /against your own copy/.test(c)));
   const last = rec.state.msgs[rec.state.msgs.length - 1];
   assert.ok(last.kind === "bot" && /not ready for restaurant sites/.test(last.text));
+});
+
+await test("a private test deploys with --private under a private- name, with no hero picture and a private-test card", async () => {
+  const dir = await makeRunner({ static: true });
+  const brief = { ...localBrief(), private_test: true, consent: { private_test: true, by: "rp@example.com" } };
+  const { db, rec } = fakeDb("rp@example.com", brief);
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  const args = JSON.parse(await readFile(path.join(dir, "deploy-args.json"), "utf8")) as string[];
+  assert.ok(args.includes("--private"), args.join(" "));
+  assert.match(args[args.indexOf("--name") + 1], /^private-test-kitchen$/);
+  assert.ok(!args.includes("--email"));
+  const b = rec.state.site!.build!;
+  assert.equal(b.url, "https://private-test-kitchen.appnomics.live");
+  assert.equal(b.heroJobId, undefined);
+  const card = rec.state.msgs.find((m) => m.kind === "site_ready");
+  assert.ok(card && card.kind === "site_ready" && card.checks.some((c) => /private test/i.test(c)) && card.password === undefined);
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /not published/.test(last.text));
+});
+
+await test("an owner-confirmed restaurant build never passes --private", async () => {
+  const dir = await makeRunner({ static: true });
+  const { db } = fakeDb("owner@example.com", localBrief());
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  const args = JSON.parse(await readFile(path.join(dir, "deploy-args.json"), "utf8")) as string[];
+  assert.ok(!args.includes("--private"));
+  assert.ok(!args[args.indexOf("--name") + 1].startsWith("private-"));
 });
 
 await test("the waitlist build still uses the waitlist specs", async () => {

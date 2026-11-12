@@ -87,6 +87,7 @@ function localBody(c: ReturnType<typeof localCard>) {
   ].filter(Boolean);
   return (
     <>
+      {c.privateTest && <p className="rounded-xl bg-foreground/[0.06] px-3 py-2 text-foreground/80">Private test: it will be built behind a login and never published.</p>}
       <div>
         <p className="text-lg text-foreground">{c.name}</p>
         {c.kind && <p className="text-foreground/70">{c.kind}</p>}

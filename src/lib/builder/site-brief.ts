@@ -234,6 +234,7 @@ export function localCard(b: Record<string, unknown>) {
     address: String(contact.address ?? ""),
     links: Object.entries(links).filter(([, v]) => typeof v === "string" && v).map(([k]) => k),
     source: String(b.source_url ?? ""),
+    privateTest: b.private_test === true,
     notFound: ((b.not_found as string[] | undefined) ?? []),
   };
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
+import { allowedEmails } from "@/auth";
 import { getUser } from "@/lib/session";
 import { loadOwned, statusFor, titleFor } from "@/lib/projects";
 import { getInterviewer, getSiteInterviewer } from "@/lib/agents/interviewer";
@@ -34,7 +35,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const site = p.kind === "site";
   const interviewer = site ? getSiteInterviewer() : getInterviewer();
   if (!interviewer) return NextResponse.json({ error: "The website interview needs the model key (ANTHROPIC_API_KEY)." }, { status: 503 });
-  const result = await interviewer.turn(prev, body.data.text, { userEmail: user.email ?? undefined });
+  const result = await interviewer.turn(prev, body.data.text, { userEmail: user.email ?? undefined, isAdmin: allowedEmails().includes((user.email ?? "").toLowerCase()) });
   let state = result.state;
   if (site && state.site?.brief && JSON.stringify(state.site.brief) !== JSON.stringify(prev.site?.brief)) {
     await saveBriefForRunner(p.id, state).catch((e) => console.error("could not save the brief for the runner:", e instanceof Error ? e.message : e));

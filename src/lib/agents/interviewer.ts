@@ -14,7 +14,7 @@ import { intakeTurn, type TurnResult } from "@/lib/workspace/state";
  * schema in src/lib/builder/brief.ts, and anything the validator rejects is re-asked.
  */
 /** Who is talking, for the places the interview records it (the restaurant owner's confirmation). */
-export type TurnContext = { userEmail?: string };
+export type TurnContext = { userEmail?: string; /** On the builder allow-list: may save a private test of a site that is not theirs. */ isAdmin?: boolean };
 
 export interface Interviewer {
   turn(state: WorkspaceState, text: string, ctx?: TurnContext): Promise<TurnResult>;
