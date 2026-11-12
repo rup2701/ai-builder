@@ -47,7 +47,7 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
     // The idea from the home page is the first answer.
     const ai = getSiteInterviewer();
     if (ai) {
-      const r = await ai.turn(state, idea);
+      const r = await ai.turn(state, idea, { userEmail: user.email ?? undefined });
       state = { ...r.state, firstIdea: idea };
       usage = r.usage;
     }

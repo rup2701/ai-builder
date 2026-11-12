@@ -2,6 +2,9 @@ import type { WorkspaceState } from "@/lib/workspace/types";
 import { makeModelInterviewer } from "./model-interviewer";
 import { anthropicChat, anthropicComplete } from "./anthropic";
 import { makeSiteInterviewer } from "./site-interviewer";
+import { makeLocalInterviewer } from "./local-interviewer";
+import { readRestaurantSite } from "@/lib/builder/read-website";
+import { isLocal } from "@/lib/builder/site-brief";
 import { intakeTurn, type TurnResult } from "@/lib/workspace/state";
 
 /**
@@ -10,8 +13,11 @@ import { intakeTurn, type TurnResult } from "@/lib/workspace/state";
  * signature: it receives the knowledge pack as cached context, fills the brief through the
  * schema in src/lib/builder/brief.ts, and anything the validator rejects is re-asked.
  */
+/** Who is talking, for the places the interview records it (the restaurant owner's confirmation). */
+export type TurnContext = { userEmail?: string };
+
 export interface Interviewer {
-  turn(state: WorkspaceState, text: string): Promise<TurnResult>;
+  turn(state: WorkspaceState, text: string, ctx?: TurnContext): Promise<TurnResult>;
   /** Label written to the usage log. */
   model: string;
 }
@@ -33,5 +39,9 @@ export function getSiteInterviewer(): Interviewer | null {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return null;
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-  return makeSiteInterviewer(anthropicChat({ apiKey: key, model }), model);
+  const chat = anthropicChat({ apiKey: key, model });
+  const site = makeSiteInterviewer(chat, model);
+  const local = makeLocalInterviewer(chat, model, readRestaurantSite);
+  // The restaurant pack has its own interview; every other website pack uses the guide-driven one.
+  return { model, turn: (state, text, ctx) => (isLocal(state.sitePack) ? local : site).turn(state, text, ctx) };
 }

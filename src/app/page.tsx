@@ -46,7 +46,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ i
           </Link>
         </div>
       )}
-      <NewProject />
+      <NewProject localOn={process.env.ENABLE_LOCAL_PACK === "1"} />
     </AppShell>
   );
 }

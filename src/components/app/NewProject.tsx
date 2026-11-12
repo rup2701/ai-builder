@@ -17,7 +17,7 @@ const MIN_SITE = 15;
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 
 /** The prompt and starter cards on Home. Submitting opens /new, which makes the project and starts the conversation. */
-export default function NewProject() {
+export default function NewProject({ localOn = false }: { localOn?: boolean }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("site");
   const [text, setText] = useState("");
@@ -27,7 +27,8 @@ export default function NewProject() {
   const boxRef = useRef<HTMLTextAreaElement>(null);
 
   const current = KINDS.find((k) => k.id === kind)!;
-  const templates = kind === "site" ? SITE_TEMPLATES : STORE_TEMPLATES;
+  // The restaurant card stops saying "Coming soon" only where the restaurant pack is switched on (ENABLE_LOCAL_PACK, read on the server).
+  const templates = (kind === "site" ? SITE_TEMPLATES : STORE_TEMPLATES).map((t) => (t.pack === "local" && localOn ? { ...t, soon: false } : t));
   const value = text.trim();
   const valid = kind === "site" ? value.length >= MIN_SITE && !text.includes("___") : value.length > 0;
 

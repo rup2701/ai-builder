@@ -1,6 +1,6 @@
 "use client";
 
-import { briefCard } from "@/lib/builder/site-brief";
+import { briefCard, localCard } from "@/lib/builder/site-brief";
 import SiteTimeline from "./SiteTimeline";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
@@ -8,10 +8,13 @@ import type { WorkspaceState } from "@/lib/workspace/types";
 /** The side panel for a website project: the brief as the interview saved it, until the site is built. */
 export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean }) {
   const brief = st.site?.brief;
+  const local = (brief?.site as { kind?: string } | undefined)?.kind === "local-business";
   const c = brief ? briefCard(brief) : null;
+  const lc = brief && local ? localCard(brief) : null;
   const build = st.site?.build;
   const running = st.phase === "build" || st.phase === "verify";
   const canBuild = Boolean(c) && !running && !starting;
+  const siteName = lc ? lc.name : c?.name;
   const kind = (brief?.site as { kind?: string } | undefined)?.kind;
   const buildLabel = kind === "waitlist" ? "Build my waitlist site" : "Build my site";
   const finishedForReal = Boolean(build && build.stage >= DONE_STAGE && !build.fake);
@@ -43,11 +46,11 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
       <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-relaxed">
         {build && c ? (
           <div>
-            <SiteTimeline build={build} siteName={c.name || "your site"} projectId={projectId} />
+            <SiteTimeline build={build} siteName={siteName || "your site"} projectId={projectId} />
             {!running && !finishedForReal && <div className="mt-6">{(publishRetry ? buildButton("Retry publishing", "publish") : buildButton(build.failedStage !== undefined ? "Try again" : buildLabel))}</div>}
             <details className="mt-8 border-t border-foreground/10 pt-4">
               <summary className="cursor-pointer text-sm text-foreground/60">Your brief</summary>
-              <div className="mt-4 space-y-5">{briefBody(c)}</div>
+              <div className="mt-4 space-y-5">{lc ? localBody(lc) : briefBody(c)}</div>
             </details>
           </div>
         ) : !c ? (
@@ -56,7 +59,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
           </p>
         ) : (
           <div className="space-y-5" data-testid="brief-card">
-            {briefBody(c)}
+            {lc ? localBody(lc) : briefBody(c)}
             <div className="rounded-xl bg-foreground/[0.04] p-4">
               <p className="text-foreground/70">When the brief looks right, build the site. It takes about 45 minutes, and you can close this window while it runs.</p>
               <div className="mt-3">{buildButton(buildLabel)}</div>
@@ -74,6 +77,31 @@ function Part({ label, children }: { label: string; children: React.ReactNode })
       <p className="mb-0.5 text-xs uppercase tracking-wide text-foreground/45">{label}</p>
       <div className="text-foreground/80">{children}</div>
     </div>
+  );
+}
+
+function localBody(c: ReturnType<typeof localCard>) {
+  const found = [
+    c.hours.length ? "opening hours" : "", c.address ? "address" : "", c.hasStory ? "your story page" : "", c.hasCatering ? "catering" : "",
+    c.reviews ? `${c.reviews} customer review${c.reviews === 1 ? "" : "s"}` : "", c.links.length ? `links: ${c.links.join(", ")}` : "",
+  ].filter(Boolean);
+  return (
+    <>
+      <div>
+        <p className="text-lg text-foreground">{c.name}</p>
+        {c.kind && <p className="text-foreground/70">{c.kind}</p>}
+        {c.tagline && <p className="text-foreground/70">{c.tagline}</p>}
+      </div>
+      <Part label="Menu">{c.dishes} dishes in {c.sections.length} section{c.sections.length === 1 ? "" : "s"}{c.sections.length ? `: ${c.sections.join(", ")}` : ""}</Part>
+      <Part label="Pictures">{c.pictures ? `${c.pictures} from your website, each with its own description` : "None found"}</Part>
+      {found.length > 0 && <Part label="Also found">{found.join(" · ")}</Part>}
+      {c.source && <Part label="Taken from">{c.source}</Part>}
+      {c.notFound.length > 0 && (
+        <Part label="Not found on your website">
+          <ul className="list-disc space-y-0.5 pl-5">{c.notFound.map((u) => <li key={u}>{u}</li>)}</ul>
+        </Part>
+      )}
+    </>
   );
 }
 

@@ -76,6 +76,8 @@ export type WorkspaceState = {
   site?: { brief: Record<string, unknown>; build?: SiteBuild };
   /** Which website pack the interview and build use. Missing means the waitlist pack. */
   sitePack?: "waitlist" | "showcase" | "saas" | "local"; // "saas" is the old name of "showcase"
+  /** Restaurant projects: what the owner's website gave, kept until the owner confirms it is theirs and the brief is made from it. */
+  local?: { url: string; read?: Record<string, unknown>; reads: number; notFound?: string[] };
 };
 
 /** Progress of a website build, written by the worker and read by the side pane. */

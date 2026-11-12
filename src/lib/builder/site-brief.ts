@@ -212,3 +212,28 @@ export function briefCard(b: Record<string, unknown>) {
     contact: String(site.contact_email ?? ""),
   };
 }
+
+/** The restaurant brief in a few readable facts for the side panel: counts and names, never long text. Missing parts come back empty. */
+export function localCard(b: Record<string, unknown>) {
+  const site = (b.site ?? {}) as Record<string, any>;
+  const cats = ((b.menu as Record<string, any> | undefined)?.categories as { name: string; items: unknown[] }[] | undefined) ?? [];
+  const images = (b.images ?? {}) as Record<string, any>;
+  const links = (b.links ?? {}) as Record<string, unknown>;
+  const contact = (b.contact ?? {}) as Record<string, any>;
+  return {
+    name: String(site.name ?? ""),
+    kind: String(site.kind_label ?? site.business_type ?? ""),
+    tagline: String(site.tagline ?? ""),
+    dishes: cats.reduce((n, c) => n + (c.items?.length ?? 0), 0),
+    sections: cats.map((c) => c.name),
+    pictures: ((images.gallery as unknown[] | undefined) ?? []).length,
+    hasStory: Boolean(b.story),
+    hasCatering: Boolean(b.catering),
+    reviews: ((b.testimonials as unknown[] | undefined) ?? []).length,
+    hours: (contact.hours as string[] | undefined) ?? [],
+    address: String(contact.address ?? ""),
+    links: Object.entries(links).filter(([, v]) => typeof v === "string" && v).map(([k]) => k),
+    source: String(b.source_url ?? ""),
+    notFound: ((b.not_found as string[] | undefined) ?? []),
+  };
+}

@@ -1,0 +1,236 @@
+import assert from "node:assert/strict";
+import { makeLocalInterviewer, ownerSaidYes, summarizeRead } from "../src/lib/agents/local-interviewer";
+import { LOCAL_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
+import { localCard, validateSiteBrief } from "../src/lib/builder/site-brief";
+import { emptyState, pushMsg } from "../src/lib/workspace/state";
+import type { WorkspaceState } from "../src/lib/workspace/types";
+import type { ImportResult } from "../src/lib/builder/site-import";
+import type { ReadWebsite } from "../src/lib/builder/read-website";
+
+let failed = 0;
+async function test(name: string, fn: () => Promise<void> | void) {
+  try { await fn(); console.log("PASS", name); } catch (e) { failed++; console.log("FAIL", name, e); }
+}
+
+const site = {
+  name: "Test Kitchen", kind: "Indian and Himalayan restaurant", tagline: "Real food.", about: "We cook food from the hills.", address: "1 Test St", phone: "510-555-0100", hours: ["Open daily 10 to 10"],
+  menu: [{ category: "Appetizers", items: [{ name: "Veg Samosa", price: "$6.95" }, { name: "Papadam" }] }, { category: "Momo", items: [{ name: "Veg Steam Momo", price: "$15" }] }],
+  socials: [], testimonials: [], signup: false, sourceUrl: "https://testkitchen.example/", dropped: [], pagesRead: 3, readPages: [], textChars: 100, warnings: [], linksSeen: [], catalog: [], extras: [],
+  images: [{ src: "https://img.example.com/1.jpg", alt: "Veg Samosa" }, { src: "https://img.example.com/2.jpg", alt: "" }],
+  actions: [{ label: "Menu", url: "https://testkitchen.example/menu" }],
+} as unknown as ImportResult;
+const software = { ...site, name: "Acme Cloud", kind: "software company", menu: [], extras: [] } as unknown as ImportResult;
+
+const usage = { inputTokens: 1000, outputTokens: 100, costUsd: 0.02 };
+type Step = { text?: string; tools?: { name: string; input: unknown }[]; throws?: boolean };
+const script = (...steps: Step[]) => {
+  const calls: Parameters<Chat>[0][] = [];
+  let i = 0;
+  const chat: Chat = async (req) => {
+    calls.push(JSON.parse(JSON.stringify(req)));
+    const st = steps[Math.min(i++, steps.length - 1)];
+    if (st.throws) throw new Error("boom");
+    const toolUses = (st.tools ?? []).map((t, k) => ({ id: `tu${i}_${k}`, ...t }));
+    return { text: st.text ?? "", toolUses, content: [{ type: "text", text: st.text ?? "" }, ...toolUses.map((t) => ({ type: "tool_use", ...t }))], usage };
+  };
+  return { chat, calls };
+};
+const reader = (result: ImportResult = site, fail?: string) => {
+  const urls: string[] = [];
+  const read: ReadWebsite = async (url) => { urls.push(url); if (fail) throw new Error(fail); return { result, costUsd: 0.01, inputTokens: 500, outputTokens: 50 }; };
+  return { read, urls };
+};
+const start = (): WorkspaceState => pushMsg({ ...emptyState(), phase: "intake", sitePack: "local" }, { kind: "bot", text: LOCAL_OPENER });
+const bots = (s: WorkspaceState) => s.msgs.filter((m) => m.kind === "bot").map((m) => (m as { text: string }).text);
+const lastResult = (c: Parameters<Chat>[0]) => ((c.messages.at(-1)!.content as { content: string; is_error?: boolean }[])[0]);
+
+// A state after the site was read and shown to the person, ready for their answer.
+async function afterRead() {
+  const { chat } = script({ tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }] }, { text: "I found Test Kitchen with 3 dishes. Is this your website and may we use it?" });
+  const r = reader();
+  const ai = makeLocalInterviewer(chat, "fake", r.read);
+  const out = await ai.turn(start(), "My site is https://testkitchen.example", { userEmail: "owner@example.com" });
+  return out.state;
+}
+
+await test("ownerSaidYes needs the exact words, a yes, and no no", () => {
+  assert.equal(ownerSaidYes("Yes, I own it", "Yes, I own it, go ahead"), true);
+  assert.equal(ownerSaidYes("YES, I own   it", "yes, i own it!"), true);
+  assert.equal(ownerSaidYes("yes i own it", "Yes, I own it"), false);
+  assert.equal(ownerSaidYes("I own it", "Yes, I own it"), true);
+  assert.equal(ownerSaidYes("I own it", "no"), false);
+  assert.equal(ownerSaidYes("No, it is not mine", "No, it is not mine"), false);
+  assert.equal(ownerSaidYes("I don't own it", "I don't own it"), false);
+  assert.equal(ownerSaidYes("yes", "maybe later"), false);
+  assert.equal(ownerSaidYes("", "yes"), false);
+  assert.equal(ownerSaidYes(undefined, "yes"), false);
+  assert.equal(ownerSaidYes("x".repeat(500), "x".repeat(500)), false);
+});
+
+await test("reading the site the person typed keeps it and tells the model what was found", async () => {
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }] }, { text: "Found Test Kitchen. Is it yours?" });
+  const r = reader();
+  const out = await makeLocalInterviewer(chat, "fake", r.read).turn(start(), "My site is https://testkitchen.example");
+  assert.deepEqual(r.urls, ["https://testkitchen.example"]);
+  const res = lastResult(calls[1]);
+  assert.ok(!res.is_error);
+  const sum = JSON.parse(res.content);
+  assert.equal(sum.name, "Test Kitchen");
+  assert.equal(sum.dishes, 3);
+  assert.equal(sum.pictures_without_captions, 1);
+  assert.ok(sum.not_found.includes("customer reviews"));
+  assert.equal(out.state.local?.reads, 1);
+  assert.ok(out.state.local?.read);
+  assert.equal(out.state.phase, "intake");
+  assert.equal(out.state.site, undefined);
+  assert.equal(bots(out.state).at(-1), "Found Test Kitchen. Is it yours?");
+  assert.equal(out.usage?.costUsd, 0.02 * 2 + 0.01);
+  assert.equal(out.usage?.inputTokens, 2500);
+});
+
+await test("an address the person did not write is not read", async () => {
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "https://evil.example/" } }] }, { text: "Which website?" });
+  const r = reader();
+  const out = await makeLocalInterviewer(chat, "fake", r.read).turn(start(), "My site is https://testkitchen.example");
+  assert.deepEqual(r.urls, []);
+  assert.equal(lastResult(calls[1]).is_error, true);
+  assert.equal(out.state.local, undefined);
+});
+
+await test("an address without https is refused", async () => {
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "http://testkitchen.example" } }] }, { text: "Please send the https address." });
+  const r = reader();
+  await makeLocalInterviewer(chat, "fake", r.read).turn(start(), "My site is http://testkitchen.example");
+  assert.deepEqual(r.urls, []);
+  assert.equal(lastResult(calls[1]).is_error, true);
+});
+
+await test("a site that cannot be read gives the plain reason, and the try is counted", async () => {
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }] }, { text: "I could not open it." });
+  const r = reader(site, "That website did not answer.");
+  const out = await makeLocalInterviewer(chat, "fake", r.read).turn(start(), "https://testkitchen.example");
+  assert.equal(lastResult(calls[1]).content, "That website did not answer.");
+  assert.equal(out.state.local?.reads, 1);
+  assert.equal(out.state.local?.read, undefined);
+});
+
+await test("a site that is not a food business is not kept", async () => {
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "https://acme.example" } }] }, { text: "That does not look like a restaurant." });
+  const r = reader(software);
+  const out = await makeLocalInterviewer(chat, "fake", r.read).turn(start(), "https://acme.example");
+  assert.equal(lastResult(calls[1]).is_error, true);
+  assert.match(lastResult(calls[1]).content, /restaurants/);
+  assert.equal(out.state.local?.read, undefined);
+});
+
+await test("only three reads per project", async () => {
+  let s = start();
+  const r = reader();
+  for (let n = 0; n < 3; n++) {
+    const { chat } = script({ tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }] }, { text: "ok" });
+    s = (await makeLocalInterviewer(chat, "fake", r.read).turn(s, "https://testkitchen.example")).state;
+  }
+  const { chat, calls } = script({ tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }] }, { text: "ok" });
+  await makeLocalInterviewer(chat, "fake", r.read).turn(s, "https://testkitchen.example");
+  assert.equal(r.urls.length, 3);
+  assert.equal(lastResult(calls[1]).is_error, true);
+});
+
+await test("the model cannot confirm in the same turn it read the site", async () => {
+  const { chat, calls } = script(
+    { tools: [{ name: "read_website", input: { url: "https://testkitchen.example" } }, { name: "confirm_ownership", input: { quote: "I own it" } }] },
+    { text: "Is it yours?" },
+  );
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(start(), "I own it, https://testkitchen.example");
+  const results = calls[1].messages.at(-1)!.content as { is_error?: boolean }[];
+  assert.equal(results[1].is_error, true);
+  assert.equal(out.state.site, undefined);
+});
+
+await test("after the owner says yes, code builds and saves a valid brief with the owner's words as proof", async () => {
+  const s0 = await afterRead();
+  const { chat } = script({ tools: [{ name: "confirm_ownership", input: { quote: "Yes, I own it" } }] });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "Yes, I own it and you can use everything.", { userEmail: "owner@example.com" });
+  const brief = out.state.site!.brief as Record<string, any>;
+  assert.equal(validateSiteBrief(brief, "local").ok, true);
+  assert.equal(brief.consent.owner_confirmed, true);
+  assert.equal(brief.consent.by, "owner@example.com");
+  assert.equal(brief.consent.quote, "Yes, I own it");
+  assert.equal(brief.images.owner_confirmed, true);
+  assert.equal(brief.private_test, undefined);
+  assert.equal(brief.menu.categories[0].items[0].name, "Veg Samosa");
+  assert.equal(out.state.phase, "summary");
+  assert.match(bots(out.state).at(-1)!, /3 dishes in 2 menu sections/);
+  const card = localCard(brief);
+  assert.equal(card.name, "Test Kitchen");
+  assert.equal(card.dishes, 3);
+  assert.equal(card.pictures, 1);
+  assert.ok(card.notFound.includes("customer reviews"));
+});
+
+await test("a quote that is not in their message does not save", async () => {
+  const s0 = await afterRead();
+  const { chat, calls } = script({ tools: [{ name: "confirm_ownership", input: { quote: "Yes, I own the place" } }] }, { text: "Just to be sure, is it yours?" });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "ok sounds good", { userEmail: "owner@example.com" });
+  assert.equal(lastResult(calls[1]).is_error, true);
+  assert.equal(out.state.site, undefined);
+  assert.equal(out.state.phase, "intake");
+});
+
+await test("a no never saves, even if the model calls the tool", async () => {
+  const s0 = await afterRead();
+  const { chat } = script({ tools: [{ name: "confirm_ownership", input: { quote: "No, it is not my website" } }] }, { text: "Then I cannot use it." });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "No, it is not my website");
+  assert.equal(out.state.site, undefined);
+});
+
+await test("confirming with nothing read does not save", async () => {
+  const { chat, calls } = script({ tools: [{ name: "confirm_ownership", input: { quote: "Yes, I own it" } }] }, { text: "Which website?" });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(start(), "Yes, I own it");
+  assert.equal(lastResult(calls[1]).is_error, true);
+  assert.equal(out.state.site, undefined);
+});
+
+await test("once saved there are no tools, the saved state is kept and the model is told the brief is saved", async () => {
+  const s0 = await afterRead();
+  const a = makeLocalInterviewer(script({ tools: [{ name: "confirm_ownership", input: { quote: "Yes, I own it" } }] }).chat, "fake", reader().read);
+  const saved = (await a.turn(s0, "Yes, I own it", { userEmail: "o@example.com" })).state;
+  const { chat, calls } = script({ text: "It has three dishes." });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(saved, "How many dishes?");
+  assert.deepEqual(calls[0].tools, []);
+  assert.match(calls[0].system, /already saved/);
+  assert.ok(out.state.site?.brief);
+  assert.equal(out.state.phase, "summary");
+});
+
+await test("the model sees what was read earlier when the person answers", async () => {
+  const s0 = await afterRead();
+  const { chat, calls } = script({ text: "Thanks, is it yours?" });
+  await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "hmm");
+  assert.match(calls[0].system, /<site_read>/);
+  assert.match(calls[0].system, /Test Kitchen/);
+  assert.ok(calls[0].messages.at(-1)!.role === "user");
+});
+
+await test("a model failure gives a plain apology and keeps what was read", async () => {
+  const s0 = await afterRead();
+  const out = await makeLocalInterviewer(script({ throws: true }).chat, "fake", reader().read).turn(s0, "Yes");
+  assert.match(bots(out.state).at(-1)!, /Sorry/);
+  assert.ok(out.state.local?.read);
+  assert.equal(out.usage?.model, "local-fallback");
+});
+
+await test("an empty message changes nothing", async () => {
+  const s = start();
+  const out = await makeLocalInterviewer(script({ text: "x" }).chat, "fake", reader().read).turn(s, "   ");
+  assert.equal(out.state, s);
+});
+
+await test("summarizeRead is counts and names only", () => {
+  const sum = summarizeRead(site, ["tagline"]);
+  assert.equal(sum.menu_sections.length, 2);
+  assert.ok(!JSON.stringify(sum).includes("We cook food"));
+});
+
+if (failed) { console.log(`${failed} FAILED`); process.exit(1); }
+console.log("all passed");

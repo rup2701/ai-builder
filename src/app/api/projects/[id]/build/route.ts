@@ -27,6 +27,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   if (!state.site?.brief) return NextResponse.json({ error: "Finish the interview first: there is no saved brief yet." }, { status: 409 });
   if (state.phase === "build" || state.phase === "verify") return NextResponse.json({ error: "A build is already running." }, { status: 409 });
+  // The restaurant pack can be talked through but not built until the worker knows how (ENABLE_LOCAL_BUILD=1 once it does).
+  if (state.sitePack === "local" && process.env.ENABLE_LOCAL_BUILD !== "1") {
+    return NextResponse.json({ error: "Building restaurant sites is not switched on yet. Your brief is saved and will be ready when it is." }, { status: 409 });
+  }
 
   const running = await db
     .select({ id: schema.jobs.id })
