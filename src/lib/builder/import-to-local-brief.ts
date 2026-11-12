@@ -75,6 +75,11 @@ export function importToLocalBrief(r: ImportResult, consent: Consent, opts: { ac
   }).slice(0, 4);
   need(features, "catering page");
   const aboutTitle = (r.extras ?? []).find((e) => /story|about/i.test(e.title))?.title;
+  // A page the site itself calls its story or journey becomes the story page, in the owner's words with the footer cut off.
+  // When the site has none, there is no story page: the interview asks the owner for one.
+  const storyExtra = (r.extras ?? []).find((e) => (/story|journey/i.test(e.title) || /\/(our-?)?(story|journey)/i.test(e.url ?? "")) && !/cater/i.test(e.title) && cleanBody(e.body).length > 40);
+  const story = storyExtra ? { heading: storyExtra.title, body: cleanBody(storyExtra.body) } : null;
+  need(story, "story page");
 
   const brief: Brief = {
     schema_version: "1.0",
@@ -85,6 +90,7 @@ export function importToLocalBrief(r: ImportResult, consent: Consent, opts: { ac
     look: { design: "restaurant_001", mode: "light", accent: /^#[0-9a-f]{6}$/i.test(opts.accent ?? "") ? opts.accent : "#c2410c" },
     contact: { address: r.address ?? null, phone: r.phone ?? null, email: r.email ?? null, hours: r.hours ?? [] },
     links: { reserve, order, catering, menu: menuLink, delivery: [] },
+    story,
     about: r.about ? { heading: aboutTitle ?? "About us", body: r.about } : null,
     menu: {
       show_prices: true,

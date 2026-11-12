@@ -84,6 +84,18 @@ await test("the about heading is the site's own, and the text is copied", () => 
   assert.deepEqual(brief.about, { heading: "Our story", body: "We cook food from the Himalayas and India." });
   assert.equal(importToLocalBrief({ ...r, about: undefined }, test_).brief.about, null);
 });
+await test("a story page comes only from a page the site calls its story, in its own words", () => {
+  const long = "We pride ourselves on food that tastes like the hills we come from, cooked the way our families cook it.";
+  const withStory = { ...r, extras: [{ title: "Our story", body: `${long}\nOrder Now\n${FOOTER}`, url: "https://example.com/ourstory" }, ...(r.extras ?? [])] } as ImportResult;
+  const a = importToLocalBrief(withStory, test_);
+  assert.deepEqual(a.brief.story, { heading: "Our story", body: long });
+  assert.ok(!a.notFound.includes("story page"));
+  const b = importToLocalBrief(r, test_);
+  assert.equal(b.brief.story, null, "a short page of button words is not a story");
+  assert.ok(b.notFound.includes("story page"));
+  const c = importToLocalBrief({ ...r, extras: [{ title: "Customized catering menus", body: long, url: "https://example.com/catering" }] } as ImportResult, test_);
+  assert.equal(c.brief.story, null, "a catering page is never the story");
+});
 await test("what the site did not give is listed, and nothing is made up", () => {
   const { brief, notFound } = importToLocalBrief(r, test_);
   for (const k of ["email", "customer reviews", "social links"]) assert.ok(notFound.includes(k), k);
