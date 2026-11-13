@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { checklist, nameCandidates, packFor, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
+import { briefForRunner, checklist, nameCandidates, packFor, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
@@ -189,6 +189,29 @@ await test("an owner-confirmed restaurant build never passes --private", async (
   const args = JSON.parse(await readFile(path.join(dir, "deploy-args.json"), "utf8")) as string[];
   assert.ok(!args.includes("--private"));
   assert.ok(!args[args.indexOf("--name") + 1].startsWith("private-"));
+});
+
+await test("a restaurant brief goes to the runner with this project's request address, and the saved brief is not changed", async () => {
+  const b = localBrief();
+  const out = briefForRunner(b, "proj-1", { APP_URL: "https://builder.example/" } as NodeJS.ProcessEnv);
+  assert.deepEqual(out.reservations, { requests: true, endpoint: "https://builder.example/api/reserve/proj-1" });
+  assert.equal((b as { reservations?: unknown }).reservations, undefined);
+  assert.equal((briefForRunner(b, "p", {} as NodeJS.ProcessEnv).reservations as { endpoint: string }).endpoint, "https://builder.appnomics.dev/api/reserve/p");
+});
+
+await test("the request address is left out when the owner switched the form off, and never added to other packs", () => {
+  const off = { ...localBrief(), reservations: { requests: false } };
+  assert.equal(briefForRunner(off, "p"), off);
+  const wl = JSON.parse(SITE_EXAMPLE_BRIEF) as Record<string, unknown>;
+  assert.equal(briefForRunner(wl, "p"), wl);
+});
+
+await test("the file the runner reads carries the request address", async () => {
+  const dir = await makeRunner({ static: true });
+  const { db } = fakeDb("owner@example.com", localBrief());
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, APP_URL: "https://builder.example", ...quick });
+  const written = JSON.parse(await readFile(path.join(dir, "briefs", (await readdir(path.join(dir, "briefs")))[0]), "utf8"));
+  assert.equal(written.reservations.endpoint, "https://builder.example/api/reserve/p1");
 });
 
 await test("the waitlist build still uses the waitlist specs", async () => {

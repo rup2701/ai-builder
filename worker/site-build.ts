@@ -84,6 +84,19 @@ export function packFor(brief: Record<string, unknown>): { id: "waitlist" | "sho
   return { id: "waitlist", specs: "vertical-packs/site/specs", label: "waitlist", static: false };
 }
 
+/**
+ * The brief as the runner gets it. A restaurant site gets the address its table request form posts to: the Builder's own endpoint for this project.
+ * It is added here, not saved in the project, so it follows APP_URL and is never typed by the model. The owner can switch the form off with reservations.requests false;
+ * the site shows it only when the owner has no booking link of their own.
+ */
+export function briefForRunner(brief: Record<string, unknown>, projectId: string, env: NodeJS.ProcessEnv = process.env): Record<string, unknown> {
+  if (packFor(brief).id !== "local") return brief;
+  const res = (brief.reservations ?? {}) as { requests?: boolean };
+  if (res.requests === false) return brief;
+  const base = (env.APP_URL || "https://builder.appnomics.dev").replace(/\/$/, "");
+  return { ...brief, reservations: { requests: true, endpoint: `${base}/api/reserve/${projectId}` } };
+}
+
 /** A brief marked as a private test is built and deployed only behind protection (the runner's --private), and never published for everyone. */
 export const isPrivateTest = (brief: Record<string, unknown>): boolean => packFor(brief).static && brief.private_test === true;
 
@@ -228,7 +241,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     // 1. The brief goes where the runner looks for briefs.
     const briefFile = path.join(runner, "briefs", `${siteSlug(siteName)}-${job.id.slice(0, 8)}.json`);
     await mkdir(path.dirname(briefFile), { recursive: true });
-    await writeFile(briefFile, JSON.stringify(brief, null, 2));
+    await writeFile(briefFile, JSON.stringify(briefForRunner(brief, job.project_id, env), null, 2));
 
     // 2. Build: create runs the main build, the look pass and the independent checks.
     let runDir: string | undefined;

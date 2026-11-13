@@ -104,7 +104,7 @@ export function importToLocalBrief(r: ImportResult, consent: Consent, opts: { ac
     page_plan: { default_order: ["hero", "highlights", "menu", "about", "gallery", "reviews", "catering", "ways", "footer"], off: [] },
     source_url: r.sourceUrl,
     not_found: notFound,
-    not_in_this_version: ["table booking forms", "online ordering and payments", "a separate owner screen", "multiple locations", "languages other than English"],
+    not_in_this_version: ["checking which tables are free", "online ordering and payments", "an owner screen for table requests", "multiple locations", "languages other than English"],
     assumptions: [
       "Prices are shown exactly as the site wrote them. The owner can hide them with one request.",
       ...(reserve ? [`The Reserve button opens the site's own page (${reserve}). No booking service was found, so there is no booking form.`] : []),
