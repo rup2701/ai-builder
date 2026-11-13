@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Complete, Tool } from "./model-interviewer";
+import { SECTION_LABEL, SWITCHABLE, isScaffoldBrief, sectionHasContent, sectionsOff, type Switchable } from "../builder/local-edit";
 
 /**
  * "Change my site": Scout turns what the owner typed into a short plan they can check at a glance, and a clear
@@ -39,10 +40,10 @@ const TOOL: Tool = {
   },
 };
 
-const SYSTEM = (siteName: string, sections: string[], applied: string[], content: string) => `You help the owner of a website called "${siteName}" ask for changes to its public page. You rewrite their request so they can check it at a glance, and so the developer who makes the change gets a clear instruction. Always call the plan_change tool.
+const SYSTEM = (siteName: string, sections: string[], applied: string[], content: string, packNote: string) => `You help the owner of a website called "${siteName}" ask for changes to its public page. You rewrite their request so they can check it at a glance, and so the developer who makes the change gets a clear instruction. Always call the plan_change tool.
 
 The page has these sections, top to bottom: ${sections.join("; ")}.
-
+${packNote ? `\n${packNote}\n` : ""}
 ${content ? `What the page said when it was built, from the brief (it may be a little behind later changes):\n${content}\n\n` : ""}${applied.length ? `Changes already made and live on this site, newest last:\n${applied.map((a) => `- ${a}`).join("\n")}\n` : "No changes have been made through this chat yet.\n"}
 Rules:
 - The owner may ask a question instead of asking for a change ("why is this card bigger?", "what does this section do?", "how many plans are there?"). Then set "answer" to one to four plain sentences that answer it, using the page content, the section list and the list of live changes above, and leave everything else out. Say plainly when you cannot tell. Do not guess. When a change is the natural next step, end with one short sentence that offers it, for example "Tell me if you want it the same size as the others." Never make a change for a question and never ask the owner a question.
@@ -86,8 +87,61 @@ const SECTION_NAMES: Record<string, string> = {
   use_case_cards: "the use-case cards",
 };
 
+const isLocalBrief = (b: Record<string, unknown> | null | undefined): boolean => (b?.site as { kind?: string } | undefined)?.kind === "local-business";
+
+/** The site's name: a restaurant brief keeps it under site.name, a showcase brief at the top. */
+export function siteNameOf(brief: Record<string, unknown> | null | undefined): string {
+  const top = brief?.name;
+  const nested = (brief?.site as { name?: unknown } | undefined)?.name;
+  return typeof top === "string" && top ? top : typeof nested === "string" && nested ? nested : "this site";
+}
+
+/** What a restaurant page really draws, by the page rules, and what it does not. A section with nothing to show is a placeholder block in template mode. */
+export function localPage(brief: Record<string, unknown>): { shown: string[]; missing: string[]; scaffold: boolean } {
+  const b = brief as never;
+  const off = new Set(sectionsOff(b));
+  const scaffold = isScaffoldBrief(b);
+  const shown = ["the hero at the top (name, tagline and the table request form)"];
+  const missing: string[] = [];
+  for (const sec of SWITCHABLE) {
+    const label = SECTION_LABEL[sec as Switchable];
+    if (off.has(sec)) { missing.push(`${label} (switched off)`); continue; }
+    if (sectionHasContent(b, sec as Switchable)) shown.push(label);
+    else if (scaffold && sec !== "ways") shown.push(`${label} (placeholder block: coming soon)`);
+    else missing.push(`${label} (not on the page: nothing to show yet)`);
+  }
+  shown.push("the footer");
+  return { shown, missing, scaffold };
+}
+
+function localContent(brief: Record<string, unknown>): string {
+  const site = (brief.site ?? {}) as Record<string, unknown>;
+  const contact = (brief.contact ?? {}) as Record<string, unknown>;
+  const cats = ((brief.menu as { categories?: { name: string; items: { name: string; price?: string }[] }[] } | undefined)?.categories ?? []);
+  const menu = cats.map((c) => `${c.name}: ${c.items.map((i) => (i.price ? `${i.name} ${i.price}` : i.name)).join(", ")}`).join("\n");
+  return [
+    `Name: ${site.name ?? ""}`, site.kind_label ? `Kind: ${site.kind_label}` : "", site.tagline ? `Tagline: ${site.tagline}` : "",
+    contact.address ? `Address: ${contact.address}` : "", contact.phone ? `Phone: ${contact.phone}` : "",
+    Array.isArray(contact.hours) && contact.hours.length ? `Hours: ${(contact.hours as string[]).join("; ")}` : "",
+    menu ? `Menu:\n${menu}` : "Menu: none given yet", brief.story ? "Story: given" : "Story: none given yet",
+  ].filter(Boolean).join("\n");
+}
+
+/** Rules for a restaurant page, so a request for one of its sections is handled as the template's section and never as new code. */
+export function packNoteOf(brief: Record<string, unknown> | null | undefined): string {
+  if (!isLocalBrief(brief)) return "";
+  const { missing, scaffold } = localPage(brief!);
+  return [
+    "This is a restaurant site made from a fixed template. Its sections are: hero, Menu highlights (the \"From the menu\" cards), Menu, About or Our story, Our Food (the photo gallery), Customer reviews, Catering, Ways to order, footer. It has no other sections: no How it works, Pricing or Testimonials.",
+    scaffold ? "Sections with nothing to show are drawn as placeholder blocks (\"Dish 1\", \"Photo 1\", \"Coming soon\") for the owner to fill in." : "This site was built before placeholder blocks existed, so a section with nothing to show is not drawn at all.",
+    missing.length ? `Template sections not on the page now: ${missing.join("; ")}.` : "",
+    "Rules for this site: when the owner asks to add a section that is already on the page (even as a placeholder block), set decline to say it is already there and what to send to fill it (dish names and prices, or attached pictures). When they ask for a template section that is not on the page, plan to switch that section on with the content they give, and say in the instruction to use the template's own section and not to write a new one. When they ask for a section the template does not have, set decline to say so and name the nearest template section. Never invent dishes, prices, hours or pictures.",
+  ].filter(Boolean).join("\n");
+}
+
 /** The page's sections, in the brief's order, in plain words. */
 export function sectionsOf(brief: Record<string, unknown> | null | undefined): string[] {
+  if (isLocalBrief(brief)) return localPage(brief!).shown;
   const blocks = Array.isArray(brief?.blocks) ? (brief!.blocks as { type?: unknown }[]) : [];
   const names = blocks.map((b) => (typeof b?.type === "string" ? SECTION_NAMES[b.type] : undefined)).filter((x): x is string => Boolean(x));
   return names.length ? names : ["the hero", "the product preview", "How it works", "Pricing", "the closing call to action", "the footer"];
@@ -95,6 +149,7 @@ export function sectionsOf(brief: Record<string, unknown> | null | undefined): s
 
 /** The page's words, from the brief, as short text for the planner: enough to quote real values, never the whole brief. */
 export function pageContentOf(brief: Record<string, unknown> | null | undefined, max = 3500): string {
+  if (isLocalBrief(brief)) return localContent(brief!).slice(0, max);
   const blocks = Array.isArray(brief?.blocks) ? (brief!.blocks as Record<string, unknown>[]) : [];
   const text = blocks.map((b) => JSON.stringify(b)).join("\n");
   return text.length > max ? text.slice(0, max) + " …" : text;
@@ -104,10 +159,10 @@ export function pageContentOf(brief: Record<string, unknown> | null | undefined,
 export async function planChange(
   complete: Complete,
   text: string,
-  ctx: { siteName: string; sections: string[]; applied?: string[]; content?: string },
+  ctx: { siteName: string; sections: string[]; applied?: string[]; content?: string; packNote?: string },
 ): Promise<{ plan: ChangePlanT | null; usage: { inputTokens: number; outputTokens: number; costUsd: number } | null }> {
   try {
-    const ask = () => complete({ system: SYSTEM(ctx.siteName, ctx.sections, ctx.applied ?? [], ctx.content ?? ""), user: `The owner wrote:\n"""\n${text}\n"""\n\nCall plan_change.`, tool: TOOL });
+    const ask = () => complete({ system: SYSTEM(ctx.siteName, ctx.sections, ctx.applied ?? [], ctx.content ?? "", ctx.packNote ?? ""), user: `The owner wrote:\n"""\n${text}\n"""\n\nCall plan_change.`, tool: TOOL });
     // One retry: the model sometimes answers without calling the tool, or the call times out.
     const r = await ask().catch((e) => {
       console.error("change planner: first try failed:", e instanceof Error ? e.message : e);

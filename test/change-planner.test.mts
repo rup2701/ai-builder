@@ -41,3 +41,21 @@ console.log("answer ok");
 await planChange(async (req) => { seen = req.system; return { input: { decline: "That is already live: x." }, usage: u }; }, "x", ctx);
 assert.ok(seen.includes("Plain slips in the owner's text are fixed") && seen.includes("inside quotation marks stay exactly as typed"));
 console.log("slips ok");
+
+// A restaurant page is described by its own sections, never the showcase fallback.
+{
+  const { sectionsOf, packNoteOf, siteNameOf, pageContentOf } = await import("../src/lib/agents/change-planner");
+  const bukhara = { site: { name: "Bukhara", kind: "local-business" }, story: { body: "We started small." }, menu: { categories: [], highlights: [] }, images: { use_photos: false, gallery: [] }, links: {}, contact: {}, testimonials: [], catering: null, page_plan: { off: [] } };
+  const secs = sectionsOf(bukhara);
+  assert.ok(!secs.join(" ").includes("How it works") && !secs.join(" ").includes("Pricing"));
+  assert.ok(secs.some((x) => /^About/.test(x)));
+  assert.ok(!secs.some((x) => /Menu highlights/.test(x)), "an old site does not draw empty sections");
+  assert.match(packNoteOf(bukhara), /Menu highlights \(not on the page/);
+  assert.match(packNoteOf(bukhara), /built before placeholder blocks existed/);
+  assert.equal(siteNameOf(bukhara), "Bukhara");
+  assert.match(pageContentOf(bukhara), /Menu: none given yet/);
+  const fresh = { ...bukhara, page_plan: { off: [], scaffold: true } };
+  assert.ok(sectionsOf(fresh).some((x) => /^Menu highlights \(placeholder block/.test(x)));
+  assert.match(packNoteOf(fresh), /already on the page/);
+  assert.equal(packNoteOf({ blocks: [] }), "", "other packs get no restaurant note");
+}
