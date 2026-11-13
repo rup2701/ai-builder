@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import readXlsxFile from "read-excel-file/node";
+import { readXlsx } from "@/lib/builder/xlsx-read";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
 import { loadOwned } from "@/lib/projects";
 import { pushMsg } from "@/lib/workspace/state";
 import { localPlanText, withMenu } from "@/lib/builder/local-edit";
-import { cellText, MAX_SHEET_BYTES, menuFromRows, menuSummary, parseCsv } from "@/lib/builder/menu-sheet";
+import { MAX_SHEET_BYTES, menuFromRows, menuSummary, parseCsv } from "@/lib/builder/menu-sheet";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   let rows: unknown[][];
   try {
     if (lower.endsWith(".csv") || lower.endsWith(".tsv") || lower.endsWith(".txt")) rows = parseCsv(await file.text());
-    else if (lower.endsWith(".xlsx")) rows = (await readXlsxFile(Buffer.from(await file.arrayBuffer()))).map((r) => r.map(cellText));
+    else if (lower.endsWith(".xlsx")) rows = readXlsx(new Uint8Array(await file.arrayBuffer()));
     else return fail("Use a .csv or .xlsx file. In Excel or Sheets, choose Save as or Download as one of those.", 400);
   } catch {
     return fail("I could not open that file. Save it again as .csv or .xlsx and try once more.", 400);

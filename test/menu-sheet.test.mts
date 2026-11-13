@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { cellText, menuFromRows, menuSummary, parseCsv } from "../src/lib/builder/menu-sheet";
+import { readXlsx } from "../src/lib/builder/xlsx-read";
+import { zipSync, strToU8 } from "fflate";
 import { briefFromOwner, localPlanText, withMenu } from "../src/lib/builder/local-edit";
 
 let failed = 0;
@@ -97,6 +99,24 @@ await test("the menu goes into the brief, replaces the old one, and clears the n
   assert.equal(b.menu.highlights.length, 0);
   assert.match(localPlanText(out.brief), /Menu/);
   // Highlights now come from the real dishes, as colour blocks, in template mode.
+});
+
+await test("an .xlsx is read: first sheet by its relationship, inline and rich text, entities, gaps, numbers as stored", () => {
+  const sheet = '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Section</t></is></c><c r="B1" t="inlineStr"><is><t>Dish</t></is></c><c r="C1" t="inlineStr"><is><t>Price</t></is></c></row>'
+    + '<row r="3"><c r="A3" t="inlineStr"><is><r><t>Mai</t></r><r><t>ns</t></r></is></c><c r="B3" t="inlineStr"><is><t>Fish &amp; Chips</t></is></c><c r="C3"><v>12.5</v></c></row></sheetData></worksheet>';
+  const bytes = zipSync({
+    "xl/workbook.xml": strToU8('<workbook><sheets><sheet name="Menu" sheetId="1" r:id="rId7"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": strToU8('<Relationships><Relationship Id="rId7" Target="worksheets/sheet2.xml"/></Relationships>'),
+    "xl/worksheets/sheet2.xml": strToU8(sheet),
+    "xl/worksheets/sheet1.xml": strToU8("<worksheet><sheetData><row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>WRONG SHEET</t></is></c></row></sheetData></worksheet>"),
+  });
+  const rows = readXlsx(bytes);
+  assert.deepEqual(rows[0], ["Section", "Dish", "Price"]);
+  assert.deepEqual(rows[2], ["Mains", "Fish & Chips", "12.5"]);
+  const m = menuFromRows(rows);
+  assert.ok(m.ok && m.categories[0].items[0].name === "Fish & Chips" && m.categories[0].items[0].price === "12.5");
+  assert.throws(() => readXlsx(new Uint8Array([1, 2, 3])));
+  assert.throws(() => readXlsx(zipSync({ "readme.txt": strToU8("x") })), /No sheet/);
 });
 
 if (failed) { console.log(failed + " failed"); process.exit(1); }
