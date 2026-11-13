@@ -274,3 +274,13 @@ export function briefFromOwner(b: OwnerBasics, consent: { by: string; at: string
   if (!v.ok) return { error: v.error };
   return { brief: v.brief as unknown as Brief, notFound };
 }
+
+/** The brief with the menu from a spreadsheet. It replaces the menu, drops "menu" from the not-found list and keeps everything else. */
+export function withMenu(brief: Brief, categories: { name: string; items: { name: string; price?: string; description?: string }[] }[]): { brief: Brief } | { error: string } {
+  const b = brief as Record<string, unknown>;
+  const prev = (b.menu ?? {}) as Record<string, unknown>;
+  const nf = ((b.not_found as string[] | undefined) ?? []).filter((n) => n !== "menu");
+  const next = { ...b, menu: { ...prev, show_prices: prev.show_prices ?? true, highlights: [], categories }, not_found: nf };
+  const v = validateSiteBrief(next, "local");
+  return v.ok ? { brief: v.brief as unknown as Brief } : { error: "The menu could not be added. " + v.error };
+}

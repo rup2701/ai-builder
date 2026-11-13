@@ -355,6 +355,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const sheetRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [pane, setPane] = useState<"chat" | "preview">("chat");
@@ -504,6 +505,29 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
       setPane("chat");
     } catch {
       setSt((s) => pushMsg(s, { kind: "bot", text: "I couldn't reach the server just now. Try sending that again." }));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  /** A restaurant with a saved brief that is not built yet can take its menu from a spreadsheet (.csv or .xlsx). */
+  const canMenuFile = (st.site?.brief as { site?: { kind?: string } } | undefined)?.site?.kind === "local-business" && !st.site?.build && !editing;
+
+  async function sendMenuFile(files: FileList | null) {
+    const f = files?.[0];
+    if (sheetRef.current) sheetRef.current.value = "";
+    if (!f) return;
+    setPending(true);
+    try {
+      const form = new FormData();
+      form.append("file", f);
+      const r = await fetch(`/api/projects/${projectId}/menu-file`, { method: "POST", body: form });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) setSt(j.state as WorkspaceState);
+      else setSt((s) => pushMsg(s, { kind: "bot", text: j.error ?? "I could not read that file. Try again in a moment." }));
+      setPane("chat");
+    } catch {
+      setSt((s) => pushMsg(s, { kind: "bot", text: "I couldn't reach the server just now. Try attaching it again." }));
     } finally {
       setPending(false);
     }
@@ -1039,6 +1063,24 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                     </svg>
                   </button>
+                  {canMenuFile && (
+                    <>
+                      <input ref={sheetRef} type="file" accept=".csv,.tsv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => void sendMenuFile(e.target.files)} />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => sheetRef.current?.click()}
+                        title="Add your menu from a spreadsheet (.csv or .xlsx). Columns: Section, Dish, Price, Description"
+                        aria-label="Add your menu from a spreadsheet"
+                        className={`grid h-8 w-8 place-items-center rounded-lg ${busy ? "text-foreground/30" : "text-foreground/60 hover:bg-foreground/5"} ${focusRing}`}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <path d="M3 10h18M3 15h18M9 4v16" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
                   <button type="button" disabled title="Talk instead of typing (coming soon)" aria-label="Talk instead of typing (coming soon)" className="grid h-8 w-8 place-items-center rounded-lg text-foreground/30">
                     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
