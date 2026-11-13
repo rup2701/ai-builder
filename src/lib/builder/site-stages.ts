@@ -8,8 +8,8 @@ export const SITE_STAGES = [
   { id: "build", label: "Building the pages", blurb: "Writing the site from your brief. This is the long part." },
   { id: "look", label: "Polishing the look", blurb: "Checking spacing, type, images and layout against the look rules." },
   { id: "test", label: "Testing", blurb: "Running the checks on the finished site." },
-  { id: "online", label: "Putting it online", blurb: "Creating the database and publishing at your address." },
-  { id: "done", label: "Ready", blurb: "Your site is live." },
+  { id: "online", label: "Putting it online", blurb: "Publishing the site at its address." },
+  { id: "done", label: "Ready", blurb: "Your site is ready." },
 ] as const;
 
 export type StageId = (typeof SITE_STAGES)[number]["id"];

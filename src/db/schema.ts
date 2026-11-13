@@ -112,3 +112,31 @@ export const publishRequests = pgTable("publish_requests", {
   role: text("role").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Table requests from a restaurant site's booking form. A request is not a booking: the owner confirms by phone or email.
+ * The site posts to /api/reserve/<project id>; the owner is emailed, and the rows stay here for the admin screen later.
+ */
+export const tableRequests = pgTable(
+  "table_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    guestName: text("guest_name").notNull(),
+    phone: text("phone"),
+    email: text("email"),
+    /** The day and time the guest asked for, as they typed them (yyyy-mm-dd and hh:mm, in the restaurant's own time). */
+    day: text("day").notNull(),
+    time: text("time").notNull(),
+    partySize: integer("party_size").notNull(),
+    note: text("note"),
+    /** new | confirmed | declined. Only "new" is used until the owner screen exists. */
+    status: text("status").notNull().default("new"),
+    /** Whether the owner's email went out. A failed email never loses the request. */
+    emailed: boolean("emailed").notNull().default(false),
+    /** A one-way hash of the visitor's address, only to limit how many requests one person can send. */
+    ipHash: text("ip_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("table_requests_project_idx").on(t.projectId, t.createdAt)],
+);
