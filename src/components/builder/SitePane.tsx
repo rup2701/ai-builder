@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { briefCard, localCard } from "@/lib/builder/site-brief";
-import { sectionHasContent, sectionsOff, SWITCHABLE, type Switchable } from "@/lib/builder/local-edit";
+import { SECTION_LABEL, sectionsOff, type Switchable } from "@/lib/builder/local-edit";
 import SiteTimeline from "./SiteTimeline";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
 /** The side panel for a website project: the brief as the interview saved it, until the site is built. */
-export default function SitePane({ st, projectId, busy, visible, onBuild, starting, onState }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean; onState?: (s: WorkspaceState) => void }) {
+export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean }) {
   const brief = st.site?.brief;
   const local = (brief?.site as { kind?: string } | undefined)?.kind === "local-business";
   const c = brief ? briefCard(brief) : null;
   const lc = brief && local ? localCard(brief) : null;
+  const leftOff = brief && local ? sectionsOff(brief).map((x) => SECTION_LABEL[x as Switchable]).filter(Boolean) : [];
   const build = st.site?.build;
   const running = st.phase === "build" || st.phase === "verify";
   const canBuild = Boolean(c) && !running && !starting;
@@ -52,7 +52,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
             {!running && !finishedForReal && <div className="mt-6">{(publishRetry ? buildButton("Retry publishing", "publish") : buildButton(build.failedStage !== undefined ? "Try again" : buildLabel))}</div>}
             <details className="mt-8 border-t border-foreground/10 pt-4">
               <summary className="cursor-pointer text-sm text-foreground/60">Your brief</summary>
-              <div className="mt-4 space-y-5">{lc ? localBody(lc) : briefBody(c)}</div>
+              <div className="mt-4 space-y-5">{lc ? localBody(lc, leftOff) : briefBody(c)}</div>
             </details>
           </div>
         ) : !c ? (
@@ -61,8 +61,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
           </p>
         ) : (
           <div className="space-y-5" data-testid="brief-card">
-            {lc ? localBody(lc) : briefBody(c)}
-            {lc && brief && onState && !running ? <SectionSwitches st={st} projectId={projectId} onState={onState} /> : null}
+            {lc ? localBody(lc, leftOff) : briefBody(c)}
             <div className="rounded-xl bg-foreground/[0.04] p-4">
               <p className="text-foreground/70">When the brief looks right, build the site. It takes {lc ? "about 10 to 15 minutes" : "about 45 minutes"}, and you can close this window while it runs.</p>
               <div className="mt-3">{buildButton(buildLabel)}</div>
@@ -71,45 +70,6 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
         )}
       </div>
     </section>
-  );
-}
-
-const SECTION_LABEL: Record<Switchable, string> = { highlights: "Menu highlights", menu: "Menu", about: "About", gallery: "Our Food (pictures)", reviews: "Customer reviews", catering: "Catering", ways: "Ways to order" };
-
-/** The sections of the page, each with a switch. A section with nothing to show is greyed out and says so: it is never filled with invented content. */
-function SectionSwitches({ st, projectId, onState }: { st: WorkspaceState; projectId: string; onState: (s: WorkspaceState) => void }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState("");
-  const brief = st.site?.brief as Record<string, unknown>;
-  const off = new Set(sectionsOff(brief));
-  async function flip(section: Switchable, on: boolean) {
-    setBusy(section); setErr("");
-    try {
-      const r = await fetch(`/api/projects/${projectId}/sections`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ section, on }) });
-      const j = (await r.json().catch(() => ({}))) as { state?: WorkspaceState; error?: string };
-      if (r.ok && j.state) onState(j.state); else setErr(j.error ?? "That did not save. Try again.");
-    } catch { setErr("I couldn't reach the server just now. Try again."); }
-    finally { setBusy(null); }
-  }
-  return (
-    <Part label="Sections on your page">
-      <ul className="space-y-1.5" data-testid="section-switches">
-        {SWITCHABLE.map((s) => {
-          const has = sectionHasContent(brief, s);
-          const empty = has === false;
-          const on = !off.has(s);
-          return (
-            <li key={s}>
-              <label className={`flex items-center gap-2 ${empty ? "text-foreground/40" : ""}`}>
-                <input type="checkbox" checked={on && !empty} disabled={empty || busy !== null} onChange={(e) => flip(s, e.target.checked)} />
-                <span>{SECTION_LABEL[s]}{empty ? " (nothing to show yet)" : ""}</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-      {err && <p className="mt-1 text-red-700" role="alert">{err}</p>}
-    </Part>
   );
 }
 
@@ -122,7 +82,7 @@ function Part({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-function localBody(c: ReturnType<typeof localCard>) {
+function localBody(c: ReturnType<typeof localCard>, off: string[] = []) {
   const found = [
     c.hours.length ? "opening hours" : "", c.address ? "address" : "", c.hasStory ? "your story page" : "", c.hasCatering ? "catering" : "",
     c.reviews ? `${c.reviews} customer review${c.reviews === 1 ? "" : "s"}` : "", c.links.length ? `links: ${c.links.join(", ")}` : "",
@@ -138,6 +98,7 @@ function localBody(c: ReturnType<typeof localCard>) {
       <Part label="Menu">{c.dishes ? <>{c.dishes} dishes in {c.sections.length} section{c.sections.length === 1 ? "" : "s"}{c.sections.length ? `: ${c.sections.join(", ")}` : ""}</> : "No menu yet"}</Part>
       <Part label="Pictures">{c.pictures ? `${c.pictures} from your website, each with its own description` : "None found"}</Part>
       {found.length > 0 && <Part label="Also found">{found.join(" · ")}</Part>}
+      {off.length > 0 && <Part label="Left off the page">{off.join(", ")}</Part>}
       {c.source && <Part label="Taken from">{c.source}</Part>}
       {c.notFound.length > 0 && (
         <Part label={c.source ? "Not found on your website" : "Not given yet, so left out"}>

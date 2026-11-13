@@ -160,7 +160,7 @@ await test("after the owner says yes, code builds and saves a valid brief with t
   assert.equal(brief.private_test, undefined);
   assert.equal(brief.menu.categories[0].items[0].name, "Veg Samosa");
   assert.equal(out.state.phase, "summary");
-  assert.match(bots(out.state).at(-1)!, /3 dishes in 2 menu sections/);
+  assert.match(bots(out.state).at(-2)!, /3 dishes in 2 menu sections/);
   const card = localCard(brief);
   assert.equal(card.name, "Test Kitchen");
   assert.equal(card.dishes, 3);
@@ -337,9 +337,9 @@ async function noSiteAsked() {
   return (await ai.turn(start(), details, { userEmail: "o@example.com" })).state;
 }
 
-await test("an owner with no website: the brief is made from exactly what they typed, with no pictures and nothing invented", async () => {
+await test("a person with no website: the brief is made from exactly what they typed, with no pictures and nothing invented", async () => {
   const s0 = await noSiteAsked();
-  const { chat } = script({ tools: [{ name: "save_basics", input: { ...typed, quote: "Yes, I own it" } }] });
+  const { chat } = script({ tools: [{ name: "save_basics", input: { ...typed } }] });
   const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "Yes, I own it", { userEmail: "o@example.com" });
   const brief = out.state.site!.brief as Record<string, any>;
   assert.equal(validateSiteBrief(brief, "local").ok, true);
@@ -353,32 +353,24 @@ await test("an owner with no website: the brief is made from exactly what they t
   assert.equal(brief.story, null);
   assert.ok(brief.not_found.includes("story page") && brief.not_found.includes("pictures") && brief.not_found.includes("tagline"));
   assert.equal(out.state.phase, "summary");
-  assert.match(bots(out.state).at(-1)!, /4 dishes in 2 menu sections/);
-  assert.match(bots(out.state).at(-1)!, /Nothing was added/);
+  assert.match(bots(out.state).at(-2)!, /4 dishes in 2 menu sections/);
+  assert.match(bots(out.state).at(-2)!, /Nothing was added/);
 });
 
-await test("an owner with no website: a dish, price or phone they did not type is refused, nothing is saved", async () => {
+await test("a person with no website: a dish, price or phone they did not type is refused, nothing is saved", async () => {
   const s0 = await noSiteAsked();
   for (const bad of [{ ...typed, menu_text: typed.menu_text + "\nNaan $4" }, { ...typed, phone: "510-555-0100" }, { ...typed, name: "Spice hut" }, { ...typed, tagline: "Best curry in town" }, { ...typed, hours: ["Open daily"] }]) {
-    const { chat, calls } = script({ tools: [{ name: "save_basics", input: { ...bad, quote: "Yes, I own it" } }] }, { text: "Sorry." });
+    const { chat, calls } = script({ tools: [{ name: "save_basics", input: { ...bad } }] }, { text: "Sorry." });
     const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "Yes, I own it", { userEmail: "o@example.com" });
     assert.equal(out.state.site, undefined);
     assert.equal(lastResult(calls[1]).is_error, true);
   }
 });
 
-await test("an owner with no website: no yes, no save", async () => {
-  const s0 = await noSiteAsked();
-  const { chat, calls } = script({ tools: [{ name: "save_basics", input: { ...typed, quote: "not sure" } }] }, { text: "Are you the owner?" });
-  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "not sure", { userEmail: "o@example.com" });
-  assert.equal(out.state.site, undefined);
-  assert.equal(lastResult(calls[1]).is_error, true);
-});
-
-await test("an owner with no website: a name with no way to reach them is refused", async () => {
+await test("a person with no website: a name with no way to reach them is refused", async () => {
   const ai0 = makeLocalInterviewer(script({ text: "Anything else?" }).chat, "fake", reader().read);
   const s0 = (await ai0.turn(start(), "Spice Hut, an Indian kitchen", { userEmail: "o@example.com" })).state;
-  const { chat, calls } = script({ tools: [{ name: "save_basics", input: { name: "Spice Hut", kind_label: "Indian kitchen", quote: "Yes, I own it" } }] }, { text: "I need an address or phone." });
+  const { chat, calls } = script({ tools: [{ name: "save_basics", input: { name: "Spice Hut", kind_label: "Indian kitchen" } }] }, { text: "I need an address or phone." });
   const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "Yes, I own it", { userEmail: "o@example.com" });
   assert.equal(out.state.site, undefined);
   assert.match(lastResult(calls[1]).content, /address, a phone number or opening hours/);
@@ -395,6 +387,57 @@ await test("parseMenuText: sections, dishes, prices as typed, and no long lines"
   if (ok.ok) assert.deepEqual(ok.categories.map((c) => [c.name, c.items.map((i) => `${i.name}|${i.price ?? ""}`)]), [["Starters", ["Samosa|$6", "PAKORA|7.50"]], ["Drinks", ["Mango Lassi|", "Chai|$3"]]]);
   assert.equal(parseMenuText("a".repeat(90)).ok, false);
   assert.equal(parseMenuText("   ").ok, false);
+});
+
+await test("after the brief is saved Scout posts the page plan as a card, and the card's answer is applied by code without the model", async () => {
+  const { parsePlan, planReply } = await import("../src/lib/builder/plan-card");
+  const s0 = await saved();
+  const planText = bots(s0).at(-1)!;
+  const plan = parsePlan(planText);
+  assert.ok(plan, "the plan message is a card");
+  assert.deepEqual(plan!.added.slice(0, 1).concat(plan!.added.slice(-1)), ["Hero", "Footer"]);
+  assert.ok(plan!.extra.some((x) => /^Customer reviews/.test(x)), "a section with nothing to show is offered, marked as needing content");
+  assert.ok(!plan!.added.some((x) => /Customer reviews/.test(x)));
+  // The person ticks reviews on and drops Catering-type choices off; no model call happens.
+  let called = 0;
+  const chat: Chat = async () => { called++; throw new Error("no model call expected"); };
+  const reply = planReply(plan!, new Set([...plan!.added.filter((n) => n !== "About"), "Customer reviews (needs your content)"]));
+  assert.match(reply, /^Looks good\. Add: Customer reviews \(needs your content\)\. Drop: About\.$/);
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, reply, { userEmail: "o@example.com" });
+  assert.equal(called, 0);
+  const brief = out.state.site!.brief as Record<string, any>;
+  assert.deepEqual(brief.page_plan.off, ["about"]);
+  assert.match(bots(out.state).at(-1)!, /Left off: About/);
+  assert.match(bots(out.state).at(-1)!, /Customer reviews has nothing to show yet/);
+  assert.match(bots(out.state).at(-1)!, /Press Build my site/);
+});
+
+await test("a plan answer with no changes keeps everything and still needs no model", async () => {
+  const s0 = await saved();
+  const chat: Chat = async () => { throw new Error("no model call expected"); };
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "Looks good. No changes to the plan.");
+  assert.deepEqual((out.state.site!.brief as Record<string, any>).page_plan.off, []);
+  assert.match(bots(out.state).at(-1)!, /Nothing is switched off/);
+});
+
+await test("a private test gets no plan card, and a no-website owner does", async () => {
+  const s0 = await afterRead();
+  const t = await makeLocalInterviewer(script({ tools: [{ name: "confirm_private_test", input: { quote: "private test" } }] }).chat, "fake", reader().read).turn(s0, "It is a private test", { userEmail: "rp@example.com", isAdmin: true });
+  assert.ok(!bots(t.state).some((x) => /added these sections/.test(x)));
+  const n = await makeLocalInterviewer(script({ tools: [{ name: "save_basics", input: { ...typed } }] }).chat, "fake", reader().read).turn(await noSiteAsked(), "Yes, I own it", { userEmail: "o@example.com" });
+  assert.ok(bots(n.state).at(-1)!.includes("I've added these sections:"));
+});
+
+await test("About counts as filled when there is a story, and the plan card does not ask for content that is already there", async () => {
+  const { sectionHasContent } = await import("../src/lib/builder/local-edit");
+  assert.equal(sectionHasContent({ about: null, story: { body: "We started small." } }, "about"), true);
+  assert.equal(sectionHasContent({ about: null, story: null }, "about"), false);
+  assert.equal(sectionHasContent({ about: { body: "Hi" }, story: null }, "about"), true);
+  const s0 = await noSiteAsked();
+  const out = await makeLocalInterviewer(script({ tools: [{ name: "save_basics", input: { ...typed, story: "We started small." } }] }).chat, "fake", reader().read).turn(pushMsg(s0, { kind: "user", text: "Our story: We started small." }), "go ahead", { userEmail: "o@example.com" });
+  const plan = bots(out.state).at(-1)!;
+  assert.ok(plan.includes("- About"), "About is offered as on");
+  assert.ok(!/About \(needs your content\)/.test(plan));
 });
 
 if (failed) { console.log(`${failed} FAILED`); process.exit(1); }

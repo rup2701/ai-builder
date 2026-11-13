@@ -26,7 +26,8 @@ export function sectionHasContent(b: Brief, s: Switchable): boolean | "depends" 
   const images = (b.images ?? {}) as { gallery?: unknown[] };
   switch (s) {
     case "menu": return menu.some((c) => (c.items?.length ?? 0) > 0);
-    case "about": return Boolean(b.about);
+    // The page shows the story's first paragraph in this section when there is a story, so either one fills it.
+    case "about": return Boolean(b.about || b.story);
     case "gallery": return (images.gallery?.length ?? 0) >= MIN_GALLERY;
     case "reviews": return ((b.testimonials as unknown[] | undefined) ?? []).length > 0;
     case "catering": return Boolean(b.catering);
@@ -69,6 +70,57 @@ export function setSection(brief: Brief, section: unknown, on: unknown): EditRes
   const has = sectionHasContent(next, s);
   const note = on && has === false ? ` There is nothing to show in it yet (it was not found on the website or given by the owner), so it will not appear until there is.` : "";
   return { ok: true, brief: ok.brief as unknown as Brief, said: `The ${s} section is now ${on ? "on" : "off"}.${note}` };
+}
+
+export const SECTION_LABEL: Record<Switchable, string> = { highlights: "Menu highlights", menu: "Menu", about: "About", gallery: "Our Food", reviews: "Customer reviews", catering: "Catering", ways: "Ways to order" };
+const NEEDS = " (needs your content)";
+
+/**
+ * The page plan Scout shows once the brief is saved, in the format the chat turns into a card of ticks (plan-card.ts): the sections that
+ * are on, and "more sections to add" for the ones that are off or have nothing to show yet. The hero and the footer are always there.
+ * Written by code from the brief, so it only ever lists what the page rules know about.
+ */
+export function localPlanText(b: Brief): string {
+  const off = new Set(sectionsOff(b));
+  const added: string[] = ["Hero"];
+  const extra: string[] = [];
+  for (const s of SWITCHABLE) {
+    const has = sectionHasContent(b, s);
+    if (off.has(s)) extra.push(SECTION_LABEL[s]);
+    else if (has === false) extra.push(SECTION_LABEL[s] + NEEDS);
+    else added.push(SECTION_LABEL[s]);
+  }
+  added.push("Footer");
+  return ["Here is your page. Tick the sections you want, then press Looks good.", "", "I've added these sections:", ...added.map((x) => `- ${x}`), "", "More sections to add:", ...(extra.length ? extra : ["Nothing else to add right now"]).map((x) => `- ${x}`)].join("\n");
+}
+
+const sectionOfLabel = (name: string): Switchable | undefined => SWITCHABLE.find((s) => name.trim().toLowerCase().startsWith(SECTION_LABEL[s].toLowerCase()));
+
+/**
+ * The person's answer to the plan card ("Looks good. Add: Customer reviews. Drop: Catering."), applied by code with no model call.
+ * Returns null when the text is not a plan answer. A section with nothing to show can be ticked, but stays out until there is something.
+ */
+export function applyPlanReply(b: Brief, text: string): { brief: Brief; said: string } | null {
+  const t = text.trim();
+  if (!/^looks good\./i.test(t)) return null;
+  const list = (word: string) => { const m = new RegExp(`${word}: (.+?)\\.(?: |$)`, "i").exec(t); return m ? m[1].split(/,\s*/).map(sectionOfLabel).filter((x): x is Switchable => Boolean(x)) : []; };
+  let cur = b;
+  const empty: string[] = [];
+  for (const [sections, on] of [[list("add"), true], [list("drop"), false]] as const) {
+    for (const sec of sections) {
+      const r = setSection(cur, sec, on);
+      if (!r.ok) continue;
+      cur = r.brief;
+      if (on && sectionHasContent(cur, sec) === false) empty.push(SECTION_LABEL[sec]);
+    }
+  }
+  const off = sectionsOff(cur).map((x) => SECTION_LABEL[x as Switchable]).filter(Boolean);
+  const said = [
+    off.length ? `Done. Left off: ${off.join(", ")}.` : "Done. Nothing is switched off.",
+    empty.length ? `${empty.join(" and ")} ${empty.length === 1 ? "has" : "have"} nothing to show yet, so ${empty.length === 1 ? "it" : "they"} will appear once there is content for ${empty.length === 1 ? "it" : "them"}. After the site is built you can add it in the change box.` : "",
+    "Press Build my site when you are ready.",
+  ].filter(Boolean).join(" ");
+  return { brief: cur, said };
 }
 
 /** The sections switched off in a brief. */
@@ -137,7 +189,7 @@ export type OwnerBasics = {
  * The brief for an owner with no website. Everything comes from OwnerBasics, which the caller has checked against the person's own messages.
  * No pictures (the hero is a colour field), no reviews, no links: those are not invented. What is missing is listed in not_found.
  */
-export function briefFromOwner(b: OwnerBasics, consent: { by: string; quote: string; at: string }): { brief: Brief; notFound: string[] } | { error: string } {
+export function briefFromOwner(b: OwnerBasics, consent: { by: string; at: string }): { brief: Brief; notFound: string[] } | { error: string } {
   const name = clean(b.name ?? "");
   const kind = clean(b.kind_label ?? "");
   if (!name) return { error: "The restaurant's name is needed." };
@@ -165,7 +217,7 @@ export function briefFromOwner(b: OwnerBasics, consent: { by: string; quote: str
 
   const brief: Brief = {
     schema_version: "1.0",
-    purpose: "Brief built from details the owner typed in the chat, because the restaurant has no website to read. Everything here is the owner's own words. Anything the owner did not give is empty and listed under not_found.",
+    purpose: "Brief built from details the person typed in the chat, because the restaurant has no website to read. Everything here is their own words (they may be the owner or building the site for the owner). Anything the owner did not give is empty and listed under not_found.",
     site: { name, kind: "local-business", business_type: "restaurant", kind_label: kind, tagline: tagline || null },
     look: { design: "restaurant_001", mode: "light", accent: "#c2410c" },
     contact: { address: address || null, phone: phone || null, email: null, hours },
@@ -182,13 +234,13 @@ export function briefFromOwner(b: OwnerBasics, consent: { by: string; quote: str
     not_found: notFound,
     not_in_this_version: ["checking which tables are free", "online ordering and payments", "an owner screen for table requests", "multiple locations", "languages other than English"],
     assumptions: [
-      "There is no website, so everything here is what the owner typed. Nothing was added.",
+      "There is no website, so everything here is what was typed in the chat. Nothing was added.",
       "There are no pictures yet, so the top of the page is a colour field. The owner can add pictures later.",
       "Prices are shown exactly as the owner typed them. The owner can hide them with one request.",
       "The accent colour is a default. The owner can ask for another.",
     ],
     placeholders: [],
-    consent: { owner_confirmed: true, by: consent.by, quote: consent.quote, at: consent.at, source: "typed_by_owner" },
+    consent: { owner_confirmed: true, by: consent.by, at: consent.at, source: "typed_by_the_person_building_the_site" },
   };
   const v = validateSiteBrief(brief, "local");
   if (!v.ok) return { error: v.error };

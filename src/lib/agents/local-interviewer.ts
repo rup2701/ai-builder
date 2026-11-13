@@ -1,5 +1,5 @@
 import { importToLocalBrief } from "@/lib/builder/import-to-local-brief";
-import { briefFromOwner, setSection, setText, SWITCHABLE, type OwnerBasics } from "@/lib/builder/local-edit";
+import { applyPlanReply, briefFromOwner, localPlanText, setSection, setText, SWITCHABLE, type OwnerBasics } from "@/lib/builder/local-edit";
 import { localCard, validateSiteBrief } from "@/lib/builder/site-brief";
 import type { ImportResult } from "@/lib/builder/site-import";
 import type { ReadWebsite } from "@/lib/builder/read-website";
@@ -42,7 +42,7 @@ const PRIVATE: Tool = {
 
 const BASICS: Tool = {
   name: "save_basics",
-  description: "For an owner with NO website only. Save the restaurant from the details the person typed. Every value must be copied exactly from the person's own messages: never reword, correct, complete or invent anything, and leave out what they did not give. Call it only after you asked whether they own the restaurant and are happy for the site to be made from these details, and their latest message says yes (pass their words in quote, copied exactly).",
+  description: "For an owner with NO website only. Save the restaurant from the details the person typed. Every value must be copied exactly from the person's own messages: never reword, correct, complete or invent anything, and leave out what they did not give. Call it once you have a name, the kind of food and at least one of address, phone or hours, and you have offered the menu and the story once (they can skip both). Do not ask whether they own the restaurant: they may be building it for a client, and these are details they typed themselves.",
   input_schema: {
     type: "object",
     properties: {
@@ -54,9 +54,8 @@ const BASICS: Tool = {
       tagline: { type: "string", description: "A short line the person typed as their tagline. Never write one yourself." },
       menu_text: { type: "string", description: "The menu exactly as the person typed it, one dish per line with its price at the end, section names on their own lines. Leave out if not given." },
       story: { type: "string", description: "The story or about text exactly as the person typed it. Leave out if not given." },
-      quote: { type: "string", description: "The person's own words saying they own the restaurant and agree, copied exactly from their latest message" },
     },
-    required: ["name", "kind_label", "quote"],
+    required: ["name", "kind_label"],
   },
 };
 const UPDATE: Tool = {
@@ -74,9 +73,9 @@ const SYSTEM = `You are the interview agent of an AI website builder, helping a 
 
 The flow:
 1. The person gives their website address. Call read_website with it.
-2. Tell them what was found, in a few short lines: the restaurant's name, how many dishes and menu sections, whether opening hours, pictures, a story page and a catering page were found (use story_page_found and catering_page_found exactly; never guess), and what was NOT found (take this from the tool result). Then ask one question: is this their restaurant's website, and are they happy for the builder to use its text, menu and pictures for the new site?
+2. Tell them what was found, in a few short lines: the restaurant's name, how many dishes and menu sections, whether opening hours, pictures, a story page and a catering page were found (use story_page_found and catering_page_found exactly; never guess), and what was NOT found (take this from the tool result). Then ask one question: is this their restaurant's website (or their client's, if they are building it for someone), and are they happy for the builder to use its text, menu and pictures for the new site?
 3. Only when their latest message answers yes to that question, call confirm_ownership with their words, copied exactly. If they say no, are unsure, or say it is not theirs, do not call it; explain that the builder only uses a site with the owner's go-ahead.
-4. If they have no website, that is fine. Ask for the basics in a few short messages: first the restaurant's name and the kind of food; then the address, phone number and opening hours (they can skip any); then the menu, one dish per line with its price at the end, section names on their own lines (they can skip it); then, if they like, a few lines about their story and a tagline of their own (they can skip). Never write a tagline, a story, a dish or a price for them. You may suggest tagline ideas in chat; it only counts when they type it as theirs. When you have enough (a name, the kind of food, and at least one of address, phone or hours), tell them in a line or two what you will use and ask once: are they the owner, and are they happy for the site to be made from these details? When their latest message says yes, call save_basics with their details copied exactly and their words as the quote.
+4. If they have no website, that is fine. Ask for the basics in a few short messages: first the restaurant's name and the kind of food; then the address, phone number and opening hours (they can skip any, but at least one is needed); then the menu, one dish per line with its price at the end, section names on their own lines (they can skip it); then a few lines about the story and a tagline of their own (they can skip). Never write a tagline, a story, a dish or a price for them. You may suggest tagline ideas in chat; it only counts when they type it as theirs. Do not ask whether they own the restaurant: they may be building the site for a client. Once you have a name, the kind of food and at least one of address, phone or hours, and you have offered the menu and the story, call save_basics with their details copied exactly.
 5. If the tool returns an error, tell the person in plain words what went wrong and what to try (another address, or the menu page itself).
 
 Rules:
@@ -149,6 +148,11 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
       if (ctx?.isAdmin) system += `\n\nThis person runs the builder and may be testing it. In step 2, ask whether this is their restaurant's website or a private test. If they say it is a private test, call confirm_private_test with their words instead of confirm_ownership. Never suggest a private test to someone who says the site is theirs.`;
       if (prev.local?.read) system += `\n\n<site_read>\n${JSON.stringify(summarizeRead(prev.local.read as unknown as ImportResult, prev.local.notFound ?? []))}\n</site_read>\nThis is what was read earlier from ${prev.local.url}.`;
       const built = Boolean(prev.site?.build);
+      // The answer to the plan card is applied by code. No model call, nothing to get wrong.
+      if (saved && !built) {
+        const plan = applyPlanReply(saved, text);
+        if (plan) return { state: pushMsg({ ...s, site: { ...(s.site ?? {}), brief: plan.brief }, phase: "summary" }, { kind: "bot", text: plan.said }) };
+      }
       if (saved && built) system += `\n\nThe brief is saved and the site is already built. Answer questions about it. To change the site now the person uses the change box next to the chat; you cannot change anything.`;
       else if (saved) system += `\n\nThe brief is already saved and the site is not built yet. Answer questions about it. You may change the name, the tagline or the short line above the name with update_brief, only with the person's own exact words (their spelling and capital letters), and switch sections on or off with set_section. Report exactly what the tool says. The menu, prices, hours, address and pictures cannot be changed in this chat yet; say so, and that after the site is built they can ask for changes in the change box.`;
       let briefNow = saved as Record<string, unknown> | undefined;
@@ -227,9 +231,8 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
               briefNow = out.brief;
               reply(out.said);
             } else if (tu.name === BASICS.name && !saved) {
-              const i = input as Partial<OwnerBasics> & { quote?: unknown };
+              const i = input as Partial<OwnerBasics>;
               if (prev.msgs.filter((m) => m.kind === "user").length < 1) { reply("The person has not told you anything about the restaurant yet. Ask first.", true); continue; }
-              if (!ownerSaidYes(i.quote, text)) { reply("Their latest message does not clearly say yes, or the quote is not their exact words. Tell them what you will use and ask once: are they the owner, and are they happy for the site to be made from these details?", true); continue; }
               const strings: [string, unknown][] = [["name", i.name], ["kind_label", i.kind_label], ["address", i.address], ["phone", i.phone], ["tagline", i.tagline], ["story", i.story]];
               const bad = strings.find(([, v]) => typeof v === "string" && v.trim() && !typedBy(v, allUser));
               const badHours = (Array.isArray(i.hours) ? i.hours : []).find((h) => typeof h !== "string" || !typedBy(h, allUser));
@@ -237,7 +240,7 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
               if (bad || badHours || badMenu) { reply(`"${String(bad?.[0] ?? (badHours ? "hours" : "menu")).slice(0, 40)}" is not copied exactly from what the person typed. Use only their own words, exactly, and leave out anything they did not give.`, true); continue; }
               const made = briefFromOwner(
                 { name: String(i.name ?? ""), kind_label: String(i.kind_label ?? ""), address: typeof i.address === "string" ? i.address : undefined, phone: typeof i.phone === "string" ? i.phone : undefined, hours: Array.isArray(i.hours) ? (i.hours as string[]) : undefined, tagline: typeof i.tagline === "string" ? i.tagline : undefined, menu_text: typeof i.menu_text === "string" ? i.menu_text : undefined, story: typeof i.story === "string" ? i.story : undefined },
-                { by: ctx?.userEmail || "signed-in owner", quote: String(i.quote).trim(), at: new Date().toISOString() },
+                { by: ctx?.userEmail || "signed-in user", at: new Date().toISOString() },
               );
               if ("error" in made) { reply(made.error, true); continue; }
               savedTyped = { brief: made.brief };
@@ -251,8 +254,9 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
               kind: "bot",
               text: savedNow.test
                 ? `Saved as a private test: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}. It will be built and put behind a login, and it is never published. Press Build my site when you are ready.`
-                : `Thank you. Your brief is saved: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}, all taken from your website. You can read it next to this chat and download it. When it looks right, press Build my site.`,
+                : `Thank you. Your brief is saved: ${d.name}, with ${d.dishes} dishes in ${d.menu_sections.length} menu section${d.menu_sections.length === 1 ? "" : "s"}, all taken from your website. You can read it next to this chat and download it.`,
             });
+            if (!savedNow.test) s = pushMsg(s, { kind: "bot", text: localPlanText(savedNow.brief) });
             return { state: s, usage: usage() };
           }
           if (savedTyped) {
@@ -260,8 +264,9 @@ export function makeLocalInterviewer(chat: Chat, model: string, read: ReadWebsit
             const c = localCard(savedTyped.brief);
             s = pushMsg({ ...s, phase: "summary", site: { brief: savedTyped.brief }, local }, {
               kind: "bot",
-              text: `Thank you. Your brief is saved: ${c.name}${c.dishes ? `, with ${c.dishes} dish${c.dishes === 1 ? "" : "es"} in ${c.sections.length} menu section${c.sections.length === 1 ? "" : "s"}` : ", with no menu yet"}, all from what you typed. Nothing was added. You can read it next to this chat and download it. When it looks right, press Build my site.`,
+              text: `Thank you. Your brief is saved: ${c.name}${c.dishes ? `, with ${c.dishes} dish${c.dishes === 1 ? "" : "es"} in ${c.sections.length} menu section${c.sections.length === 1 ? "" : "s"}` : ", with no menu yet"}, all from what you typed. Nothing was added. You can read it next to this chat and download it.`,
             });
+            s = pushMsg(s, { kind: "bot", text: localPlanText(savedTyped.brief) });
             return { state: s, usage: usage() };
           }
           convo.push({ role: "assistant", content: r.content }, { role: "user", content: results });
