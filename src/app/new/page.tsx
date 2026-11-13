@@ -5,7 +5,7 @@ import { allowedEmails } from "@/auth";
 import { getUser } from "@/lib/session";
 import { initialState, pushMsg } from "@/lib/workspace/state";
 import { getSiteInterviewer } from "@/lib/agents/interviewer";
-import { LOCAL_OPENER, SHOWCASE_OPENER, SITE_OPENER } from "@/lib/agents/site-interviewer";
+import { hasLinkOrDomain, LOCAL_FIRST_REPLY, LOCAL_OPENER, SHOWCASE_OPENER, SITE_OPENER } from "@/lib/agents/site-interviewer";
 import { normalizePack } from "@/lib/builder/site-brief";
 import { logUsage } from "@/lib/usage";
 import { statusFor, titleFor } from "@/lib/projects";
@@ -27,7 +27,8 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
   const pack: "waitlist" | "showcase" | "local" = kind !== "site" ? "waitlist" : asked === "showcase" && switchOn ? "showcase" : asked === "local" && localOn ? "local" : "waitlist";
   const trimmed = (raw ?? "").trim().slice(0, 1000);
   // A website idea shorter than this is not enough to start from: Scout opens with its usual first question instead.
-  const idea = kind === "site" && trimmed.length < MIN_SITE_IDEA ? "" : trimmed;
+  const longEnough = kind === "site" && trimmed.length < MIN_SITE_IDEA ? "" : trimmed;
+  const idea = longEnough;
   const user = await getUser();
   if (!user) redirect(`/signin?${new URLSearchParams({ ...(idea ? { idea } : {}), ...(kind === "site" ? { kind } : {}), ...(pack !== "waitlist" ? { pack } : {}) })}`);
 
@@ -42,9 +43,12 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
     if (recent) redirect(`/projects/${recent.id}`);
   }
 
-  let state = kind === "site" ? siteStart(pack) : initialState(idea || undefined);
+  let state = kind === "site" ? siteStart(pack, Boolean(idea)) : initialState(idea || undefined);
   let usage: { model: string; inputTokens: number; outputTokens: number; costUsd: number } | undefined;
-  if (kind === "site" && idea) {
+  if (kind === "site" && idea && pack === "local" && !hasLinkOrDomain(idea)) {
+    // A restaurant that starts from a sentence: the sentence is the first message and Scout's answer is fixed text, so there is no model call.
+    state = { ...pushMsg(pushMsg(state, { kind: "user", text: idea }), { kind: "bot", text: LOCAL_FIRST_REPLY }), firstIdea: idea };
+  } else if (kind === "site" && idea) {
     // The idea from the home page is the first answer.
     const ai = getSiteInterviewer();
     if (ai) {
@@ -61,7 +65,11 @@ export default async function New({ searchParams }: { searchParams: Promise<{ id
   redirect(`/projects/${row.id}`);
 }
 
-function siteStart(pack: "waitlist" | "showcase" | "local") {
+function siteStart(pack: "waitlist" | "showcase" | "local", hasIdea = false) {
   const s = initialState();
-  return { ...pushMsg({ ...s, msgs: [], nextId: 1, phase: "intake" as const, sitePack: pack }, { kind: "bot", text: pack === "showcase" ? SHOWCASE_OPENER : pack === "local" ? LOCAL_OPENER : SITE_OPENER }) };
+  const base = { ...s, msgs: [], nextId: 1, phase: "intake" as const, sitePack: pack };
+  // A start from a sentence opens with that sentence and Scout's answer to it, with no separate welcome message: the welcome message asks
+  // the question the sentence already answers. The welcome message is only for a start with no sentence.
+  if (hasIdea) return base;
+  return { ...pushMsg(base, { kind: "bot", text: pack === "showcase" ? SHOWCASE_OPENER : pack === "local" ? LOCAL_OPENER : SITE_OPENER }) };
 }

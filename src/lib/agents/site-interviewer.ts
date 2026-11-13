@@ -23,6 +23,15 @@ export type Chat = (req: { system: string; messages: ChatMessage[]; tools: Tool[
 export const SITE_OPENER =
   "Hi! This site has one job: to test whether your idea has legs, so everything on the page will help you find that out.\n\nWhat's your idea about, in one or two sentences? Please include the name if you already have one.";
 
+/**
+ * Scout's second message when a restaurant starts from a sentence on a template ("A website for my restaurant, with the menu..."). We know the
+ * pack and the template, so what Scout asks next is the same for everyone: fixed text, no model call. A sentence that holds a link or a domain is
+ * not answered with this; Scout reads it instead.
+ */
+export const LOCAL_FIRST_REPLY =
+  "That sounds good. Do you already have a website for the restaurant?\n\nIf you do, please paste the link and I'll read it. If you don't, tell me the restaurant's name and the kind of food you serve, and we'll start from there.";
+export const hasLinkOrDomain = (t: string) => /(https?:\/\/|\b[a-z0-9-]+\.[a-z]{2,}\b)/i.test(t);
+
 export const LOCAL_OPENER =
   "Hi! I'll help you build a website for your restaurant.\n\nWhat is the link to your current website? I'll read it and start from what is already there.\n\nNo website? Just tell me, and I'll ask a few quick questions instead.";
 

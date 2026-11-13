@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { makeLocalInterviewer, ownerSaidYes, saidPrivateTest, summarizeRead } from "../src/lib/agents/local-interviewer";
-import { LOCAL_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
+import { hasLinkOrDomain, LOCAL_FIRST_REPLY, LOCAL_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
 import { localCard, validateSiteBrief } from "../src/lib/builder/site-brief";
 import { emptyState, pushMsg } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
@@ -438,6 +438,25 @@ await test("About counts as filled when there is a story, and the plan card does
   const plan = bots(out.state).at(-1)!;
   assert.ok(plan.includes("- About"), "About is offered as on");
   assert.ok(!/About \(needs your content\)/.test(plan));
+});
+
+await test("a restaurant that starts from a sentence is answered by Scout with no opener, and the model is told how to answer a description", async () => {
+  const s0 = { ...emptyState(), phase: "intake" as const, sitePack: "local" as const };
+  const { chat, calls } = script({ text: "That sounds good. Do you already have a website for the restaurant?" });
+  const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, "A website for my restaurant, with the menu, our story, a gallery and ways to book or order.", { userEmail: "o@example.com" });
+  assert.deepEqual(out.state.msgs.map((m) => m.kind), ["user", "bot"]);
+  assert.equal((calls[0].messages[0] as { content: string }).content.startsWith("Start the interview."), true);
+  assert.match(calls[0].system, /do they already have a website/);
+  assert.match(calls[0].system, /restaurant's name and the kind of food/);
+});
+
+await test("the fixed second message is for a sentence with no link; a link or domain goes to Scout to read", () => {
+  assert.equal(hasLinkOrDomain("A website for my restaurant, with the menu, our story, a gallery and ways to book or order."), false);
+  assert.equal(hasLinkOrDomain("My site is https://testkitchen.example"), true);
+  assert.equal(hasLinkOrDomain("testkitchen.com is my website"), true);
+  assert.match(LOCAL_FIRST_REPLY, /^That sounds good\. Do you already have a website for the restaurant\?/);
+  assert.match(LOCAL_FIRST_REPLY, /paste the link/);
+  assert.match(LOCAL_FIRST_REPLY, /name and the kind of food/);
 });
 
 if (failed) { console.log(`${failed} FAILED`); process.exit(1); }
