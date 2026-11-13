@@ -24,7 +24,7 @@ export const SITE_OPENER =
   "Hi! This site has one job: to test whether your idea has legs, so everything on the page will help you find that out.\n\nWhat's your idea about, in one or two sentences? Please include the name if you already have one.";
 
 export const LOCAL_OPENER =
-  "Hi! I'll help you build a website for your restaurant.\n\nDo you have a website now? If so, send me the link and I'll read it and start from what is already there.";
+  "Hi! I'll help you build a website for your restaurant.\n\nWhat is the link to your current website? I'll read it and start from what is already there.\n\nNo website? Just tell me, and I'll ask a few quick questions instead.";
 
 /** Until the local business interview is built, the template cannot start a site, and says so plainly. */
 export const LOCAL_NOT_READY = "The restaurant template is still being finished and cannot build a site yet. Please try again in a few days.";

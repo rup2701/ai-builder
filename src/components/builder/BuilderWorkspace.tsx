@@ -713,7 +713,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
 
       <div className={`grid min-h-0 flex-1 gap-3 px-3 pb-3 ${expanded ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(340px,430px)]"}`}>
         {site ? (
-          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} />
+          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} onState={setSt} />
         ) : (
           <>
         <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
