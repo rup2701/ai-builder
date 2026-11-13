@@ -20,18 +20,41 @@ const MIN_GALLERY = 3;
 const clone = (b: Brief): Brief => JSON.parse(JSON.stringify(b));
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
-/** Whether the brief has anything to show in a section. A section with nothing to show stays out even when it is switched on. */
-export function sectionHasContent(b: Brief, s: Switchable): boolean | "depends" {
-  const menu = ((b.menu as { categories?: { items?: unknown[] }[] } | undefined)?.categories ?? []);
-  const images = (b.images ?? {}) as { gallery?: unknown[] };
+const MIN_HIGHLIGHTS = 3;
+const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
+
+/**
+ * Whether the brief has anything to show in a section. This mirrors the page rules of the local-business pack (visibleSections in its content.ts),
+ * so the plan card does not offer a section that would be left out anyway. A section with nothing to show stays out even when it is switched on.
+ */
+export function sectionHasContent(b: Brief, s: Switchable): boolean {
+  const menu = ((b.menu as { categories?: { items?: { name?: string }[] }[]; highlights?: string[] } | undefined) ?? {});
+  const dishes = (menu.categories ?? []).flatMap((c) => c.items ?? []);
+  const images = (b.images ?? {}) as { gallery?: { alt?: string }[]; use_photos?: boolean };
+  const links = (b.links ?? {}) as Record<string, unknown>;
+  const phone = str((b.contact as { phone?: unknown } | undefined)?.phone);
   switch (s) {
-    case "menu": return menu.some((c) => (c.items?.length ?? 0) > 0);
-    // The page shows the story's first paragraph in this section when there is a story, so either one fills it.
+    case "menu": return dishes.length > 0;
+    // The story's first paragraph fills this section, so a story or an about text is enough.
     case "about": return Boolean(b.about || b.story);
     case "gallery": return (images.gallery?.length ?? 0) >= MIN_GALLERY;
     case "reviews": return ((b.testimonials as unknown[] | undefined) ?? []).length > 0;
     case "catering": return Boolean(b.catering);
-    default: return "depends";
+    case "highlights": {
+      // Pinned dishes first; else dishes with a picture whose description is exactly the dish name (and only when pictures are allowed).
+      const names = new Set(dishes.map((d) => norm(d.name ?? "")));
+      const pinned = (menu.highlights ?? []).filter((n) => names.has(norm(n))).length;
+      if (pinned) return pinned >= MIN_HIGHLIGHTS;
+      if (!images.use_photos) return false;
+      const alts = new Set((images.gallery ?? []).map((g) => norm(g.alt ?? "")));
+      return dishes.filter((d) => alts.has(norm(d.name ?? ""))).length >= MIN_HIGHLIGHTS;
+    }
+    case "ways": {
+      // Needs at least two cards. The site always gets a way to request a table; the others need a menu, an order link, or catering with a phone or link.
+      const cards = 1 + (dishes.length || str(links.menu) ? 1 : 0) + (str(links.order) || ((links.delivery as unknown[] | undefined)?.length ?? 0) ? 1 : 0) + (b.catering && (str(links.catering) || phone) ? 1 : 0);
+      return cards >= 2;
+    }
   }
 }
 
@@ -54,6 +77,10 @@ export function setText(brief: Brief, field: unknown, value: unknown): EditResul
   return { ok: true, brief: ok.brief as unknown as Brief, said: `${f === "kind_label" ? "The line above the name" : f === "name" ? "The name" : "The tagline"} is now "${v}".` };
 }
 
+/** Template mode: the page draws every section, with placeholder blocks where there is no content (page_plan.scaffold, set on every restaurant brief). Ways to order needs real links, so it never gets a placeholder. */
+export const isScaffoldBrief = (b: Brief): boolean => (b.page_plan as { scaffold?: boolean } | undefined)?.scaffold === true;
+const hasPlaceholder = (b: Brief, s: Switchable): boolean => isScaffoldBrief(b) && s !== "ways";
+
 /** Switch a section on or off. Off sections are listed in page_plan.off, which the page already honours. */
 export function setSection(brief: Brief, section: unknown, on: unknown): EditResult {
   if (!SWITCHABLE.includes(section as Switchable)) return { ok: false, error: `Sections that can be switched are: ${SWITCHABLE.join(", ")}. The top of the page and the footer are always shown.` };
@@ -67,13 +94,13 @@ export function setSection(brief: Brief, section: unknown, on: unknown): EditRes
   next.page_plan = plan;
   const ok = validateSiteBrief(next, "local");
   if (!ok.ok) return { ok: false, error: ok.error };
-  const has = sectionHasContent(next, s);
-  const note = on && has === false ? ` There is nothing to show in it yet (it was not found on the website or given by the owner), so it will not appear until there is.` : "";
+  const has = sectionHasContent(next, s) || hasPlaceholder(next, s);
+  const note = on && !has ? ` There is nothing to show in it yet (it was not found on the website or given by the owner), so it will not appear until there is.` : "";
   return { ok: true, brief: ok.brief as unknown as Brief, said: `The ${s} section is now ${on ? "on" : "off"}.${note}` };
 }
 
 export const SECTION_LABEL: Record<Switchable, string> = { highlights: "Menu highlights", menu: "Menu", about: "About", gallery: "Our Food", reviews: "Customer reviews", catering: "Catering", ways: "Ways to order" };
-const NEEDS = " (needs your content)";
+const NEEDS: Record<Switchable, string> = { highlights: " (needs pictures of your dishes)", menu: " (needs your content)", about: " (needs your content)", gallery: " (needs your content)", reviews: " (needs your content)", catering: " (needs your content)", ways: " (needs a menu or an order link)" };
 
 /**
  * The page plan Scout shows once the brief is saved, in the format the chat turns into a card of ticks (plan-card.ts): the sections that
@@ -87,7 +114,8 @@ export function localPlanText(b: Brief): string {
   for (const s of SWITCHABLE) {
     const has = sectionHasContent(b, s);
     if (off.has(s)) extra.push(SECTION_LABEL[s]);
-    else if (has === false) extra.push(SECTION_LABEL[s] + NEEDS);
+    else if (!has && hasPlaceholder(b, s)) added.push(SECTION_LABEL[s] + " (placeholder until you add it)");
+    else if (!has) extra.push(SECTION_LABEL[s] + NEEDS[s]);
     else added.push(SECTION_LABEL[s]);
   }
   added.push("Footer");
@@ -111,7 +139,7 @@ export function applyPlanReply(b: Brief, text: string): { brief: Brief; said: st
       const r = setSection(cur, sec, on);
       if (!r.ok) continue;
       cur = r.brief;
-      if (on && sectionHasContent(cur, sec) === false) empty.push(SECTION_LABEL[sec]);
+      if (on && !sectionHasContent(cur, sec) && !hasPlaceholder(cur, sec)) empty.push(SECTION_LABEL[sec]);
     }
   }
   const off = sectionsOff(cur).map((x) => SECTION_LABEL[x as Switchable]).filter(Boolean);
@@ -229,7 +257,7 @@ export function briefFromOwner(b: OwnerBasics, consent: { by: string; at: string
     catering: null,
     testimonials: [],
     socials: [],
-    page_plan: { default_order: ["hero", "highlights", "menu", "about", "gallery", "reviews", "catering", "ways", "footer"], off: [] },
+    page_plan: { default_order: ["hero", "highlights", "menu", "about", "gallery", "reviews", "catering", "ways", "footer"], off: [], scaffold: true },
     source_url: null,
     not_found: notFound,
     not_in_this_version: ["checking which tables are free", "online ordering and payments", "an owner screen for table requests", "multiple locations", "languages other than English"],

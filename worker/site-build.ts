@@ -113,11 +113,16 @@ export function checklist(brief: Record<string, unknown>): string[] {
     ];
   }
   if (kind === "local-business") {
-    // A restaurant site is made from the owner's own website: the list is what that site did not give, and what was chosen for them.
+    // A restaurant site is a template: what was not given is either a labelled placeholder on the page or left out. The wording depends on whether there is a website.
     const nf = (brief.not_found as string[] | undefined) ?? [];
-    for (const n of nf) items.push(`Your website did not give this, so it is left out: ${n}.`);
-    for (const a of (brief.assumptions as string[] | undefined) ?? []) items.push(a);
-    items.push("The menu, hours, text and pictures were copied from your website. Read the menu and prices once against your own copy before you share it.");
+    const fromSite = typeof brief.source_url === "string" && brief.source_url.length > 0;
+    const scaffold = (brief.page_plan as { scaffold?: boolean } | undefined)?.scaffold === true;
+    const PLACEHOLDER = new Set(["menu", "story page", "pictures", "customer reviews", "opening hours"]);
+    const who = fromSite ? "Your website did not give this" : "This was not given";
+    for (const n of nf) items.push(scaffold && PLACEHOLDER.has(n) ? `${who}, so the page shows a "coming soon" placeholder you can fill in later: ${n}.` : `${who}, so it is left out: ${n}.`);
+    for (const a of (brief.assumptions as string[] | undefined) ?? []) if (fromSite || !/copied from your website/.test(a)) items.push(a);
+    if (fromSite) items.push("The menu, hours, text and pictures were copied from your website. Read the menu and prices once against your own copy before you share it.");
+    else items.push("Everything on the page is what you typed in the chat. Read it once before you share it. You can add the menu, photos and the rest later.");
     return items;
   }
   if (kind === "product-showcase" || kind === "saas-showcase") {

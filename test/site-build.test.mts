@@ -132,6 +132,7 @@ await test("a good build ends Ready with the address, the password and the check
 
 // ---- the restaurant pack ----
 const localBrief = (): Record<string, unknown> => ({
+  source_url: "https://testkitchen.example",
   site: { name: "Test Kitchen", kind: "local-business", business_type: "restaurant" },
   not_found: ["customer reviews", "booking link"],
   assumptions: ["Prices are shown exactly as the site wrote them."],
@@ -278,3 +279,15 @@ await test("no RUNNER_DIR is a clear error", async () => {
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);
+
+await test("a restaurant with no website gets notes that fit it, and placeholders are named as placeholders", () => {
+  const brief = { site: { kind: "local-business" }, source_url: null, not_found: ["tagline", "menu", "pictures", "phone"], assumptions: ["There is no website, so everything here is what was typed in the chat. Nothing was added."], page_plan: { scaffold: true } };
+  const items = checklist(brief);
+  assert.ok(!items.some((i) => /website did not give|copied from your website/.test(i)));
+  assert.ok(items.includes('This was not given, so the page shows a "coming soon" placeholder you can fill in later: menu.'));
+  assert.ok(items.includes("This was not given, so it is left out: tagline."));
+  assert.ok(items.some((i) => /what you typed in the chat/.test(i)));
+  const site = checklist({ ...brief, source_url: "https://x.example", not_found: ["menu"] });
+  assert.ok(site.some((i) => /Your website did not give this, so the page shows a "coming soon"/.test(i)));
+  assert.ok(site.some((i) => /copied from your website/.test(i)));
+});

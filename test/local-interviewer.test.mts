@@ -311,7 +311,7 @@ await test("set_section switches a section off and on, and says when there is no
   assert.deepEqual((off.state.site!.brief as Record<string, any>).page_plan.off, ["catering"]);
   const { chat, calls } = script({ tools: [{ name: "set_section", input: { section: "reviews", on: true } }] }, { text: "ok" });
   await makeLocalInterviewer(chat, "fake", reader().read).turn(off.state, "turn on reviews");
-  assert.match(lastResult(calls[1]).content, /nothing to show/);
+  assert.equal(lastResult(calls[1]).content, "The reviews section is now on.", "in template mode an empty section is drawn as a placeholder, so there is nothing to warn about");
   const hero = script({ tools: [{ name: "set_section", input: { section: "hero", on: false } }] }, { text: "no" });
   const out = await makeLocalInterviewer(hero.chat, "fake", reader().read).turn(off.state, "remove the top of the page");
   assert.equal(lastResult(hero.calls[1]).is_error, true);
@@ -396,19 +396,19 @@ await test("after the brief is saved Scout posts the page plan as a card, and th
   const plan = parsePlan(planText);
   assert.ok(plan, "the plan message is a card");
   assert.deepEqual(plan!.added.slice(0, 1).concat(plan!.added.slice(-1)), ["Hero", "Footer"]);
-  assert.ok(plan!.extra.some((x) => /^Customer reviews/.test(x)), "a section with nothing to show is offered, marked as needing content");
-  assert.ok(!plan!.added.some((x) => /Customer reviews/.test(x)));
+  assert.ok(plan!.added.includes("Customer reviews (placeholder until you add it)"), "a section with nothing to show is on, marked as a placeholder");
+  assert.ok(!plan!.extra.some((x) => /Customer reviews/.test(x)));
   // The person ticks reviews on and drops Catering-type choices off; no model call happens.
   let called = 0;
   const chat: Chat = async () => { called++; throw new Error("no model call expected"); };
-  const reply = planReply(plan!, new Set([...plan!.added.filter((n) => n !== "About"), "Customer reviews (needs your content)"]));
-  assert.match(reply, /^Looks good\. Add: Customer reviews \(needs your content\)\. Drop: About\.$/);
+  const reply = planReply(plan!, new Set(plan!.added.filter((n) => n !== "About")));
+  assert.match(reply, /^Looks good\. Drop: About\.$/);
   const out = await makeLocalInterviewer(chat, "fake", reader().read).turn(s0, reply, { userEmail: "o@example.com" });
   assert.equal(called, 0);
   const brief = out.state.site!.brief as Record<string, any>;
   assert.deepEqual(brief.page_plan.off, ["about"]);
   assert.match(bots(out.state).at(-1)!, /Left off: About/);
-  assert.match(bots(out.state).at(-1)!, /Customer reviews has nothing to show yet/);
+  assert.ok(!/nothing to show yet/.test(bots(out.state).at(-1)!));
   assert.match(bots(out.state).at(-1)!, /Press Build my site/);
 });
 
@@ -459,5 +459,37 @@ await test("the fixed second message is for a sentence with no link; a link or d
   assert.match(LOCAL_FIRST_REPLY, /name and the kind of food/);
 });
 
+await test("the plan card mirrors the page rules: no menu means no highlights and no ways to order, and each says what it needs", async () => {
+  const { sectionHasContent, localPlanText } = await import("../src/lib/builder/local-edit");
+  const { parsePlan } = await import("../src/lib/builder/plan-card");
+  const noMenu = { menu: { categories: [], highlights: [] }, images: { use_photos: false, gallery: [] }, links: {}, contact: { phone: "510-555-0199" }, story: { body: "We started small." }, testimonials: [], catering: null };
+  const plan = parsePlan(localPlanText(noMenu))!;
+  assert.deepEqual(plan.added, ["Hero", "About", "Footer"]);
+  assert.ok(plan.extra.includes("Menu highlights (needs pictures of your dishes)"));
+  assert.ok(plan.extra.includes("Ways to order (needs a menu or an order link)"));
+  assert.ok(plan.extra.includes("Menu (needs your content)"));
+  const dishes = ["A", "B", "C"].map((n) => ({ name: n }));
+  const withMenu = { ...noMenu, menu: { categories: [{ name: "Mains", items: dishes }], highlights: [] } };
+  assert.equal(sectionHasContent(withMenu, "ways"), true, "a menu plus the request form is two cards");
+  assert.equal(sectionHasContent(withMenu, "highlights"), false, "dishes with no pictures are not highlights");
+  assert.equal(sectionHasContent({ ...withMenu, menu: { ...withMenu.menu, highlights: ["a", "B", "c"] } }, "highlights"), true, "three pinned dishes are");
+  assert.equal(sectionHasContent({ ...withMenu, images: { use_photos: true, gallery: dishes.map((d) => ({ alt: d.name, src: "https://x/y.jpg" })) } }, "highlights"), true, "three dishes with pictures named for them are");
+  assert.equal(sectionHasContent({ ...withMenu, images: { use_photos: false, gallery: dishes.map((d) => ({ alt: d.name })) } }, "highlights"), false, "pictures that may not be used do not count");
+  assert.equal(sectionHasContent({ ...noMenu, links: { order: "https://order.example" } }, "ways"), true);
+});
+
 if (failed) { console.log(`${failed} FAILED`); process.exit(1); }
 console.log("all passed");
+
+await test("template mode: every restaurant brief asks for placeholders, and ways to order still needs real links", async () => {
+  const { isScaffoldBrief, localPlanText } = await import("../src/lib/builder/local-edit");
+  const { parsePlan } = await import("../src/lib/builder/plan-card");
+  const s0 = await noSiteAsked();
+  const out = await makeLocalInterviewer(script({ tools: [{ name: "save_basics", input: typed }] }).chat, "fake", reader().read).turn(pushMsg(s0, { kind: "user", text: "x" }), "go", { userEmail: "o@example.com" });
+  const brief = out.state.site!.brief as Record<string, any>;
+  assert.equal(brief.page_plan.scaffold, true);
+  assert.equal(isScaffoldBrief(brief), true);
+  const plan = parsePlan(localPlanText(brief))!;
+  for (const n of ["Menu highlights", "Our Food", "Customer reviews", "Catering"]) assert.ok(plan.added.some((x) => x.startsWith(n)), n + " is on");
+  assert.ok(plan.added.some((x) => /^Customer reviews \(placeholder/.test(x)));
+});

@@ -101,7 +101,7 @@ export function importToLocalBrief(r: ImportResult, consent: Consent, opts: { ac
     catering: features.length ? { heading: "Catering", features } : null,
     testimonials: (r.testimonials ?? []).map((t) => (t.author ? { quote: t.quote, author: t.author } : { quote: t.quote })),
     socials: (r.socials ?? []).map((s) => ({ label: cap(s.network), url: s.url })).filter((s) => httpsOnly(s.url)),
-    page_plan: { default_order: ["hero", "highlights", "menu", "about", "gallery", "reviews", "catering", "ways", "footer"], off: [] },
+    page_plan: { default_order: ["hero", "highlights", "menu", "about", "gallery", "reviews", "catering", "ways", "footer"], off: [], scaffold: true },
     source_url: r.sourceUrl,
     not_found: notFound,
     not_in_this_version: ["checking which tables are free", "online ordering and payments", "an owner screen for table requests", "multiple locations", "languages other than English"],
