@@ -285,11 +285,12 @@ await test("a restaurant with no website gets notes that fit it, and placeholder
   const brief = { site: { kind: "local-business" }, source_url: null, not_found: ["tagline", "menu", "pictures", "phone"], assumptions: ["There is no website, so everything here is what was typed in the chat. Nothing was added."], page_plan: { scaffold: true } };
   const items = checklist(brief);
   assert.ok(!items.some((i) => /website did not give|copied from your website/.test(i)));
-  assert.ok(items.includes('This was not given, so the page shows a "coming soon" placeholder you can fill in later: menu.'));
-  assert.ok(items.includes("This was not given, so it is left out: tagline."));
+  assert.ok(items.includes('Not given, so the page shows "coming soon" blocks you can fill in later: menu and pictures.'), items.join(" | "));
+  assert.ok(items.includes("Not given, so it is left off the page: tagline and phone."), items.join(" | "));
+  assert.equal(items.filter((i) => /^Not given/.test(i)).length, 2, "one line for each kind of gap");
   assert.ok(items.some((i) => /what you typed in the chat/.test(i)));
   const site = checklist({ ...brief, source_url: "https://x.example", not_found: ["menu"] });
-  assert.ok(site.some((i) => /Your website did not give this, so the page shows a "coming soon"/.test(i)));
+  assert.ok(site.some((i) => /Not found on your website, so the page shows "coming soon" blocks/.test(i)));
   assert.ok(site.some((i) => /copied from your website/.test(i)));
 });
 

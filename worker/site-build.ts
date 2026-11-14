@@ -125,8 +125,13 @@ export function checklist(brief: Record<string, unknown>): string[] {
     const fromSite = typeof brief.source_url === "string" && brief.source_url.length > 0;
     const scaffold = (brief.page_plan as { scaffold?: boolean } | undefined)?.scaffold === true;
     const PLACEHOLDER = new Set(["menu", "story page", "pictures", "customer reviews", "opening hours"]);
-    const who = fromSite ? "Your website did not give this" : "This was not given";
-    for (const n of nf) items.push(scaffold && PLACEHOLDER.has(n) ? `${who}, so the page shows a "coming soon" placeholder you can fill in later: ${n}.` : `${who}, so it is left out: ${n}.`);
+    const who = fromSite ? "Not found on your website" : "Not given";
+    const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+    const soon = nf.filter((n) => scaffold && PLACEHOLDER.has(n));
+    const left = nf.filter((n) => !soon.includes(n));
+    // One line for each kind of gap, not one line per missing item.
+    if (soon.length) items.push(`${who}, so the page shows "coming soon" blocks you can fill in later: ${list(soon)}.`);
+    if (left.length) items.push(`${who}, so it is left off the page: ${list(left)}.`);
     for (const a of (brief.assumptions as string[] | undefined) ?? []) if (fromSite || !/copied from your website/.test(a)) items.push(a);
     if (fromSite) items.push("The menu, hours, text and pictures were copied from your website. Read the menu and prices once against your own copy before you share it.");
     else items.push("Everything on the page is what you typed in the chat. Read it once before you share it. You can add the menu, photos and the rest later.");
