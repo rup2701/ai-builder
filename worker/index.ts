@@ -10,7 +10,7 @@ import { finishBuild, BUILD_STEPS } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { notifyBuildEnd, projectLink } from "../src/lib/notify";
-import { patchSiteBuild as patchSiteBuildDb, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
+import { adminFailed, patchSiteBuild as patchSiteBuildDb, runSiteAdmin, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
 import { failSiteChangeMsg, runSiteChange } from "./site-change";
 
 // The agent saves its work with git commits. The worker image has no git identity of its own, and without one the
@@ -130,6 +130,11 @@ async function main() {
       await pool.query(`UPDATE jobs SET status = 'failed', error = 'restarted', finished_at = now() WHERE id = $1`, [j.id]);
       continue;
     }
+    if (j.type === "site_admin") {
+      await adminFailed(pool, j.project_id, "the builder restarted while it was working");
+      await pool.query(`UPDATE jobs SET status = 'failed', error = 'restarted', finished_at = now() WHERE id = $1`, [j.id]);
+      continue;
+    }
     await fail(j, new Error("The builder restarted while this build was running."));
     await pool.query(`UPDATE jobs SET finished_at = now() WHERE id = $1`, [j.id]);
   }
@@ -152,6 +157,10 @@ async function main() {
         if (process.env.WORKER_SITE_MODE !== "real") throw new Error("Publish retries only run in real mode.");
         await runSitePublish(pool, job);
       }
+      else if (job.type === "site_admin") {
+        if (process.env.WORKER_SITE_MODE !== "real") throw new Error("The owner area is only added in real mode.");
+        await runSiteAdmin(pool, job);
+      }
       else if (job.type === "site_change") {
         if (process.env.WORKER_SITE_MODE !== "real") throw new Error("Site changes only run in real mode.");
         const r = await runSiteChange(pool, job);
@@ -167,6 +176,9 @@ async function main() {
       if (job.type === "site_change") {
         await failSiteChangeMsg(pool, job, e instanceof Error ? e.message : String(e));
         await pool.query(`UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, [job.id, e instanceof Error ? e.message : String(e)]);
+      } else if (job.type === "site_admin") {
+        // The owner area is an add-on to a site that is already live: runSiteAdmin has told the chat, so only the job is marked.
+        await pool.query(`UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, [job.id, (e instanceof Error ? e.message : String(e)).slice(0, 500)]);
       } else await fail(job, e);
     }
   }

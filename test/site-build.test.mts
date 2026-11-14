@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { briefForRunner, checklist, nameCandidates, packFor, parseLiveUrl, parseSummary, runSiteBuild, runSitePublish, type Db } from "../worker/site-build";
+import { briefForRunner, checklist, nameCandidates, packFor, parseAdminUrl, parseLiveUrl, parseSummary, runSiteAdmin, runSiteBuild, runSitePublish, wantsAdmin, type Db } from "../worker/site-build";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
@@ -84,7 +84,7 @@ console.log("Live: https://" + name + ".appnomics.live");
 
 function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF)) {
   const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief, build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
-  const rec = { state: st, usage: [] as unknown[][], status: "building" };
+  const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[] };
   const db: Db = {
     async query(text, params = []) {
       if (text.includes("FROM projects p JOIN users")) return { rows: [{ state: rec.state, email }] };
@@ -97,6 +97,10 @@ function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JS
       if (text.startsWith("UPDATE projects SET state = $2")) {
         rec.state = JSON.parse(params[1] as string);
         rec.status = "ready";
+        return { rows: [] };
+      }
+      if (text.startsWith("INSERT INTO jobs")) {
+        rec.jobs.push(String(params[0]) + ":" + /'(\w+)'/.exec(text)?.[1]);
         return { rows: [] };
       }
       if (text.startsWith("INSERT INTO usage")) {
@@ -277,9 +281,6 @@ await test("no RUNNER_DIR is a clear error", async () => {
   await assert.rejects(() => runSiteBuild(db, { id: "j", project_id: "p" }, env), /RUNNER_DIR/);
 });
 
-console.log(failed ? `${failed} failed` : "all passed");
-process.exit(failed ? 1 : 0);
-
 await test("a restaurant with no website gets notes that fit it, and placeholders are named as placeholders", () => {
   const brief = { site: { kind: "local-business" }, source_url: null, not_found: ["tagline", "menu", "pictures", "phone"], assumptions: ["There is no website, so everything here is what was typed in the chat. Nothing was added."], page_plan: { scaffold: true } };
   const items = checklist(brief);
@@ -291,3 +292,123 @@ await test("a restaurant with no website gets notes that fit it, and placeholder
   assert.ok(site.some((i) => /Your website did not give this, so the page shows a "coming soon"/.test(i)));
   assert.ok(site.some((i) => /copied from your website/.test(i)));
 });
+
+// ---- stage two: the owner area and the site's own database ----
+await test("wantsAdmin: a restaurant site yes; a private test, a showcase, a waitlist site or the off switch no", () => {
+  assert.equal(wantsAdmin(localBrief(), {} as NodeJS.ProcessEnv), true);
+  assert.equal(wantsAdmin(localBrief(), { WORKER_RESTAURANT_ADMIN: "off" } as NodeJS.ProcessEnv), false);
+  assert.equal(wantsAdmin({ ...localBrief(), private_test: true }, {} as NodeJS.ProcessEnv), false);
+  assert.equal(wantsAdmin({ site: { kind: "product-showcase" } }, {} as NodeJS.ProcessEnv), false);
+  assert.equal(wantsAdmin(JSON.parse(SITE_EXAMPLE_BRIEF), {} as NodeJS.ProcessEnv), false);
+});
+
+await test("parseAdminUrl finds the owner sign-in address", () => assert.equal(parseAdminUrl("x\nAdmin: https://a.appnomics.live/admin/login\ny"), "https://a.appnomics.live/admin/login"));
+
+await test("a live restaurant site queues the owner area job and says so; the other kinds do not", async () => {
+  const dir = await makeRunner({ static: true });
+  const { db, rec } = fakeDb("owner@example.com", localBrief());
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  assert.deepEqual(rec.jobs, ["p1:site_admin"]);
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /adding your owner area now/.test(last.text) && /stays live/.test(last.text));
+  const off = fakeDb("owner@example.com", localBrief());
+  await runSiteBuild(off.db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, WORKER_RESTAURANT_ADMIN: "off", ...quick });
+  assert.deepEqual(off.rec.jobs, []);
+  const lastOff = off.rec.state.msgs[off.rec.state.msgs.length - 1];
+  assert.ok(lastOff.kind === "bot" && !/owner area/.test(lastOff.text));
+  const wl = fakeDb();
+  await runSiteBuild(wl.db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: await makeRunner({}), ...quick });
+  assert.deepEqual(wl.rec.jobs, []);
+});
+
+/** A stand-in runner for stage two. mode: ok | once (fails the first time) | always | kept. It records each call's arguments and whether ADMIN_PASSWORD was set. */
+async function makeAdminRunner(mode: "ok" | "once" | "always" | "kept") {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "runner-admin-"));
+  await mkdir(path.join(dir, "runs", "r1", "app"), { recursive: true });
+  await writeFile(path.join(dir, "package.json"), JSON.stringify({ scripts: { deploy: "node deploy.mjs" } }));
+  await writeFile(
+    path.join(dir, "deploy.mjs"),
+    `import { appendFileSync, readFileSync, existsSync } from "node:fs";
+const calls = new URL("./calls.log", import.meta.url);
+appendFileSync(calls, JSON.stringify({ args: process.argv.slice(2), pw: process.env.ADMIN_PASSWORD }) + "\\n");
+const n = readFileSync(calls, "utf8").trim().split("\\n").length;
+const mode = ${JSON.stringify(mode)};
+if (mode === "always" || (mode === "once" && n === 1)) { console.log("FAILED. The live site was not changed."); console.log("Neon did not create the project (402): project limit " + process.env.ADMIN_PASSWORD); process.exit(1); }
+if (mode === "kept") { console.log("The new version is deployed, but the site did not answer as expected. The database was kept."); process.exit(1); }
+console.log("Admin: https://test-kitchen.appnomics.live/admin/login");
+console.log("Owner sign-in: owner@example.com");
+`,
+  );
+  return dir;
+}
+const liveState = (dir: string, extra: Partial<SiteBuild> = {}) => {
+  const f = fakeDb("owner@example.com", localBrief());
+  f.rec.state.msgs = [{ id: 1, kind: "site_ready", name: "Test Kitchen", url: "https://test-kitchen.appnomics.live", checks: ["Read it once."] }];
+  f.rec.state.nextId = 2;
+  f.rec.state.site!.build = { stage: DONE_STAGE, startedAt: new Date().toISOString(), files: 3, url: "https://test-kitchen.appnomics.live", runDir: path.join(dir, "runs", "r1"), ...extra };
+  return f;
+};
+const callsOf = async (dir: string) => (await readFile(path.join(dir, "calls.log"), "utf8")).trim().split("\n").map((l) => JSON.parse(l) as { args: string[]; pw?: string });
+
+await test("the owner area job runs --add-database with the owner email and a password, then puts the sign-in on the ready card", async () => {
+  const dir = await makeAdminRunner("ok");
+  const { db, rec } = liveState(dir);
+  await runSiteAdmin(db, { id: "job-adm00001", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir });
+  const calls = await callsOf(dir);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes("--add-database") && calls[0].args[calls[0].args.indexOf("--email") + 1] === "owner@example.com", calls[0].args.join(" "));
+  assert.ok(!calls[0].args.includes(calls[0].pw!), "the password is not on the command line");
+  assert.ok(/\S{10,}/.test(calls[0].pw ?? ""), "a generated password reaches the deploy script through the environment");
+  const card = rec.state.msgs.find((m) => m.kind === "site_ready");
+  assert.ok(card && card.kind === "site_ready" && card.adminUrl === "https://test-kitchen.appnomics.live/admin/login" && card.ownerEmail === "owner@example.com" && card.password === calls[0].pw);
+  assert.equal(rec.state.site!.build!.adminUrl, "https://test-kitchen.appnomics.live/admin/login");
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /owner area is ready/.test(last.text) && !last.text.includes(calls[0].pw!));
+  assert.equal(rec.state.site!.build!.url, "https://test-kitchen.appnomics.live", "the live address is untouched");
+});
+
+await test("the owner area job tries once more after a failure, and the second try is enough", async () => {
+  const dir = await makeAdminRunner("once");
+  const { db, rec } = liveState(dir);
+  await runSiteAdmin(db, { id: "job-adm00002", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir });
+  assert.equal((await callsOf(dir)).length, 2);
+  assert.ok(rec.state.site!.build!.adminUrl);
+});
+
+await test("when it fails twice the chat says the public site is fine, the password never appears, and the job fails", async () => {
+  const dir = await makeAdminRunner("always");
+  const { db, rec } = liveState(dir);
+  await assert.rejects(() => runSiteAdmin(db, { id: "job-adm00003", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir }), /owner area was not added/);
+  const calls = await callsOf(dir);
+  assert.equal(calls.length, 2);
+  const last = rec.state.msgs[rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /live and works as before/.test(last.text) && /project limit/.test(last.text), last.kind === "bot" ? last.text : "");
+  assert.ok(!JSON.stringify(rec.state).includes(calls[0].pw!), "the password is not in the saved state or the message");
+  assert.equal(rec.state.site!.build!.adminUrl, undefined);
+  assert.equal(rec.state.site!.build!.url, "https://test-kitchen.appnomics.live");
+});
+
+await test("a database that was kept is never created a second time", async () => {
+  const dir = await makeAdminRunner("kept");
+  const { db } = liveState(dir);
+  await assert.rejects(() => runSiteAdmin(db, { id: "job-adm00004", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir }));
+  assert.equal((await callsOf(dir)).length, 1);
+});
+
+await test("a site that already has an owner area is left alone; a missing folder or a non-restaurant site is refused", async () => {
+  const dir = await makeAdminRunner("ok");
+  const done = liveState(dir, { adminUrl: "https://x/admin/login" });
+  await runSiteAdmin(done.db, { id: "j", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir });
+  assert.equal(await readFile(path.join(dir, "calls.log"), "utf8").catch(() => ""), "");
+  const gone = liveState(dir, { runDir: path.join(dir, "runs", "nope") });
+  await assert.rejects(() => runSiteAdmin(gone.db, { id: "j", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir }), /not added/);
+  const last = gone.rec.state.msgs[gone.rec.state.msgs.length - 1];
+  assert.ok(last.kind === "bot" && /no longer on the builder/.test(last.text));
+  const wl = fakeDb();
+  wl.rec.state.site!.build = { stage: DONE_STAGE, startedAt: "x", files: 1, url: "https://m.appnomics.live", runDir: path.join(dir, "runs", "r1") };
+  await assert.rejects(() => runSiteAdmin(wl.db, { id: "j", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir }), /restaurant/);
+});
+
+
+console.log(failed ? `${failed} failed` : "all passed");
+process.exit(failed ? 1 : 0);

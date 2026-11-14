@@ -100,6 +100,13 @@ export function briefForRunner(brief: Record<string, unknown>, projectId: string
 /** A brief marked as a private test is built and deployed only behind protection (the runner's --private), and never published for everyone. */
 export const isPrivateTest = (brief: Record<string, unknown>): boolean => packFor(brief).static && brief.private_test === true;
 
+/**
+ * Does this site get an owner area and its own database after it is live? A restaurant site that is not a private test does.
+ * WORKER_RESTAURANT_ADMIN=off turns it off without a code change (for example when Neon or Resend is not set up yet).
+ */
+export const wantsAdmin = (brief: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): boolean =>
+  packFor(brief).id === "local" && !isPrivateTest(brief) && env.WORKER_RESTAURANT_ADMIN !== "off";
+
 /** The "Check these before you share it" list, built from the brief by code, not by the model. */
 export function checklist(brief: Record<string, unknown>): string[] {
   const c = briefCard(brief);
@@ -361,13 +368,16 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
       { id: s.nextId + 1, kind: "bot", text: privateTest
         ? "The private test is built and deployed behind a login. It is not published. Open it after signing in, and delete it when you are done."
         : packFor(brief).id === "local"
-        ? "Your site is live. Read the list under it, check the menu and prices against your own copy, then share it. Changing the site from this chat is not ready for restaurant sites yet."
+        ? `Your site is live. Read the list under it, check the menu and prices against your own copy, then share it.${wantsAdmin(brief, env) ? " I am adding your owner area now, where you can edit the menu and see table requests. It takes a few minutes, and your public site stays live the whole time." : ""} Changing the site from this chat is not ready for restaurant sites yet.`
         : "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
     ],
     nextId: s.nextId + 2,
     site: { brief: s.site!.brief, build },
   };
   await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+  // Stage two of a restaurant site: the owner area and its own database are added after the public site is live, as a job of their own.
+  // Whether it works or not, the public site is already live. A failure only means the owner area is missing and the chat says so.
+  if (wantsAdmin(brief, env)) await db.query(`INSERT INTO jobs (project_id, type) VALUES ($1, 'site_admin')`, [job.project_id]).catch((e) => console.warn(`[admin] could not queue the owner area: ${e instanceof Error ? e.message : e}`));
   // The email is a courtesy, sent after everything is saved. It must never fail the build.
   await notifyBuildEnd(env, build.notifyEmail, { kind: "done", siteName, projectUrl: projectLink(env, job.project_id), siteUrl: url!, showcase: staticSite }).catch(() => {});
 }
@@ -407,6 +417,78 @@ export async function runSitePublish(db: Db, job: Job, env: NodeJS.ProcessEnv = 
   } finally {
     clearInterval(heartbeat);
   }
+}
+
+/** The deploy script prints "Admin: https://name.domain/admin/login" when the owner area is up. */
+export function parseAdminUrl(out: string): string | null {
+  return /^Admin:\s*(https:\/\/\S+)/m.exec(out)?.[1] ?? null;
+}
+
+/** Change the saved project state in place (read, change, write). Does not touch the project's status. */
+async function patchState(db: Db, projectId: string, change: (s: WorkspaceState) => WorkspaceState) {
+  const { rows } = await db.query(`SELECT state FROM projects WHERE id = $1`, [projectId]);
+  const s = rows[0]?.state as WorkspaceState | undefined;
+  if (!s) return;
+  await db.query(`UPDATE projects SET state = $2, updated_at = now() WHERE id = $1`, [projectId, JSON.stringify(change(s))]);
+}
+
+const botNote = (s: WorkspaceState, text: string): WorkspaceState => ({ ...s, msgs: [...s.msgs, { id: s.nextId, kind: "bot", text }], nextId: s.nextId + 1 });
+
+/** Said in the chat when the owner area could not be added. The public site is live and unchanged. */
+export async function adminFailed(db: Db, projectId: string, why: string) {
+  await patchState(db, projectId, (s) => botNote(s, `Your site is live and works as before. I could not add the owner area just now (${why.replace(/\s+/g, " ").slice(0, 280)}). Nothing on the public site changed.`)).catch(() => {});
+}
+
+/**
+ * Stage two of a restaurant site: the owner area and the site's own database (menu you can edit, table requests).
+ * Runs the runner's deploy with --add-database on the finished site. No model calls. The public site stays live; a failure
+ * is told in the chat and the deploy script removes the database it made, so the job can simply run again.
+ */
+export async function runSiteAdmin(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env) {
+  const runner = env.RUNNER_DIR;
+  if (!runner) throw new Error("RUNNER_DIR is not set on the worker, so it cannot find the runner.");
+  const { rows } = await db.query(
+    `SELECT p.state AS state, u.email AS email FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1`,
+    [job.project_id],
+  );
+  const start = rows[0]?.state as WorkspaceState | undefined;
+  const ownerEmail = String(rows[0]?.email ?? "");
+  const brief = start?.site?.brief;
+  const build = start?.site?.build;
+  if (!start || !brief || !build || !ownerEmail) throw new Error("The project has no saved brief or no owner.");
+  if (!wantsAdmin(brief, { ...env, WORKER_RESTAURANT_ADMIN: "on" })) throw new Error("Only a restaurant site that is not a private test gets an owner area.");
+  if (build.adminUrl) return; // it already has one
+  if (!build.url || !build.runDir || !existsSync(path.join(build.runDir, "app"))) {
+    const why = "the finished site is no longer on the builder, so it would have to be built again";
+    await adminFailed(db, job.project_id, why);
+    throw new Error(`The owner area was not added: ${why}.`);
+  }
+
+  const password = randomBytes(12).toString("base64url");
+  let out = "";
+  let code = 1;
+  // One quick retry: the deploy script removes the database it made when it fails, so running it again starts clean.
+  for (let attempt = 0; attempt < 2 && code !== 0; attempt++) {
+    const r = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, build.runDir), "--add-database", "--email", ownerEmail], { cwd: runner, env: { ...env, ADMIN_PASSWORD: password } });
+    code = r.code;
+    out = r.out.split(password).join("***");
+    // A database that is kept (the site is deployed but a check failed) or one that already exists must not be created again.
+    if (code !== 0 && /database was kept|already has a database/.test(out)) break;
+  }
+  const adminUrl = code === 0 ? parseAdminUrl(out) : null;
+  if (!adminUrl) {
+    await adminFailed(db, job.project_id, tail(out, 280));
+    throw new Error(`The owner area was not added. ${tail(out)}`);
+  }
+
+  // The password goes into the same card that shows the live address, until the person says they have saved it.
+  await patchState(db, job.project_id, (s) => {
+    let at = -1;
+    s.msgs.forEach((m, i) => { if (m.kind === "site_ready") at = i; });
+    const msgs = s.msgs.map((m, i) => (i === at && m.kind === "site_ready" ? { ...m, adminUrl, ownerEmail, password } : m));
+    const next = botNote({ ...s, msgs, site: s.site ? { ...s.site, build: { ...(s.site.build ?? build), adminUrl, ownerEmail } } : s.site }, "Your owner area is ready. Sign in from the card above to edit your menu (you can upload a spreadsheet) and to see table requests. Save the password now: it is shown once.");
+    return next;
+  });
 }
 
 export const stageLabel = (n: number) => SITE_STAGES[Math.min(Math.max(n, 0), DONE_STAGE)].label;
