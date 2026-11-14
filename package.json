@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
     "worker": "tsx --env-file=.env worker/index.ts",
     "code": "tsx --env-file=.env scripts/access-code.ts",
     "test:access": "tsx test/access-code.test.mts",

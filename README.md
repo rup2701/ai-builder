@@ -1,85 +1,60 @@
 # Appnomics Builder
 
-The standalone builder app (builder.appnomics.dev). Describe what you want to launch; an intake chat asks a few
-questions, shows what it will and will not build, then a worker builds it. This version runs the rule-based
-interviewer and a stub builder, with real sign-in, saved projects, jobs, usage logging and tests. The model, the
-builder agent and live publishing plug into the interfaces listed below.
+The web app where a person describes a website, chats with Scout, approves a plan and gets a live site. Runs on Vercel at builder.appnomics.dev. The slow work happens in the worker (`worker/`) on Fly, which drives the runner (`../appnomics-runner`).
 
-Stack: Next.js 16 · React 19 · TypeScript · Tailwind 4 · shadcn/ui (copied in) · Drizzle · Postgres · Auth.js · Zod.
-Decisions are in `knowledge/stack.json`.
+New here? Read `ARCHITECTURE.md` first (ten minutes), then this page.
 
-## Run it
+## What works today
+- Sign in with Google, invite-only (`ALLOWED_EMAILS` or an access code from `npm run code`).
+- Three site kinds: waitlist website, website for an existing product, restaurant website (the last two behind switches).
+- Scout: an interview that reads the person's existing website, asks only what is missing, shows a plan card, builds, and shows a ready card with a check list.
+- After launch: change requests, preview, publish, undo (waitlist and showcase sites).
+- Restaurant sites: table requests by email, and an owner area (menu spreadsheet, requests) added after the site is live.
+- Docs for users under `/docs`.
 
-```bash
-cp .env.example .env        # fill in the values below
-npm install
-npm run db:migrate
-npm run dev                 # web app on :3000
-npm run worker              # in a second terminal: runs build jobs
-npm run test:e2e            # needs the app on :3100 and the worker; see e2e/flow.mjs
-```
+## Set up
+    npm install
+    cp .env.example .env     # fill in; names and meanings are in the file
+    npm run db:migrate
+    npm run dev              # the web app on http://localhost:3000
+    npm run worker           # in a second terminal: the worker (stub builds unless WORKER_SITE_MODE=real)
 
-Local sign-in without Google: set `ALLOW_DEV_LOGIN=1` (ignored in production) and put your email in `ALLOWED_EMAILS`.
+You need Node 22+. Real builds also need the runner next to this folder (`../appnomics-runner`, or set `RUNNER_DIR`), a local Postgres for the runner's run databases, and the keys listed in the runner README.
 
-## Environment variables
+## Everyday commands
+| Command | What it does |
+|---|---|
+| `npm run typecheck` | TypeScript check |
+| `npm test` | Runs every test in `test/` (no database or keys needed) |
+| `npm run dev` | Web app |
+| `npm run worker` | Worker |
+| `npm run db:generate` | New migration after editing `src/db/schema.ts` |
+| `npm run db:migrate` | Apply migrations to the database in `.env` |
+| `npm run sync:site-pack` | Copy interview and example brief from the runner packs into `src/lib/builder/site-pack.generated.ts` |
+| `npm run code` | Make an access code |
+| `npm run test:e2e` | Browser flow test (needs a running app and keys) |
 
-| Variable | Needed for | Where it comes from |
-| --- | --- | --- |
-| `DATABASE_URL` | everything | Neon connection string (or local Postgres) |
-| `AUTH_SECRET` | sign-in | `openssl rand -base64 32` |
-| `AUTH_URL` | sign-in | the app's URL, e.g. `https://builder.appnomics.dev` |
-| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Google sign-in | Google Cloud console, OAuth client; redirect URI `<AUTH_URL>/api/auth/callback/google` |
-| `ALLOWED_EMAILS` | access control | comma-separated; adding someone here is how you share the builder |
-| `ALLOW_DEV_LOGIN` | local only | `1` on your machine, unset in production |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | the model interviewer | Anthropic console (setting the key turns the model interviewer on; without it the rule interviewer runs) |
-| `INTEGRATIONS` | publishing | `stub` (default) or `live` |
-| `GITHUB_ORG`, `GITHUB_TOKEN`, `GITHUB_TEMPLATE_REPO` | publishing | org for stores; GitHub App or fine-grained token (create repos, write contents and PRs); the template repo |
-| `VERCEL_TOKEN`, `VERCEL_TEAM_ID` | publishing | token scoped to one team; the Vercel GitHub integration installed on the org |
-| `NEON_API_KEY` | per-app databases | Neon console |
-| `WORKER_STEP_MS` | tests | pause per build step in the stub builder (default 700) |
+Before saying a change is done: `npm run typecheck` and `npm test`.
 
-Tokens stay server side and never go into an agent's context.
+## Layout
+    src/app/          pages and API routes (App Router)
+    src/lib/agents/   Scout interviewers, change planner
+    src/lib/builder/  brief, plan card, website reader, menu import, state helpers
+    src/db/           schema and migrations (drizzle/)
+    worker/           job loop, site build, site change
+    scripts/          sync-site-pack, run-tests, access codes
+    test/             tests (plain scripts, one file each)
+    e2e/              browser flow
+    knowledge/        notes the agents read; see its README
 
-## How it fits together
+## Releasing
+- Web app: push to main. Vercel deploys.
+- Worker or runner: `fly deploy` from `~/appnomics`. See `FLY.md` there.
+- Schema change: generate, commit, run `db:migrate` against production before the code that needs it ships.
 
-- `src/lib/builder/` the brief (questions, capability list, edge rules, summary), store settings, verify checks. Same code as the prototype.
-- `src/lib/workspace/` workspace state and its transitions (pure functions). The server runs intake turns; the worker finishes builds; the browser runs the iterate phase and saves it.
-- `src/lib/agents/interviewer.ts` the interface a model replaces. Keep the signature and the validator.
-- `src/lib/integrations/` GitHub, Vercel, Neon interfaces with stubs. `live` throws until implemented.
-- `worker/index.ts` claims queued jobs and runs them. A build survives closing the tab.
-- `src/db/schema.ts` users, projects (state as JSON), jobs, usage, interventions, publish requests.
-- `knowledge/` the knowledge pack.
-
-## Not built yet
-
-- Spec writer and spec checker. (The model interviewer exists: set `ANTHROPIC_API_KEY` to turn it on; `npm run test:interviewer` checks it against a fake model.)
-- The builder agent (specs to repo to tests) in the worker; today it is a stub that draws the preview.
-- Live GitHub, Vercel and Neon calls; the real preview deployment.
-- Completion email (a build shows as ready in Your projects).
-- Recording interventions from the UI (the table exists).
-
-## How builds run
-
-The web app and the worker are two separate programs that share one Postgres database.
-
-- **Web app** (Next.js, on Vercel). Handles the chat, the interview and the pages. Each request lasts seconds, so it cannot run a 30-minute build.
-- **Worker** (`npm run worker`). A long-running process that checks the `jobs` table every second, claims a queued job, does the slow work and writes progress back to the project's record.
-
-Pressing **Build my site** works like this:
-
-1. `POST /api/projects/:id/build` inserts a `site_build` job and sets the project to the build phase.
-2. The worker claims the job and moves it through six stages: Getting ready, Building the pages, Polishing the look, Testing, Putting it online, Ready.
-3. At each stage the worker writes `state.site.build` (stage, start time, files written, and later the live address). The right-hand pane polls the project and draws the timeline.
-4. Closing the browser does not affect the build. The job is a row in the database.
-
-The stage names live in `src/lib/builder/site-stages.ts`. The worker maps the runner's own stage markers (`1/4` to `4/4`, `3b/4`, and deploy's `1/7` to `7/7`) to those six stages.
-
-**Status:** the worker currently runs a practice build that steps through the stages and builds nothing. The real build, where the worker runs the runner's `create` and `deploy`, is the next piece.
-
-**Where the worker runs.** It cannot run on Vercel, because it is a long-lived process. Locally it runs next to `npm run dev`. If the local app and the deployed app share a database, a worker on your machine will also claim jobs queued from the deployed app, so only run one worker at a time. The plan for hosting is the web app on Vercel and the worker together with the runner on Fly (Node, git, Chromium and a Postgres for the per-build databases), moving to a separate Fly Machine per build.
-
-Settings: `WORKER_FAKE_STAGE_MS` sets how long each stage of the practice build lasts (default 4000).
-
-## Generates access codes
-DATABASE_URL='<DATABASE_URL_REPLACE>'  npm run code -- create --label aashita --builds 2
-DATABASE_URL='<DATABASE_URL_REPLACE>' npm run code -- list
+## Known gaps
+- No retry button if the restaurant owner area fails twice.
+- Changing a live restaurant site from Scout is not built; the menu is edited in the owner area.
+- Builds run on one shared machine. Fine for trusted testers, not for strangers.
+- No step that bills anyone. Spend is capped by `WORKER_BUILD_MAX_USD` and a workspace limit.
+- Ideas not being built are in `../appnomics-runner/PARKING_LOT.md`.
