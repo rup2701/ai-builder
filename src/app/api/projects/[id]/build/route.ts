@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ARCHIVED_ERROR } from "@/lib/project-archive";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
@@ -16,6 +17,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const p = await loadOwned(id, user.id);
   if (!p) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  // Archived projects are read-only (APP-29). The worker checks again before it runs a job.
+  if (p.archivedAt) return NextResponse.json({ error: ARCHIVED_ERROR }, { status: 409 });
   if (p.kind !== "site") return NextResponse.json({ error: "This project is not a website." }, { status: 400 });
 
   const state = p.state as WorkspaceState;

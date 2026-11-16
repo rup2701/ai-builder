@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ARCHIVED_ERROR } from "@/lib/project-archive";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { getUser } from "@/lib/session";
@@ -13,6 +14,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const p = await loadOwned(id, user.id);
   if (!p) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  // Archived projects are read-only (APP-29). The worker checks again before it runs a job.
+  if (p.archivedAt) return NextResponse.json({ error: ARCHIVED_ERROR }, { status: 409 });
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Enter a valid email and role." }, { status: 400 });
   await db.insert(schema.publishRequests).values({ projectId: p.id, ...body.data });

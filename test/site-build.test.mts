@@ -82,12 +82,19 @@ console.log("Live: https://" + name + ".appnomics.live");
   return dir;
 }
 
-function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF)) {
+/** claimed: site addresses that another active project already uses (APP-29), with whether it is the same owner. */
+function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF), claimed: Record<string, boolean> = {}) {
   const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief, build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
   const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[] };
   const db: Db = {
     async query(text, params = []) {
       if (text.includes("FROM projects p JOIN users")) return { rows: [{ state: rec.state, email }] };
+      if (text.includes("AS same_owner")) {
+        // The deploy check counts archived projects too: their sites keep running.
+        assert.ok(!text.includes("archived_at IS NULL AND"), "the deploy check must count archived projects");
+        const address = String(params[0]);
+        return { rows: address in claimed ? [{ id: "other", title: "Old Mealwise", created_at: "2026-11-01T00:00:00Z", archived: false, same_owner: claimed[address] }] : [] };
+      }
       if (text.startsWith("UPDATE projects\n        SET state = jsonb_set")) {
         const patch = JSON.parse(params[1] as string) as Partial<SiteBuild>;
         rec.state = { ...rec.state, site: { ...rec.state.site!, build: { ...rec.state.site!.build!, ...patch } } };
@@ -233,6 +240,26 @@ await test("a taken name is skipped and the next candidate is used", async () =>
   const { db, rec } = fakeDb();
   await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
   assert.match(rec.state.site!.build!.url!, /^https:\/\/mealwise-[0-9a-f]{4}\.appnomics\.live$/);
+});
+
+await test("an address another active project uses is never deployed over: the next name is used", async () => {
+  // Vercel would allow "mealwise" here (makeRunner takes nothing), but an active project already claims it.
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb(undefined, undefined, { "mealwise.appnomics.live": true });
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  assert.match(rec.state.site!.build!.url!, /^https:\/\/mealwise-[0-9a-f]{4}\.appnomics\.live$/);
+});
+
+await test("when every name is claimed by an active project, the build stops at publishing in plain words and deploys nothing", async () => {
+  const dir = await makeRunner({});
+  // Every address is taken, whatever random suffix the candidates get.
+  const claimed = new Proxy({} as Record<string, boolean>, { has: () => true, get: () => true });
+  const { db, rec } = fakeDb(undefined, undefined, claimed);
+  await assert.rejects(() => runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }));
+  const b = rec.state.site!.build!;
+  assert.equal(b.failedStage, 4);
+  assert.equal(b.url, undefined);
+  assert.match(b.error!, /is already used by your project "Old Mealwise" \(created Nov 1, 2026\)\. Archive that project first/);
 });
 
 await test("failing checks stop the build at Testing and nothing is deployed", async () => {

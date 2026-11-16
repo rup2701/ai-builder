@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, customType, integer, jsonb, numeric, pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { boolean, customType, integer, jsonb, numeric, pgTable, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
@@ -41,10 +41,18 @@ export const projects = pgTable(
     status: text("status").notNull().default("draft"), // draft | building | ready | published
     /** The whole workspace: messages, brief, versions. See src/lib/workspace/types.ts. */
     state: jsonb("state").notNull(),
+    /** Null means active. Set means archived: read-only in Builder, its site keeps running. See src/lib/project-archive.ts. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("projects_owner_idx").on(t.ownerId)],
+  (t) => [
+    index("projects_owner_idx").on(t.ownerId),
+    // One active project per site address. The expression is ADDRESS_SQL in src/lib/project-archive.ts; keep the two the same.
+    uniqueIndex("projects_active_address_uq")
+      .on(sql`substring(lower(${t.state} #>> '{site,build,url}') from '^https?://([^/:?#]+)')`)
+      .where(sql`${t.archivedAt} IS NULL`),
+  ],
 );
 
 /** Long-running work. The web app queues it; the worker runs it. Survives closing the tab. */

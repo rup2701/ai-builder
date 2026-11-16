@@ -15,6 +15,7 @@ import path from "node:path";
 import { briefCard, siteSlug } from "../src/lib/builder/site-brief";
 import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder/site-stages";
 import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify";
+import { addressClaim, addressTakenText, isAddressTaken, siteAddress, type Claim } from "../src/lib/project-archive";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
@@ -339,7 +340,16 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   const password = staticSite ? "" : randomBytes(12).toString("base64url");
   let url: string | null = null;
   let lastOut = "";
+  let claimed: { address: string; claim: Claim } | null = null;
   for (const name of privateTest ? nameCandidates(siteName).map((n) => `private-${n}`.slice(0, 40).replace(/-+$/g, "")) : nameCandidates(siteName)) {
+    // An address another project uses is never deployed over, even if Vercel would allow it (for example after its Vercel
+    // project was removed by hand). Archived projects count: their sites keep running. The next candidate is tried instead.
+    const address = `${name}.${env.APP_DOMAIN ?? "appnomics.live"}`;
+    const claim = await addressClaim(db, address, job.project_id, { includeArchived: true });
+    if (claim) {
+      claimed = { address, claim };
+      continue;
+    }
     const deployed = await runProcess("npm", ["run", "deploy", "--", path.relative(runner, runDir), "--name", name, ...(privateTest ? ["--private"] : []), ...(staticSite ? [] : ["--email", ownerEmail])], {
       cwd: runner,
       env: staticSite ? env : { ...env, ADMIN_PASSWORD: password },
@@ -355,6 +365,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     }
     if (!/already exists/i.test(deployed.out)) break;
   }
+  if (!url && !lastOut && claimed) await stop(4, addressTakenText(claimed.address, claimed.claim));
   if (!url) await stop(4, `Publishing did not work. ${tail(password ? lastOut.split(password).join("***") : lastOut)}`);
 
   // 4. Done: take a picture of the top of the live site for the ready panel, write the result and tell the person in the chat.
@@ -379,7 +390,14 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
     nextId: s.nextId + 2,
     site: { brief: s.site!.brief, build },
   };
-  await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+  try {
+    await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
+  } catch (e) {
+    // The database has the last word on one active project per address (the check above can race another build).
+    const address = siteAddress(url);
+    if (address && isAddressTaken(e)) await stop(4, addressTakenText(address, await addressClaim(db, address, job.project_id).catch(() => null)));
+    throw e;
+  }
   // Stage two of a restaurant site: the owner area and its own database are added after the public site is live, as a job of their own.
   // Whether it works or not, the public site is already live. A failure only means the owner area is missing and the chat says so.
   if (wantsAdmin(brief, env)) await db.query(`INSERT INTO jobs (project_id, type) VALUES ($1, 'site_admin')`, [job.project_id]).catch((e) => console.warn(`[admin] could not queue the owner area: ${e instanceof Error ? e.message : e}`));
