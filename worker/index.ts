@@ -12,6 +12,7 @@ import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { notifyBuildEnd, projectLink } from "../src/lib/notify";
 import { adminFailed, patchSiteBuild as patchSiteBuildDb, runSiteAdmin, runSiteBuild, runSitePublish, stageLabel } from "./site-build";
 import { failSiteChangeMsg, runSiteChange } from "./site-change";
+import { refuseIfArchived } from "./archived-job";
 
 // The agent saves its work with git commits. The worker image has no git identity of its own, and without one the
 // commit fails ("Author identity unknown"). Environment variables work for every child process and cannot be lost on a redeploy.
@@ -147,6 +148,11 @@ async function main() {
     }
     console.log(`worker: ${job.type} job ${job.id}`);
     try {
+      // An archived project is read-only: a job that was waiting when it was archived is refused, not run.
+      if (await refuseIfArchived(pool, job)) {
+        console.log(`worker: job ${job.id} refused, the project is archived`);
+        continue;
+      }
       if (job.type === "build") await runBuild(job);
       else if (job.type === "site_build") {
         // Real builds spend money, so they only run when WORKER_SITE_MODE=real. The default is the practice run.

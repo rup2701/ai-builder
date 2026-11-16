@@ -34,6 +34,8 @@ Vercel is the front desk; Fly is the workshop.
 
 Job types in `worker/index.ts`: `site_build`, `site_publish`, `site_change`, `site_admin` (and an old stub `build`).
 
+**Archived projects** (`projects.archived_at`, rules in `src/lib/project-archive.ts`): read-only in Builder, while the site keeps running and keeps its address. The API routes that write refuse them, and the worker refuses a job that was waiting when the project was archived (`worker/archived-job.ts`). One active project per site address: the unique index `projects_active_address_uq` on the host of `state.site.build.url`, among projects that are not archived. Before deploying a new name the worker also skips addresses that archived projects still use.
+
 ## Packs
 
 A pack is a kind of site. Its truth lives in the runner at `vertical-packs/<pack>/`: `specs/` (the contract the agent builds against), `brief.example.json`, an interview, and for restaurants `reference/` (components copied as written).

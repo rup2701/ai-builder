@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ARCHIVED_ERROR } from "@/lib/project-archive";
 import { and, count, eq, gte } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { allowedEmails } from "@/auth";
@@ -31,6 +32,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const p = await loadOwned(id, user.id);
   if (!p) return fail("Not found.", 404);
+  // Archived projects are read-only (APP-29). The worker checks again before it runs a job.
+  if (p.archivedAt) return NextResponse.json({ error: ARCHIVED_ERROR }, { status: 409 });
   if (!allowedEmails().includes((user.email ?? "").toLowerCase())) return fail("This is not switched on for your account.", 403);
   const body = (await req.json().catch(() => null)) as { url?: unknown; ownerConfirmed?: unknown; privateTest?: unknown; debugAround?: unknown; pack?: unknown; accent?: unknown } | null;
   if (typeof body?.url !== "string") return fail("Please give the address of the website.", 400);
