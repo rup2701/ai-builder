@@ -26,7 +26,7 @@ import { accentHex } from "@/lib/builder/interpret";
 import { BUILD_STEPS, iterateTurn, optionsFor, pushMsg, undoState } from "@/lib/workspace/state";
 import type { StoreConfig } from "@/lib/builder/storeConfig";
 import type { WorkspaceState } from "@/lib/workspace/types";
-import { AGENT_NAME } from "@/lib/brand";
+import { AGENT_NAME, DOCS_URL } from "@/lib/brand";
 import ProjectProgress from "./ProjectProgress";
 import { siteProgress } from "@/lib/builder/project-progress";
 
@@ -706,17 +706,28 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             <Stepper states={states} />
           )}
         </div>
-        <button
-          ref={publishBtn}
-          hidden={site}
-          type="button"
-          disabled={!canPublish}
-          onClick={() => setPublishOpen(true)}
-          title={!cur ? "Describe your store first" : sum.fail > 0 ? `Fix ${sum.fail} ${sum.fail === 1 ? "issue" : "issues"} first` : undefined}
-          className={`rounded-xl bg-foreground px-4 py-2 text-sm text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-35 ${focusRing}`}
-        >
-          Publish
-        </button>
+        <div className="flex items-center gap-3 justify-self-end">
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`rounded-lg px-2 py-1.5 text-sm text-foreground/65 transition-colors hover:text-foreground ${focusRing}`}
+          >
+            Help
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+          <button
+            ref={publishBtn}
+            hidden={site}
+            type="button"
+            disabled={!canPublish}
+            onClick={() => setPublishOpen(true)}
+            title={!cur ? "Describe your store first" : sum.fail > 0 ? `Fix ${sum.fail} ${sum.fail === 1 ? "issue" : "issues"} first` : undefined}
+            className={`rounded-xl bg-foreground px-4 py-2 text-sm text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-35 ${focusRing}`}
+          >
+            Publish
+          </button>
+        </div>
       </header>
 
       {/* Phone only: switch between the two panels */}

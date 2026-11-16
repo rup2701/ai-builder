@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { signOutAction } from "@/app/actions";
+import { DOCS_URL } from "@/lib/brand";
 
 const NAV = [
   { id: "home", href: "/", label: "Home", icon: <path d="M4 11l8-7 8 7M6 10v10h12V10" /> },
@@ -34,6 +35,19 @@ export default function AppShell({ active, email, children }: { active: NavId; e
               {n.label}
             </Link>
           ))}
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm text-foreground/65 transition-colors hover:bg-foreground/[0.04] hover:text-foreground md:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+          >
+            <svg viewBox="0 0 24 24" className="hidden h-[18px] w-[18px] md:block" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" />
+            </svg>
+            Help
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
         </nav>
         <div className="hidden md:mt-auto md:block">
           {email && <p className="truncate px-2 text-xs text-foreground/55" title={email}>{email}</p>}
