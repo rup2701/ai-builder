@@ -102,6 +102,27 @@ export const usage = pgTable("usage", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Learning data (APP-15): one row per full site build, written by the worker after the build, whether it went live or not.
+ * No foreign keys on purpose: a record is kept when its project or job is deleted. The few typed columns are for
+ * filtering; everything else is in details (see worker/build-record.ts), so adding a field needs no migration.
+ */
+export const buildRecords = pgTable(
+  "build_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    jobId: uuid("job_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** waitlist | showcase | local */
+    pack: text("pack").notNull(),
+    /** live | private_test | failed */
+    outcome: text("outcome").notNull(),
+    details: jsonb("details").notNull().default({}),
+  },
+  (t) => [index("build_records_project_idx").on(t.projectId), index("build_records_created_idx").on(t.createdAt)],
+);
+
 /** Each time a person has to step in. The experiment plan's core measure. */
 export const interventions = pgTable("interventions", {
   id: uuid("id").primaryKey().defaultRandom(),

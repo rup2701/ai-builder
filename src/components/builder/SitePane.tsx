@@ -22,15 +22,23 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
   const finishedForReal = Boolean(build && build.stage >= DONE_STAGE && !build.fake);
   const publishRetry = build?.failedStage === 4 && Boolean(build.runDir);
   const buildButton = (label: string, mode?: "publish") => (
-    <button
-      type="button"
-      onClick={() => onBuild(mode)}
-      disabled={!canBuild}
-      className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-      data-testid="build-site"
-    >
-      {starting ? "Starting…" : label}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => onBuild(mode)}
+        disabled={!canBuild}
+        className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+        data-testid="build-site"
+      >
+        {starting ? "Starting…" : label}
+      </button>
+      {/* Testers are told that builds are recorded (APP-15). A publish retry is not a new build, so it has no record and no line. */}
+      {mode !== "publish" && (
+        <p className="mt-2 text-xs text-foreground/50" data-testid="build-record-note">
+          We keep a private record of each build to help improve Appnomics.
+        </p>
+      )}
+    </>
   );
   return (
     <section aria-label="Website brief" className={`${visible ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`} data-testid="site-pane">

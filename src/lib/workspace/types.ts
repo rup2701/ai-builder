@@ -73,7 +73,13 @@ export type WorkspaceState = {
   published: boolean;
   jobId: string | null;
   /** Website projects: the brief the interview saved (the runner's brief.json). */
-  site?: { brief: Record<string, unknown>; build?: SiteBuild };
+  site?: {
+    brief: Record<string, unknown>;
+    build?: SiteBuild;
+    /** Scout's first draft, taken when the interview first reached the review screen. Never shown; saved with each build record (APP-15). */
+    draftBrief?: Record<string, unknown>;
+    draftBriefAt?: string;
+  };
   /** Which website pack the interview and build use. Missing means the waitlist pack. */
   sitePack?: "waitlist" | "showcase" | "saas" | "local"; // "saas" is the old name of "showcase"
   /** Restaurant projects: what the owner's website gave, kept until the owner confirms it is theirs and the brief is made from it. */

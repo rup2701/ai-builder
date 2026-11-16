@@ -9,6 +9,7 @@ import { loadOwned, statusFor, titleFor } from "@/lib/projects";
 import { getInterviewer, getSiteInterviewer } from "@/lib/agents/interviewer";
 import { saveBriefForRunner } from "@/lib/builder/site-files";
 import { logUsage } from "@/lib/usage";
+import { keepDraftBrief } from "@/lib/build-records";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const interviewer = site ? getSiteInterviewer() : getInterviewer();
   if (!interviewer) return NextResponse.json({ error: "The website interview needs the model key (ANTHROPIC_API_KEY)." }, { status: 503 });
   const result = await interviewer.turn(prev, body.data.text, { userEmail: user.email ?? undefined, isAdmin: allowedEmails().includes((user.email ?? "").toLowerCase()) });
-  let state = result.state;
+  // Scout's first draft of the brief is kept for the build record (APP-15); the owner never sees it.
+  let state = site ? keepDraftBrief(prev, result.state) : result.state;
   if (site && state.site?.brief && JSON.stringify(state.site.brief) !== JSON.stringify(prev.site?.brief)) {
     await saveBriefForRunner(p.id, state).catch((e) => console.error("could not save the brief for the runner:", e instanceof Error ? e.message : e));
   }

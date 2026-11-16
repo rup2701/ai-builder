@@ -67,7 +67,7 @@ async function runSiteBuildFake(job: { id: string; project_id: string }) {
     jobId: null,
     msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: "This was a practice run: the stages ran, but no site was built. The real build comes next." }],
     nextId: s.nextId + 1,
-    site: { brief: s.site!.brief, build: { ...build!, stage: DONE_STAGE, finishedAt: new Date().toISOString(), fake: true } },
+    site: { ...s.site!, build: { ...build!, stage: DONE_STAGE, finishedAt: new Date().toISOString(), fake: true } },
   };
   await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
 }
@@ -104,7 +104,7 @@ async function fail(job: { id: string; project_id: string }, err: unknown) {
       jobId: null,
       msgs: [...s.msgs, { id: s.nextId, kind: "bot", text: `The build stopped at "${label}". Nothing was lost. ${stage === 4 && s.site.build.runDir ? "The site itself is built, so only publishing runs again. Press Retry publishing." : "Press Build my site to try again."}` }],
       nextId: s.nextId + 1,
-      site: { brief: s.site.brief, build: { ...s.site.build, failedStage: stage, error: s.site.build.error ?? message.slice(0, 300) } },
+      site: { ...s.site, build: { ...s.site.build, failedStage: stage, error: s.site.build.error ?? message.slice(0, 300) } },
     };
     await pool.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(back)]);
     const name = (s.site.brief?.site as { name?: string } | undefined)?.name ?? "Your site";

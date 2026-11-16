@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { briefForRunner, checklist, nameCandidates, packFor, parseAdminUrl, parseLiveUrl, parseSummary, runSiteAdmin, runSiteBuild, runSitePublish, wantsAdmin, type Db } from "../worker/site-build";
+import { briefForRunner, checklist, nameCandidates, packFor, parseAdminUrl, parseLiveUrl, parseSummary, recordsSettled, runSiteAdmin, runSiteBuild, runSitePublish, wantsAdmin, type Db } from "../worker/site-build";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
@@ -85,7 +85,7 @@ console.log("Live: https://" + name + ".appnomics.live");
 /** claimed: site addresses that another active project already uses (APP-29), with whether it is the same owner. */
 function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF), claimed: Record<string, boolean> = {}) {
   const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief, build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
-  const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[] };
+  const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[], records: [] as { pack: string; outcome: string; details: any }[] };
   const db: Db = {
     async query(text, params = []) {
       if (text.includes("FROM projects p JOIN users")) return { rows: [{ state: rec.state, email }] };
@@ -108,6 +108,10 @@ function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JS
       }
       if (text.startsWith("INSERT INTO jobs")) {
         rec.jobs.push(String(params[0]) + ":" + /'(\w+)'/.exec(text)?.[1]);
+        return { rows: [] };
+      }
+      if (text.startsWith("INSERT INTO build_records")) {
+        rec.records.push({ pack: String(params[2]), outcome: String(params[3]), details: JSON.parse(String(params[4])) });
         return { rows: [] };
       }
       if (text.startsWith("INSERT INTO usage")) {
@@ -437,6 +441,60 @@ await test("a site that already has an owner area is left alone; a missing folde
   await assert.rejects(() => runSiteAdmin(wl.db, { id: "j", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir }), /restaurant/);
 });
 
+
+// ---- learning data (APP-15) ----
+await test("a good build saves one build record, with the approved brief, Scout's draft, the run and the transcript counts", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  const draft = { ...rec.state.site!.brief, site: { name: "Draft name" } };
+  rec.state = { ...rec.state, site: { ...rec.state.site!, draftBrief: draft, draftBriefAt: "2026-11-16T10:00:00.000Z" } };
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  await recordsSettled();
+  assert.equal(rec.records.length, 1);
+  const r = rec.records[0];
+  assert.equal(r.pack, "waitlist");
+  assert.equal(r.outcome, "live");
+  assert.deepEqual(r.details.draftBrief, draft);
+  assert.equal(r.details.draftBriefAt, "2026-11-16T10:00:00.000Z");
+  assert.equal(r.details.brief.site.name, rec.state.site!.brief.site && (rec.state.site!.brief.site as { name: string }).name);
+  assert.equal(r.details.run.estimatedCostUsd, 3.1, "no run.json, so the printed summary is kept");
+  assert.deepEqual(r.details.transcript.toolCalls, { write_file: 2, run_command: 1 });
+  assert.equal(r.details.site.address, "mealwise.appnomics.live");
+  assert.equal(r.details.failure, null);
+  assert.ok(r.details.timing.startedAt <= r.details.timing.finishedAt);
+  // The finished state keeps the draft, so a later build in the same project has it too.
+  assert.deepEqual(rec.state.site!.draftBrief, draft);
+});
+
+await test("a failed build is recorded as failed with the stage it stopped at, and the build still fails as before", async () => {
+  const dir = await makeRunner({ checks: false });
+  const { db, rec } = fakeDb();
+  await assert.rejects(() => runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }));
+  await recordsSettled();
+  assert.equal(rec.records.length, 1);
+  assert.equal(rec.records[0].outcome, "failed");
+  assert.equal(rec.records[0].details.failure.stage, 3);
+  assert.match(rec.records[0].details.failure.error, /final checks/);
+});
+
+await test("a record that cannot be saved changes nothing about the build", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  const broken: Db = { query: (text, params) => (text.startsWith("INSERT INTO build_records") ? Promise.reject(new Error("no such table")) : db.query(text, params)) };
+  await runSiteBuild(broken, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  await recordsSettled();
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+  assert.equal(rec.records.length, 0);
+});
+
+await test("a publish retry is not a new build, so it saves no record", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  rec.state = { ...rec.state, site: { ...rec.state.site!, build: { ...rec.state.site!.build!, failedStage: 4, runDir: path.join(dir, "runs", "r1") } } };
+  await runSitePublish(db, { id: "job-aaaa1111", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  await recordsSettled();
+  assert.equal(rec.records.length, 0);
+});
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);
