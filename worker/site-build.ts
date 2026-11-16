@@ -16,6 +16,7 @@ import { briefCard, siteSlug } from "../src/lib/builder/site-brief";
 import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder/site-stages";
 import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify";
 import { addressClaim, addressTakenText, isAddressTaken, siteAddress, type Claim } from "../src/lib/project-archive";
+import { saveBuildRecord } from "./build-record";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
@@ -246,7 +247,11 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       void patchSiteBuild(db, job.project_id, { stage: n }).catch(() => {});
     }
   };
+  // Learning data (APP-15): what this build did, saved quietly at the end whether it went live or not.
+  const record: { startedAt: string; runDir?: string; summary?: unknown; url?: string; heroShot?: boolean; failedStage?: number; error?: string; live?: boolean } = { startedAt: new Date().toISOString() };
   const stop = async (at: number, message: string): Promise<never> => {
+    record.failedStage ??= at;
+    record.error ??= message;
     await patchSiteBuild(db, job.project_id, { failedStage: at, error: message.slice(0, 300) }).catch(() => {});
     throw new BuildStop(message);
   };
@@ -291,6 +296,8 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     );
     const summary = parseSummary(created.out);
     if (summary?.runId && !runDir) runDir = path.join(runner, "runs", summary.runId);
+    record.runDir = runDir;
+    record.summary = summary ?? undefined;
     if (created.code !== 0 || !summary) await stop(stage, `The build did not finish. ${tail(created.out)}`);
     if (summary!.stopReason !== "finished") await stop(1, `The build stopped early (${summary!.stopReason}). It may have hit its time or cost limit.`);
     if (!summary!.checks?.typecheck || !summary!.checks?.build) await stop(3, "The site was written, but it did not pass the final checks.");
@@ -310,11 +317,48 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       ])
       .catch(() => {});
 
-    await publishSite(db, job, { runner, runDir: runDir!, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild: start.site!.build! });
+    const published = await publishSite(db, job, { runner, runDir: runDir!, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild: start.site!.build! });
+    Object.assign(record, published, { live: true });
+  } catch (e) {
+    record.failedStage ??= stage;
+    record.error ??= e instanceof Error ? e.message : String(e);
+    throw e;
   } finally {
     clearInterval(heartbeat);
     if (filesTimer) clearInterval(filesTimer);
+    // Not awaited: a record never holds up the build, its failure message or the next job. It never throws.
+    trackRecord(saveBuildRecord(db, {
+      projectId: job.project_id,
+      jobId: job.id,
+      pack: packFor(brief),
+      brief,
+      draftBrief: start.site?.draftBrief,
+      draftBriefAt: start.site?.draftBriefAt,
+      runner,
+      runDir: record.runDir,
+      summary: record.summary,
+      startedAt: record.startedAt,
+      finishedAt: new Date().toISOString(),
+      outcome: !record.live ? "failed" : isPrivateTest(brief) ? "private_test" : "live",
+      failedStage: record.live ? undefined : record.failedStage,
+      error: record.live ? undefined : record.error,
+      url: record.url ?? null,
+      heroShot: record.heroShot,
+      siteName,
+      privateTest: isPrivateTest(brief),
+      env,
+    }));
   }
+}
+
+const pendingRecords = new Set<Promise<boolean>>();
+function trackRecord(p: Promise<boolean>) {
+  pendingRecords.add(p);
+  void p.finally(() => pendingRecords.delete(p));
+}
+/** Waits for build records still being saved. For tests, and for a worker that is shutting down. */
+export async function recordsSettled(): Promise<void> {
+  await Promise.allSettled([...pendingRecords]);
 }
 
 type PublishCtx = {
@@ -330,7 +374,7 @@ type PublishCtx = {
 };
 
 /** Steps 3 and 4: put the finished site online, then write the result and the ready card. Shared by a full build and a publish retry. */
-async function publishSite(db: Db, job: Job, c: PublishCtx) {
+async function publishSite(db: Db, job: Job, c: PublishCtx): Promise<{ url: string; heroShot: boolean }> {
   const { runner, runDir, siteName, ownerEmail, brief, env, setStage, stop, fallbackBuild } = c;
   // 3. Publish. A name that is taken makes deploy stop before it changes anything, so the next candidate is safe to try.
   setStage(4);
@@ -388,7 +432,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
         : "Your site is live. Ask me anything about the page, or tell me what to change, for example “make the closing headline shorter”. I'll show you before and after." },
     ],
     nextId: s.nextId + 2,
-    site: { brief: s.site!.brief, build },
+    site: { ...s.site!, build },
   };
   try {
     await db.query(`UPDATE projects SET state = $2, status = 'ready', updated_at = now() WHERE id = $1`, [job.project_id, JSON.stringify(done)]);
@@ -403,6 +447,7 @@ async function publishSite(db: Db, job: Job, c: PublishCtx) {
   if (wantsAdmin(brief, env)) await db.query(`INSERT INTO jobs (project_id, type) VALUES ($1, 'site_admin')`, [job.project_id]).catch((e) => console.warn(`[admin] could not queue the owner area: ${e instanceof Error ? e.message : e}`));
   // The email is a courtesy, sent after everything is saved. It must never fail the build.
   await notifyBuildEnd(env, build.notifyEmail, { kind: "done", siteName, projectUrl: projectLink(env, job.project_id), siteUrl: url!, showcase: staticSite }).catch(() => {});
+  return { url: url!, heroShot: heroOk };
 }
 
 /**

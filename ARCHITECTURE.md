@@ -36,6 +36,8 @@ Job types in `worker/index.ts`: `site_build`, `site_publish`, `site_change`, `si
 
 **Archived projects** (`projects.archived_at`, rules in `src/lib/project-archive.ts`): read-only in Builder, while the site keeps running and keeps its address. The API routes that write refuse them, and the worker refuses a job that was waiting when the project was archived (`worker/archived-job.ts`). One active project per site address: the unique index `projects_active_address_uq` on the host of `state.site.build.url`, among projects that are not archived. Before deploying a new name the worker also skips addresses that archived projects still use.
 
+**Build records** (learning data, `build_records`, written by `worker/build-record.ts`): after every full build, live or failed, the worker saves one row quietly: the approved brief and Scout's first draft of it (`state.site.draftBrief`, kept by `keepDraftBrief` in `src/lib/build-records.ts`), the pack and a hash of its specs, `run.json`, the `AGENT_LOG.md` sections, what the look pass changed, transcript counts and `deploy.json` without secrets. Typed columns for filtering (project, job, date, pack, outcome); everything else in `details`. No foreign keys, so a record outlives its project. Archive and restore append an event to the project's records. Saving is not awaited and never fails a build. Publish retries and site changes get no record. The line under the Build button tells testers.
+
 ## Packs
 
 A pack is a kind of site. Its truth lives in the runner at `vertical-packs/<pack>/`: `specs/` (the contract the agent builds against), `brief.example.json`, an interview, and for restaurants `reference/` (components copied as written).
