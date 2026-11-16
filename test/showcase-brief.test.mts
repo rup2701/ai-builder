@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { briefCard, isShowcase, normalizePack, validateSiteBrief, yearlyPrice, perMonthOf } from "../src/lib/builder/site-brief";
 import { checklist } from "../worker/site-build";
 import { SHOWCASE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
@@ -22,9 +22,15 @@ test("the pack's example brief is a valid showcase brief", () => {
   const v = validateSiteBrief(example(), "showcase");
   assert.equal(v.ok, true, v.ok ? "" : v.error);
 });
+// The runner sits next to the Builder in ~/appnomics. CI checks out only the Builder, so there the part that reads it is skipped.
+const WAITLIST_EXAMPLE = "../appnomics-runner/vertical-packs/site/brief.example.json";
 test("a showcase brief is rejected by the waitlist check and the other way round", () => {
   assert.equal(validateSiteBrief(example(), "waitlist").ok, false);
-  const waitlist = JSON.parse(readFileSync("../appnomics-runner/vertical-packs/site/brief.example.json", "utf8"));
+  if (!existsSync(WAITLIST_EXAMPLE)) {
+    console.log(`SKIP the waitlist half: ${WAITLIST_EXAMPLE} is not here (the runner is not checked out next to the Builder)`);
+    return;
+  }
+  const waitlist = JSON.parse(readFileSync(WAITLIST_EXAMPLE, "utf8"));
   assert.equal(validateSiteBrief(waitlist, "showcase").ok, false);
 });
 test("the old sign-up brief shape is no longer accepted for the showcase pack", () => {
