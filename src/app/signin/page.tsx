@@ -134,7 +134,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
       <aside aria-hidden="true" data-testid="signin-art" className="hidden items-center bg-white lg:flex lg:pl-24">
         <div
           className="h-[min(62vh,40rem)] w-full rounded-l-[32px] bg-cover bg-left-top bg-no-repeat"
-          style={{ backgroundImage: "url(/images/signin-hero.webp)" }}
+          style={{ backgroundImage: "url(/images/joyride-hero.png)" }}
         />
       </aside>
     </main>
