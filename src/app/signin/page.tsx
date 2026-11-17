@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { packParam } from "@/lib/builder/site-brief";
 import { ACCESS_COOKIE, checkCode, normalizeCode } from "@/lib/access-code";
-
+import Image from "next/image";
 export const dynamic = "force-dynamic";
 
 /** Where to go back to on an error, keeping the idea and kind the person arrived with. */
@@ -57,7 +57,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     <main className="grid min-h-[100dvh] lg:grid-cols-2">
       <section className="relative flex min-h-[100dvh] flex-col justify-center px-6 py-24 sm:px-10">
         <div className="absolute inset-x-6 top-6 flex items-center justify-between sm:inset-x-10 sm:top-8 lg:top-8">
-          <p className="text-base font-medium tracking-tight">Appnomics</p>
+          <Image src="/images/appnomics-logo.svg" height={24} width={132} alt="Joyride" className="h-6" />
           <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/70">Private beta</span>
         </div>
 
