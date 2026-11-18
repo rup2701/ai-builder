@@ -447,7 +447,11 @@ await test("a good build saves one build record, with the approved brief, Scout'
   const dir = await makeRunner({});
   const { db, rec } = fakeDb();
   const draft = { ...rec.state.site!.brief, site: { name: "Draft name" } };
-  rec.state = { ...rec.state, site: { ...rec.state.site!, draftBrief: draft, draftBriefAt: "2026-11-16T10:00:00.000Z" } };
+  const chat: WorkspaceState["msgs"] = [
+    { id: 1, kind: "bot", text: "What is your idea about?" },
+    { id: 2, kind: "user", text: "Meal plans for busy parents, called Mealwise" },
+  ];
+  rec.state = { ...rec.state, msgs: chat, nextId: 3, site: { ...rec.state.site!, draftBrief: draft, draftBriefAt: "2026-11-16T10:00:00.000Z" } };
   await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
   await recordsSettled();
   assert.equal(rec.records.length, 1);
@@ -462,6 +466,9 @@ await test("a good build saves one build record, with the approved brief, Scout'
   assert.equal(r.details.site.address, "mealwise.appnomics.live");
   assert.equal(r.details.failure, null);
   assert.ok(r.details.timing.startedAt <= r.details.timing.finishedAt);
+  // The interview as it was when the build started (APP-42): the ready card this build posted is not part of it.
+  assert.deepEqual(r.details.interview, { messageCount: 2, messages: chat });
+  assert.ok(rec.state.msgs.some((m) => m.kind === "site_ready"), "the build itself still posted its ready card");
   // The finished state keeps the draft, so a later build in the same project has it too.
   assert.deepEqual(rec.state.site!.draftBrief, draft);
 });

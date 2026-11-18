@@ -10,7 +10,9 @@
  *   agentLog                          every "## " section of AGENT_LOG.md, by heading (for example "Unclear, missing or misleading in the specs",
  *                                     "Mistakes made and fixed", "Not verified", "Look pass")
  *   lookPass                          when it started, the files it changed with line counts, its commits, and why (its log section)
- *   transcript                        counts only: lines, model calls, tool calls by tool
+ *   transcript                        counts only: lines, model calls, tool calls by tool (the build agent's own log, not the interview)
+ *   interview                         the project chat as it was when the build started (APP-42): every message in order, secrets
+ *                                     masked, owner passwords dropped. The build agent never sees it; it is kept for learning only.
  *   deploy                            the runner's deploy.json without anything that looks like a secret
  *   site, timing, failure             the address, private test or not, the dates, and where a failed build stopped
  *   ownerId, projectCreatedAt         raw facts for working out later whether the site was kept or rebuilt
@@ -35,6 +37,8 @@ export type BuildRecordInput = {
   brief: Record<string, unknown>;
   draftBrief?: Record<string, unknown>;
   draftBriefAt?: string;
+  /** The project chat (projects.state.msgs) when the build started. */
+  interview?: unknown;
   runner: string;
   runDir?: string;
   /** The JSON summary the runner printed, used when run.json cannot be read. */
@@ -52,6 +56,8 @@ export type BuildRecordInput = {
 };
 
 const MAX_SECTION = 20_000;
+/** Keys never kept from deploy.json or from the chat. */
+const SECRET_KEY = /password|secret|token|key/i;
 
 /** Never keep keys or passwords, even if the agent wrote one into its log: database addresses, API keys and NAME=value secrets are masked. */
 export function redact(text: string): string {
@@ -59,6 +65,26 @@ export function redact(text: string): string {
     .replace(/\b(postgres(?:ql)?:\/\/)[^\s'"`)]+/gi, "$1***")
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, "***")
     .replace(/\b([A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*\S+/g, "$1=***");
+}
+
+/**
+ * The project chat as it goes into the record: every message in order, each text masked like the agent log and capped.
+ * Any field named like a password or secret is dropped (a "site ready" message keeps the owner password until the owner
+ * says they saved it). Anything that is not a list of messages gives null, so a missing interview never breaks a record.
+ */
+export function interviewForRecord(msgs: unknown): { messageCount: number; messages: Record<string, unknown>[] } | null {
+  if (!Array.isArray(msgs) || msgs.length === 0) return null;
+  const clean = (v: unknown, depth: number): unknown => {
+    if (typeof v === "string") return redact(v).slice(0, MAX_SECTION);
+    if (Array.isArray(v)) return depth > 4 ? [] : v.map((x) => clean(x, depth + 1));
+    if (v && typeof v === "object") {
+      if (depth > 4) return {};
+      return Object.fromEntries(Object.entries(v).filter(([k]) => !SECRET_KEY.test(k)).map(([k, x]) => [k, clean(x, depth + 1)]));
+    }
+    return v;
+  };
+  const messages = msgs.filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && !Array.isArray(m)).map((m) => clean(m, 0) as Record<string, unknown>);
+  return messages.length ? { messageCount: messages.length, messages } : null;
 }
 
 /** The "## " sections of AGENT_LOG.md, by heading, each with its "### " subsections. A repeated heading gets " (2)", " (3)". */
@@ -155,7 +181,7 @@ export async function gatherBuildRecord(r: BuildRecordInput): Promise<{ pack: st
   const tf = transcriptText ? transcriptFacts(transcriptText) : null;
   const look = appDir && tf?.lookPassStartedAt ? await lookPassChanges(appDir, tf.lookPassStartedAt) : null;
   const deployRaw = r.runDir ? await readJson(path.join(r.runDir, "deploy.json")) : null;
-  const deploy = deployRaw ? Object.fromEntries(Object.entries(deployRaw).filter(([k]) => !/password|secret|token|key/i.test(k))) : null;
+  const deploy = deployRaw ? Object.fromEntries(Object.entries(deployRaw).filter(([k]) => !SECRET_KEY.test(k))) : null;
   const run = r.runDir ? ((await readJson(path.join(r.runDir, "run.json"))) ?? r.summary ?? null) : (r.summary ?? null);
   return {
     pack: r.pack.id,
@@ -176,6 +202,7 @@ export async function gatherBuildRecord(r: BuildRecordInput): Promise<{ pack: st
       agentLog: sections,
       lookPass: tf?.lookPassStartedAt ? { startedAt: tf.lookPassStartedAt, ...look, why: sections?.["Look pass"] ?? null } : null,
       transcript: tf ? { lines: tf.lines, modelCalls: tf.modelCalls, toolCalls: tf.toolCalls } : null,
+      interview: interviewForRecord(r.interview),
       deploy,
       site: { name: r.siteName, url: r.url ?? null, address: siteAddress(r.url ?? undefined), privateTest: r.privateTest, heroShot: r.heroShot ?? false },
       timing: { startedAt: r.startedAt, finishedAt: r.finishedAt },

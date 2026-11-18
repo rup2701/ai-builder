@@ -247,5 +247,59 @@ await test("saving never throws: a database error or a slow database just means 
   assert.ok(Date.now() - started < 2000, "it gave up after the time limit");
 });
 
+// ---- the interview (APP-42) ----
+const CHAT: WorkspaceState["msgs"] = [
+  { id: 1, kind: "bot", text: "What's your product, in one or two sentences?" },
+  { id: 2, kind: "user", text: "it is called SureBetz. They get daily picks for all major amercian sports league" },
+  { id: 3, kind: "bot", text: "Sporty and orange?", options: ["Yes", "No"], palette: ["#F97316"] },
+  { id: 4, kind: "user", text: "my key is sk-ant-abc123def456ghi and ADMIN_PASSWORD=s3cret" },
+  { id: 5, kind: "recap", items: [{ label: "Name", value: "SureBetz" }] },
+  { id: 6, kind: "site_ready", name: "SureBetz", url: "https://surebetz.appnomics.live", adminUrl: "https://surebetz.appnomics.live/admin", ownerEmail: "o@example.com", password: "hunter2-owner", checks: ["Check the prices"] },
+];
+
+await test("the record keeps the whole interview in order, under details.interview", async () => {
+  const d = (await gatherBuildRecord(input({ interview: CHAT }))).details as any;
+  assert.equal(d.interview.messageCount, 6);
+  assert.deepEqual(d.interview.messages.map((m: { id: number }) => m.id), [1, 2, 3, 4, 5, 6]);
+  assert.equal(d.interview.messages[1].text, "it is called SureBetz. They get daily picks for all major amercian sports league");
+  assert.deepEqual(d.interview.messages[2].options, ["Yes", "No"]);
+  assert.deepEqual(d.interview.messages[4].items, [{ label: "Name", value: "SureBetz" }]);
+  assert.deepEqual(d.interview.messages[5].checks, ["Check the prices"]);
+});
+
+await test("the interview is masked like the log, and the owner password is dropped", async () => {
+  const d = (await gatherBuildRecord(input({ interview: CHAT }))).details as any;
+  const json = JSON.stringify(d.interview);
+  assert.ok(!/abc123|s3cret|hunter2-owner/.test(json), json);
+  assert.match(d.interview.messages[3].text, /ADMIN_PASSWORD=\*\*\*/);
+  assert.ok(!("password" in d.interview.messages[5]), "the password field is gone");
+  assert.equal(d.interview.messages[5].adminUrl, "https://surebetz.appnomics.live/admin");
+});
+
+await test("a very long message is capped, so one paste cannot swell the record", async () => {
+  const d = (await gatherBuildRecord(input({ interview: [{ id: 1, kind: "user", text: "x".repeat(50_000) }] }))).details as any;
+  assert.equal(d.interview.messages[0].text.length, 20_000);
+});
+
+await test("a missing or broken interview gives null and the record is still saved", async () => {
+  for (const interview of [undefined, null, [], "not a list", { msgs: [] }, [null, 3, "x"]]) {
+    const d = (await gatherBuildRecord(input({ interview }))).details as any;
+    assert.ok("interview" in d, "the key is always there");
+    assert.equal(d.interview, null, `for ${JSON.stringify(interview)}`);
+  }
+  const seen: unknown[][] = [];
+  const ok = await saveBuildRecord({ query: async (text, params = []) => { seen.push([text, ...params]); return { rows: [] }; } }, input({ interview: undefined }));
+  assert.equal(ok, true);
+  assert.equal(JSON.parse(String(seen[0][5])).interview, null);
+});
+
+await test("the saved details carry the interview to the database", async () => {
+  const seen: unknown[][] = [];
+  await saveBuildRecord({ query: async (text, params = []) => { seen.push([text, ...params]); return { rows: [] }; } }, input({ interview: CHAT }));
+  const saved = JSON.parse(String(seen[0][5]));
+  assert.equal(saved.interview.messageCount, 6);
+  assert.ok(!String(seen[0][5]).includes("hunter2-owner"));
+});
+
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

@@ -334,6 +334,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       brief,
       draftBrief: start.site?.draftBrief,
       draftBriefAt: start.site?.draftBriefAt,
+      interview: start.msgs,
       runner,
       runDir: record.runDir,
       summary: record.summary,
