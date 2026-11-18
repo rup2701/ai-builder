@@ -13,7 +13,7 @@ import type { Tool } from "./model-interviewer";
  */
 
 export type ChatMessage = { role: "user" | "assistant"; content: string | unknown[] };
-export type Chat = (req: { system: string; messages: ChatMessage[]; tools: Tool[]; toolChoice?: "auto" | "any" }) => Promise<{
+export type Chat = (req: { system: string; messages: ChatMessage[]; tools: Tool[] }) => Promise<{
   text: string;
   toolUses: { id: string; name: string; input: unknown }[];
   content: unknown[];
@@ -100,7 +100,7 @@ ${showcase ? SHOWCASE_EXAMPLE_BRIEF : SITE_EXAMPLE_BRIEF}
 </example_brief>
 
 How to talk:
-- Send every message with the reply tool (and save the brief with save_brief). Its parts are shown to the person as separate blocks:
+- Always answer by calling the reply tool, for every message, and never in plain text (save the brief with save_brief). Its parts are shown to the person as separate blocks:
   - understood: one or two short lines with what you took from their last message, so they can correct it. Leave it out for your first message and when their message held nothing new. Never start it with "Got it".
   - question: the one thing you ask next, in at most two short sentences.
   - parts: only when a question has several parts (for example tone, light or dark, and colour). One short line per part, and question is then a short lead-in.
@@ -129,6 +129,9 @@ export function toMessages(s: WorkspaceState): ChatMessage[] {
 
 const FALLBACK = "Sorry, something went wrong on my side. Please send that again.";
 
+/** Sent back when the model answers in plain text instead of calling reply. The person never sees it. */
+export const MISSED_REPLY = "That message was not sent to the person: answer by calling the reply tool (understood, question and, when needed, parts), not in plain text.";
+
 export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
   return {
     model,
@@ -144,9 +147,12 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
       const convo = toMessages(s);
       let tokensIn = 0, tokensOut = 0, cost = 0;
       const usage = () => ({ model, inputTokens: tokensIn, outputTokens: tokensOut, costUsd: cost });
+      // The call cannot force a tool (tool_choice any is refused for this model, see APP-45), so the prompt asks for reply and code
+      // checks it: plain text with no reply call is a missed call, retried once with a reminder, then shown as the question.
+      let nudged = false;
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
-          const r = await chat({ system, messages: convo, tools: [REPLY, SAVE_BRIEF], toolChoice: "any" });
+          const r = await chat({ system, messages: convo, tools: [REPLY, SAVE_BRIEF] });
           tokensIn += r.usage.inputTokens;
           tokensOut += r.usage.outputTokens;
           cost += r.usage.costUsd;
@@ -159,9 +165,14 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
               convo.push({ role: "assistant", content: r.content }, { role: "user", content: [{ type: "tool_result", tool_use_id: rep.id, is_error: true, content: "question is required: the message to show the person." }] });
               continue;
             }
-            // Plain text is still shown, in case the model answers without the tool.
             if (!said && !r.text) throw new Error("The model sent an empty reply.");
-            s = pushMsg(s, said ?? { kind: "bot", text: r.text });
+            if (!said && !nudged && attempt < 2) {
+              nudged = true;
+              convo.push({ role: "assistant", content: r.content }, { role: "user", content: MISSED_REPLY });
+              continue;
+            }
+            // Still plain text: show it as the question, with no understood part, so the chat is never blank.
+            s = pushMsg(s, said ?? replyMessage({ question: r.text })!);
             return { state: { ...s, phase: prev.site?.brief ? "summary" : "intake" }, usage: usage() };
           }
           const v = validateSiteBrief((tu.input as { brief?: unknown } | undefined)?.brief, pack);

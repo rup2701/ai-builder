@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { makeSiteInterviewer, replyMessage, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
+import { makeSiteInterviewer, MISSED_REPLY, replyMessage, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
 import { validateSiteBrief, briefCard } from "../src/lib/builder/site-brief";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { emptyState, pushMsg } from "../src/lib/workspace/state";
@@ -37,7 +37,7 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   ok("the example brief validates and the card reads it");
 
   // 2. An ordinary reply is shown and the project stays in intake; usage is passed on.
-  let { chat, calls } = script({ text: "Who is it for?" });
+  let { chat, calls } = script({ reply: { question: "Who is it for?" } });
   let ai = makeSiteInterviewer(chat, "fake");
   let r = await ai.turn(start(), "It's called Mealwise, a dinner planner");
   assert.equal(r.state.phase, "intake");
@@ -114,10 +114,10 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   ok("empty input is ignored and roles are merged");
 
   // ---- APP-45: what Scout understood and the next question, as separate fields ----
-  // 10. Scout must answer through a tool, and a reply shows understood and the question apart.
+  // 10. The call offers both tools without forcing one (tool_choice any is refused for this model), and a reply shows understood and the question apart.
   ({ chat, calls } = script({ reply: { understood: "GunnerWins gives members daily picks across the major US leagues.", question: "Who is it for: casual fans, serious bettors or both?" } }));
   r = await makeSiteInterviewer(chat, "fake").turn(start(), "It is called GunnerWins, daily picks for all major leagues");
-  assert.equal(calls[0].toolChoice, "any");
+  assert.equal((calls[0] as { toolChoice?: unknown }).toolChoice, undefined, "no forced tool choice");
   assert.deepEqual(calls[0].tools.map((t) => t.name), ["reply", "save_brief"]);
   let last = r.state.msgs.at(-1) as Extract<WorkspaceState["msgs"][number], { kind: "bot" }>;
   assert.equal(last.understood, "GunnerWins gives members daily picks across the major US leagues.");
@@ -173,7 +173,39 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   assert.match(calls[0].system, /reply tool/);
   assert.match(calls[0].system, /Never start it with "Got it"/);
   assert.doesNotMatch(calls[0].system, /no lists of questions/);
+  assert.match(calls[0].system, /Always answer by calling the reply tool/);
   ok("the interview rules describe the reply fields");
+
+  // 17. Plain text with no reply call is a missed call: it is retried once with a reminder, and the reply that follows is shown.
+  ({ chat, calls } = script({ text: "Who is it for?" }, { reply: { understood: "It is a dinner planner.", question: "Who is it for?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Mealwise, a dinner planner");
+  assert.equal(calls.length, 2);
+  const retry = calls[1].messages;
+  assert.equal(retry.at(-2)!.role, "assistant");
+  assert.equal(retry.at(-1)!.role, "user");
+  assert.equal(retry.at(-1)!.content, MISSED_REPLY);
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.equal(last.understood, "It is a dinner planner.");
+  assert.equal(last.question, "Who is it for?");
+  assert.equal(r.usage?.costUsd, 0.04, "both calls are counted");
+  assert.ok(!bots(r.state).some((t) => t.includes(MISSED_REPLY)), "the reminder is never shown");
+  ok("plain text is retried once, asking for the reply tool");
+
+  // 18. Plain text again after the reminder is shown as the question, with no understood part: never blank, never an error.
+  ({ chat, calls } = script({ text: "Who is it for?" }, { text: "Who is it for, casual fans or serious ones?" }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Mealwise");
+  assert.equal(calls.length, 2, "only one retry");
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.deepEqual({ text: last.text, question: last.question, understood: last.understood, parts: last.parts }, { text: "Who is it for, casual fans or serious ones?", question: "Who is it for, casual fans or serious ones?", understood: undefined, parts: undefined });
+  assert.equal(r.state.phase, "intake");
+  ok("plain text after the reminder is shown as the question");
+
+  // 19. A reply without a question, then plain text: the reminder still comes once, and the chat ends with a real message.
+  ({ chat, calls } = script({ reply: { understood: "x" } }, { text: "What is it called?" }, { text: "What is it called, then?" }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "hi");
+  assert.equal(calls.length, 3);
+  assert.equal((r.state.msgs.at(-1) as typeof last).question, "What is it called, then?");
+  ok("a missing question and a missed call are each retried, within three calls");
 
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
