@@ -11,6 +11,7 @@ import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
+import type { ToolCall } from "../src/lib/agents/design-brief-writer";
 
 let failed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -351,6 +352,91 @@ await test("a live restaurant site queues the owner area job and says so; the ot
   const wl = fakeDb();
   await runSiteBuild(wl.db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: await makeRunner({}), ...quick });
   assert.deepEqual(wl.rec.jobs, []);
+});
+
+// ---- the design brief before a showcase build (APP-42) ----
+const showcaseBrief = (): Record<string, unknown> => ({ site: { name: "PickPal", kind: "product-showcase" }, look: { mode: "dark", tone: "bold", accent: "#F97316" }, blocks: [] });
+const showcaseMsgs = [
+  { id: 1, kind: "bot" as const, text: "What is it called?" },
+  { id: 2, kind: "user" as const, text: "it is called PickPal, daily picks for casual and serious fans. Bold is fine" },
+];
+const designAnswer = (audienceQuote: string) => ({
+  name: { quote: "it is called PickPal", msg: 2 },
+  audience: [{ value: "casual and serious fans", quote: audienceQuote, msg: 2 }],
+  voice: { summary: "Plain and confident.", quotes: [{ quote: "Bold is fine", msg: 2 }] },
+  owner_facts: [],
+  messages: [{ text: "Daily picks.", quote: "daily picks for casual and serious fans", msg: 2 }],
+  plans: [],
+  look_quotes: { mode: null, accent: null, tone: { quote: "Bold is fine", msg: 2 } },
+  direction: { pairing: { value: "Heavy geometric", why: "Bold." }, motif: { value: "Stack", why: "A feed of picks." }, hero_kind: { value: "fragment", why: "Pick cards." }, signatures: [{ value: "status-chips", why: "Chips on every card." }] },
+  sample_card: { item: "one pick", fields: [{ label: "League", filler: "League" }, { label: "Line", filler: "0.0" }] },
+  care: [{ flag: "Betting", rule: "No win claims." }],
+  placeholders: [],
+  other_proposals: [],
+  gaps: [],
+});
+const fakeModel = (answer: unknown): ToolCall => async () => ({ toolUse: { id: "tu1", input: answer }, usage: { input: 2000, output: 3000, cacheRead: 0, cacheWrite: 4000 } });
+
+await test("a showcase build writes the design brief first and passes it to the runner when it passes its checks", async () => {
+  const dir = await makeRunner({ static: true });
+  await mkdir(path.join(dir, "briefs"), { recursive: true });
+  const { db, rec } = fakeDb("owner@example.com", showcaseBrief());
+  rec.state = { ...rec.state, msgs: showcaseMsgs };
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }, { designBriefCall: fakeModel(designAnswer("casual and serious fans")) });
+  await recordsSettled();
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  const i = args.indexOf("--design-brief");
+  assert.ok(i > -1, args.join(" "));
+  assert.equal(args[i + 1], "briefs/pickpal-job-1234.design-brief.md");
+  assert.match(await readFile(path.join(dir, args[i + 1]), "utf8"), /^# Design brief: PickPal/);
+  const d = rec.records[0].details.designBrief;
+  assert.equal(d.passed, true);
+  assert.equal(d.passedToRunner, true);
+  assert.equal(d.model, "claude-opus-5-5");
+  assert.equal(d.json.direction.pairing.value, "Heavy geometric");
+  assert.match(d.markdown, /## Recommended direction/);
+  assert.equal(d.quoteCheck.failed.length, 0);
+  assert.equal(d.costUsd, 0.088);
+  assert.equal(rec.usage.length, 2, "one usage row for the design brief, one for the build");
+  assert.equal(rec.usage[0][2], "claude-opus-5-5");
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+});
+
+await test("a design brief that still fails after its retry is kept in the record and not given to the runner", async () => {
+  const dir = await makeRunner({ static: true });
+  const { db, rec } = fakeDb("owner@example.com", showcaseBrief());
+  rec.state = { ...rec.state, msgs: showcaseMsgs };
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }, { designBriefCall: fakeModel(designAnswer("every sports fan in America")) });
+  await recordsSettled();
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  assert.ok(!args.includes("--design-brief"), args.join(" "));
+  const d = rec.records[0].details.designBrief;
+  assert.equal(d.attempts, 2);
+  assert.equal(d.passed, false);
+  assert.equal(d.passedToRunner, false);
+  assert.deepEqual(d.quoteCheck.failed.map((f: { quote: string }) => f.quote), ["every sports fan in America"]);
+  assert.ok(d.json && d.markdown, "the failing brief is saved for review");
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE, "the build goes on");
+});
+
+await test("other packs get no design brief, and a showcase build without a key goes on without one", async () => {
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  rec.state = { ...rec.state, msgs: showcaseMsgs };
+  let called = false;
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }, { designBriefCall: async () => { called = true; throw new Error("no"); } });
+  await recordsSettled();
+  assert.equal(called, false);
+  assert.equal(rec.records[0].details.designBrief, null);
+  const sdir = await makeRunner({ static: true });
+  const s = fakeDb("owner@example.com", showcaseBrief());
+  s.rec.state = { ...s.rec.state, msgs: showcaseMsgs };
+  const env = { ...process.env, RUNNER_DIR: sdir, ...quick };
+  delete env.ANTHROPIC_API_KEY;
+  await runSiteBuild(s.db, { id: "job-1234abcd", project_id: "p1" }, env);
+  await recordsSettled();
+  assert.match(s.rec.records[0].details.designBrief.skipped, /no ANTHROPIC_API_KEY/);
+  assert.ok(!(JSON.parse(await readFile(path.join(sdir, "create-args.json"), "utf8")) as string[]).includes("--design-brief"));
 });
 
 /** A stand-in runner for stage two. mode: ok | once (fails the first time) | always | kept. It records each call's arguments and whether ADMIN_PASSWORD was set. */

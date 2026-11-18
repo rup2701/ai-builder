@@ -17,6 +17,8 @@ import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder
 import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify";
 import { addressClaim, addressTakenText, isAddressTaken, siteAddress, type Claim } from "../src/lib/project-archive";
 import { saveBuildRecord } from "./build-record";
+import { designBriefStep, type DesignBriefRecord } from "./design-brief";
+import type { ToolCall } from "../src/lib/agents/design-brief-writer";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
 /** The part of pg's Pool this file uses, so tests can pass a stand-in. */
@@ -224,7 +226,7 @@ export const tail = (s: string, n = 400) => s.trim().split("\n").slice(-6).join(
 /** A stage-level failure. runSiteBuild records which stage it stopped at, then throws. */
 class BuildStop extends Error {}
 
-export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env) {
+export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env, deps: { designBriefCall?: ToolCall } = {}) {
   const runner = env.RUNNER_DIR;
   if (!runner) throw new Error("RUNNER_DIR is not set on the worker, so it cannot find the runner.");
   const { rows } = await db.query(
@@ -248,7 +250,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     }
   };
   // Learning data (APP-15): what this build did, saved quietly at the end whether it went live or not.
-  const record: { startedAt: string; runDir?: string; summary?: unknown; url?: string; heroShot?: boolean; failedStage?: number; error?: string; live?: boolean } = { startedAt: new Date().toISOString() };
+  const record: { startedAt: string; runDir?: string; summary?: unknown; url?: string; heroShot?: boolean; failedStage?: number; error?: string; live?: boolean; designBrief?: DesignBriefRecord } = { startedAt: new Date().toISOString() };
   const stop = async (at: number, message: string): Promise<never> => {
     record.failedStage ??= at;
     record.error ??= message;
@@ -266,6 +268,22 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     await mkdir(path.dirname(briefFile), { recursive: true });
     await writeFile(briefFile, JSON.stringify(briefForRunner(brief, job.project_id, env), null, 2));
 
+    // 1b. Showcase sites: the design brief, written from the interview (APP-42). Only a brief that passed its checks goes to
+    // the runner; any other outcome is kept in the build record and the build goes on as before.
+    const pack = packFor(brief);
+    const designArgs: string[] = [];
+    if (pack.id === "showcase") {
+      record.designBrief = await designBriefStep({ msgs: start.msgs, brief, file: briefFile.replace(/\.json$/, ".design-brief.md"), env, call: deps.designBriefCall });
+      if (record.designBrief.passedToRunner) designArgs.push("--design-brief", path.relative(runner, record.designBrief.file!));
+      const step = record.designBrief;
+      if (step.skipped === null && step.costUsd > 0) {
+        const t = step.tokens;
+        await db
+          .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'design_brief', $3, $4, $5, $6)`, [job.project_id, job.id, step.model, t.input + t.cacheRead + t.cacheWrite, t.output, step.costUsd])
+          .catch(() => {});
+      }
+    }
+
     // 2. Build: create runs the main build, the look pass and the independent checks.
     let runDir: string | undefined;
     filesTimer = setInterval(async () => {
@@ -279,10 +297,9 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       }
     }, Number(env.WORKER_FILES_MS ?? 6000));
 
-    const pack = packFor(brief);
     const created = await runProcess(
       "npm",
-      ["run", "create", "--", `A ${pack.label} website for ${siteName}`, "--specs", pack.specs, "--brief", path.relative(runner, briefFile)],
+      ["run", "create", "--", `A ${pack.label} website for ${siteName}`, "--specs", pack.specs, "--brief", path.relative(runner, briefFile), ...designArgs],
       {
         cwd: runner,
         env: { ...env, RUNNER_MAX_COST_USD: env.WORKER_BUILD_MAX_USD ?? "8" },
@@ -345,6 +362,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       error: record.live ? undefined : record.error,
       url: record.url ?? null,
       heroShot: record.heroShot,
+      designBrief: record.designBrief,
       siteName,
       privateTest: isPrivateTest(brief),
       env,

@@ -16,5 +16,8 @@ for (const [pack, prefix] of [["site", "SITE"], ["product-showcase", "SHOWCASE"]
 const localExample = JSON.stringify(JSON.parse(await read("local-business", "brief.example.json")), null, 2);
 const localQuestions = JSON.stringify(JSON.parse(await read("local-business", "interview/questions.json")), null, 2);
 out += `export const LOCAL_EXAMPLE_BRIEF = ${JSON.stringify(localExample)};\nexport const LOCAL_QUESTIONS_JSON = ${JSON.stringify(localQuestions)};\n`;
+// The showcase pack's closed direction lists (pairings, motifs, hero kinds, signatures), which the design brief's choices are checked against (APP-42).
+const direction = JSON.stringify(JSON.parse(await read("product-showcase", "direction.json")), null, 2);
+out += `export const SHOWCASE_DIRECTION_JSON = ${JSON.stringify(direction)};\n`;
 await writeFile(path.resolve("src/lib/builder/site-pack.generated.ts"), out);
 console.log(`Synced the site, product-showcase and local-business packs from ${runner}`);
