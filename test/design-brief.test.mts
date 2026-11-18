@@ -16,11 +16,13 @@ import {
   DIRECTION,
   interviewText,
   normalizeQuote,
+  quoteTooShort,
   renderDesignBrief,
+  retryNote,
   type InterviewMessage,
 } from "../src/lib/builder/design-brief";
 import { costOf, designBriefModel, writeDesignBrief, type ToolCall } from "../src/lib/agents/design-brief-writer";
-import { designBriefStep } from "../worker/design-brief";
+import { DESIGN_BRIEF_LIMIT_MS, designBriefStep } from "../worker/design-brief";
 
 let failed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -165,12 +167,50 @@ await test("owner-art needs an image the owner supplied", () => {
 
 await test("a number the owner never typed is a problem; one in the approved brief is not", () => {
   const a = goodAnswer();
-  a.messages.push({ text: "Join 5,000 members who win 62% of the time.", quote: "daily picks", msg: 2 });
+  a.messages.push({ text: "Join 5,000 members who win 62% of the time.", quote: "daily picks for all 4 major leagues", msg: 2 });
   const { r } = check(a);
   assert.ok(r.problems.some((p) => /numbers the owner never typed: 5000, 62/.test(p)), r.problems.join("; "));
   const b = goodAnswer();
-  b.owner_facts.push({ topic: "Plans", meaning: "4 leagues, 7 and 30 days", quote: "Weekly $49", msg: 6 });
+  b.owner_facts.push({ topic: "Plans", meaning: "4 leagues, 7 and 30 days", quote: "Weekly $49 for 7 days", msg: 6 });
   assert.ok(check(b).r.ok);
+});
+
+await test("a trivial quote fails: yes, ok, or fewer than 3 words and 12 characters", () => {
+  const msgs: InterviewMessage[] = [...INTERVIEW, { id: 10, kind: "user", text: "yes" }, { id: 11, kind: "user", text: "ok" }, { id: 12, kind: "user", text: "Weekly one" }];
+  const a = goodAnswer();
+  a.owner_facts = [
+    { topic: "Agreed", meaning: "the audience", quote: "yes", msg: 10 },
+    { topic: "Agreed", meaning: "the plans", quote: "ok", msg: 11 },
+    { topic: "Plan", meaning: "weekly", quote: "Weekly one", msg: 12 },
+    { topic: "Plans", meaning: "no renewal", quote: "no auto renew", msg: 6 },
+    { topic: "Audience", meaning: "both", quote: "for casual and", msg: 4 },
+  ];
+  const db = assembleDesignBrief(a, BRIEF);
+  const r = checkDesignBrief(db, msgs, BRIEF);
+  assert.deepEqual(r.quoteCheck.failed.map((f) => [f.path, f.why]), [
+    ["owner_facts[0]", "too short"],
+    ["owner_facts[1]", "too short"],
+    ["owner_facts[2]", "too short"],
+  ]);
+  assert.match(retryNote(r), /owner_facts\[0\]: the quote "yes" is too short to carry the fact\. Quote at least 3 words or 12 characters/);
+  // Three words pass, and so do 12 characters in fewer words.
+  assert.equal(quoteTooShort("messages[0]", "no auto renew", db), false);
+  assert.equal(quoteTooShort("messages[0]", "subscription", db), false);
+  assert.equal(quoteTooShort("messages[0]", "Weekly works", db), false, "12 characters is enough");
+  assert.equal(quoteTooShort("messages[0]", "yes ok", db), true);
+});
+
+await test("short owner values pass where the quote is the value: the name, and the colour mode, colour and tone", () => {
+  const db = assembleDesignBrief(goodAnswer(), BRIEF);
+  assert.equal(quoteTooShort("name", "PickPal", db), false);
+  assert.equal(quoteTooShort("name", "it is", db), true, "a short name quote must hold the name");
+  for (const v of ["Dark", "orange", "#F97316", "Bold"]) assert.equal(quoteTooShort("look.accent", v, db), false, v);
+  assert.equal(quoteTooShort("look.tone", "yes", db), true, "yes is never a quote");
+  assert.equal(quoteTooShort("look.mode", "OK!", db), true);
+  const a = goodAnswer();
+  a.name = { quote: "PickPal", msg: 2 };
+  a.look_quotes = { mode: { quote: "Dark", msg: 8 }, accent: { quote: "orange", msg: 8 }, tone: { quote: "Bold", msg: 8 } };
+  assert.ok(check(a).r.ok, check(a).r.quoteCheck.failed.map((f) => f.path).join(", "));
 });
 
 await test("sample filler stays generic: no digits but 0", () => {
@@ -316,7 +356,8 @@ await test("the worker step has a time limit and never throws", async () => {
   const slow: ToolCall = () => new Promise(() => {});
   const r = await designBriefStep({ msgs: INTERVIEW, brief: BRIEF, file: "/nope", env: { WORKER_DESIGN_BRIEF_MS: "50" } as NodeJS.ProcessEnv, call: slow });
   assert.equal(r.passedToRunner, false);
-  assert.ok(r.skipped === null && /took longer than 50 ms/.test(r.error ?? ""));
+  assert.ok(r.skipped === null && /^timed out: took longer than 50 ms, so the build went on without a design brief$/.test(r.error ?? ""), r.skipped === null ? r.error ?? "" : "");
+  assert.equal(DESIGN_BRIEF_LIMIT_MS, 120_000, "two minutes by default");
 });
 
 console.log(failed ? `${failed} failed` : "all passed");

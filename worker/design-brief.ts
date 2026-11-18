@@ -4,12 +4,16 @@
  * without a design brief, and the build record says why.
  *   WORKER_DESIGN_BRIEF=off            skips the step
  *   ANTHROPIC_DESIGN_BRIEF_MODEL       the model for this step only (default Opus)
- *   WORKER_DESIGN_BRIEF_MS             time limit for the whole step, both attempts (default 6 minutes)
+ *   WORKER_DESIGN_BRIEF_MS             time limit for the whole step, both attempts (default 2 minutes). On a time-out the
+ *                                      build goes on without the design brief, and the record's error says so.
  */
 import { writeFile } from "node:fs/promises";
 import { anthropicToolCall, designBriefModel, writeDesignBrief, type DesignBriefResult, type ToolCall } from "../src/lib/agents/design-brief-writer";
 import type { InterviewMessage } from "../src/lib/builder/design-brief";
 import { interviewForRecord } from "./build-record";
+
+/** The whole step, both attempts, gets two minutes unless WORKER_DESIGN_BRIEF_MS says otherwise. */
+export const DESIGN_BRIEF_LIMIT_MS = 120_000;
 
 /** What the build record keeps under details.designBrief. */
 export type DesignBriefRecord = (DesignBriefResult & { passedToRunner: boolean; file: string | null; skipped: null }) | { skipped: string; passedToRunner: false };
@@ -31,12 +35,12 @@ export async function designBriefStep(opts: {
   if (!call) return { skipped: "no ANTHROPIC_API_KEY on the worker", passedToRunner: false };
 
   const model = designBriefModel(env);
-  const limit = Number(env.WORKER_DESIGN_BRIEF_MS ?? 360_000);
+  const limit = Number(env.WORKER_DESIGN_BRIEF_MS ?? DESIGN_BRIEF_LIMIT_MS);
   let timer: NodeJS.Timeout | undefined;
   const timedOut = new Promise<DesignBriefResult>((resolve) => {
     timer = setTimeout(() => resolve({
       model, attempts: 0, passed: false, quoteCheck: null, problems: [], firstAttempt: null, json: null, markdown: null,
-      costUsd: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, durationMs: limit, error: `took longer than ${limit} ms`,
+      costUsd: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, durationMs: limit, error: `timed out: took longer than ${limit} ms, so the build went on without a design brief`,
     }), limit);
   });
   const r = await Promise.race([writeDesignBrief({ messages, brief: opts.brief, call, model }), timedOut]).finally(() => clearTimeout(timer));

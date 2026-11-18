@@ -123,7 +123,7 @@ export function designBriefSystem(): string {
   return `You write the design brief for one website, before it is built. You get the interview between the owner and Scout (the builder's interviewer) and the brief Scout wrote, which the owner approved. The build agent never sees the interview, so this brief carries the owner's own words to it. Call the write_design_brief tool once with the whole brief.
 
 Rules:
-1. Every owner fact carries a quote: words copied exactly, character for character, from one line marked Owner, and that line's number. Keep the owner's spelling and typos inside a quote. Never quote a Scout line. Keep quotes short: the few words that carry the fact.
+1. Every owner fact carries a quote: words copied exactly, character for character, from one line marked Owner, and that line's number. Keep the owner's spelling and typos inside a quote. Never quote a Scout line. Keep quotes short: the few words that carry the fact, and at least 3 words or 12 characters. Only a name, a colour mode, a colour or a tone may be shorter. A bare "yes" or "ok" is never a quote: quote more of the owner's line, or leave the item out.
 2. No new facts about the business. No numbers, results, records, names, prices, dates, customers or promises the owner did not give. Write a number only if the owner typed it.
 3. When the owner's words plainly expand (for example "all 4 major leagues in America" means NFL, NBA, MLB and NHL), put it in owner_facts with the quote and the plain meaning. That is the owner's fact, not a proposal.
 4. When the owner agreed to something Scout suggested (for example "yes, that's about right"), quote the owner's agreement and say in the meaning what they agreed to.
@@ -239,7 +239,25 @@ export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>
 
 // ---- the checks ----
 
-export type QuoteFailure = { path: string; quote: string; msg: number | null; why: "empty" | "not in an owner message" };
+export type QuoteFailure = { path: string; quote: string; msg: number | null; why: "empty" | "too short" | "not in an owner message" };
+
+/** Replies that carry no fact of their own. Never enough as a quote, even where a short quote is allowed. */
+const TRIVIAL = new Set(["yes", "ok", "okay", "sure", "correct", "right", "yep", "yeah", "no", "fine", "good", "done", "great"]);
+
+/**
+ * A quote must carry the fact: at least 3 words or 12 characters. Short owner values are allowed where the quote is the
+ * value itself: the product name (when the quote holds the name) and the colour mode, colour and tone (for example "Dark",
+ * "orange", "#F97316"). A bare "yes" or "ok" never passes.
+ */
+export function quoteTooShort(path: string, quote: string, db: DesignBrief): boolean {
+  const t = quote.replace(/\s+/g, " ").trim();
+  const bare = t.toLowerCase().replace(/[^a-z0-9#' ]/g, "").trim();
+  if (TRIVIAL.has(bare)) return true;
+  if (t.split(" ").length >= 3 || t.length >= 12) return false;
+  if (path === "name") return !(db.name.value && normalizeQuote(t).includes(normalizeQuote(db.name.value)));
+  if (path.startsWith("look.")) return false;
+  return true;
+}
 export type QuoteCheck = {
   checked: number;
   passed: number;
@@ -285,8 +303,8 @@ function writtenText(db: DesignBrief): string[] {
 const numbers = (s: string) => (s.replace(/(\d),(\d{3})/g, "$1$2").match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n)));
 
 /**
- * Checks the design brief against the interview. Quotes: each must appear word for word (ignoring case and spacing) in an
- * owner message; one found in another owner message than the one cited gets the right number. Direction: names from the
+ * Checks the design brief against the interview. Quotes: each must be long enough to carry the fact (quoteTooShort) and
+ * appear word for word (ignoring case and spacing) in an owner message; one found in another owner message than the one cited gets the right number. Direction: names from the
  * closed lists only. Numbers: any number the model wrote must be one the owner typed or one in the approved brief. Sample filler: no digits but 0.
  * Changes msg numbers in place; everything else is only reported.
  */
@@ -298,6 +316,10 @@ export function checkDesignBrief(db: DesignBrief, messages: InterviewMessage[], 
     const n = normalizeQuote(ref.quote ?? "");
     if (!n) {
       quoteCheck.failed.push({ path, quote: ref.quote ?? "", msg: ref.msg, why: "empty" });
+      continue;
+    }
+    if (quoteTooShort(path, ref.quote ?? "", db)) {
+      quoteCheck.failed.push({ path, quote: ref.quote ?? "", msg: ref.msg, why: "too short" });
       continue;
     }
     const cited = owner.find((o) => o.id === ref.msg);
@@ -349,7 +371,10 @@ function ownerImage(brief: Record<string, unknown>): boolean {
 /** What the model is told when its first answer did not pass, so the one retry can fix exactly that. */
 export function retryNote(r: CheckResult): string {
   const lines = [
-    ...r.quoteCheck.failed.map((f) => `- ${f.path}: the quote "${f.quote}" is ${f.why === "empty" ? "empty" : "not word for word in any Owner line"}. Copy the owner's exact words, or leave the item out.`),
+    ...r.quoteCheck.failed.map((f) =>
+      f.why === "too short"
+        ? `- ${f.path}: the quote "${f.quote}" is too short to carry the fact. Quote at least 3 words or 12 characters of the owner's own line (a bare yes or ok is never enough), or leave the item out.`
+        : `- ${f.path}: the quote "${f.quote}" is ${f.why === "empty" ? "empty" : "not word for word in any Owner line"}. Copy the owner's exact words, or leave the item out.`),
     ...r.problems.map((p) => `- ${p}`),
   ];
   return `The design brief did not pass the checks:\n${lines.join("\n")}\nCall write_design_brief again with the whole corrected brief.`;
