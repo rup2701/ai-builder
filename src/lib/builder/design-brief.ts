@@ -47,6 +47,21 @@ export const normalizeQuote = (s: string) =>
 // ---- what the model returns (the tool input) ----
 
 export type Quoted = { quote: string; msg: number };
+
+/** What a reference may teach, from creative.md section 5. Never its layout measurements, wording, logos, art or exact palette. */
+export const REFERENCE_LESSONS = ["pace", "density", "contrast", "hero", "proof", "motion"] as const;
+export type ReferenceLesson = (typeof REFERENCE_LESSONS)[number];
+const LESSON_WORDS: Record<ReferenceLesson, string> = {
+  pace: "pace (how much per screen)",
+  density: "density",
+  contrast: "contrast between headline and body",
+  hero: "how the hero presents the product",
+  proof: "how proof is shown",
+  motion: "how motion is used",
+};
+
+/** A placeholder is one short label for one thing only the owner can supply: at most 8 words, not a sentence. */
+export const PLACEHOLDER_MAX_WORDS = 8;
 type Choice = { value: string; why: string };
 
 export type ModelDesignBrief = {
@@ -57,6 +72,8 @@ export type ModelDesignBrief = {
   messages: ({ text: string } & Quoted)[];
   plans: ({ name: string; price: string | null; length: string | null; highlight: boolean; highlight_quote: Quoted | null } & Quoted)[];
   look_quotes: { mode: Quoted | null; accent: Quoted | null; tone: Quoted | null };
+  /** Sites, apps or brands the owner named as inspiration, with what to learn from each (creative.md section 5). */
+  references: ({ name: string; learn: ReferenceLesson[] } & Quoted)[];
   direction: { pairing: Choice; motif: Choice; hero_kind: Choice; signatures: Choice[] };
   sample_card: { item: string; fields: { label: string; filler: string }[] };
   care: { flag: string; rule: string }[];
@@ -89,6 +106,15 @@ export const DESIGN_BRIEF_TOOL = {
         },
       },
       look_quotes: { type: "object", properties: { mode: quotedOrNull, accent: quotedOrNull, tone: quotedOrNull }, required: ["mode", "accent", "tone"] },
+      references: {
+        type: "array",
+        description: "Sites, apps or brands the owner named as inspiration or as a look they like. Empty if they named none.",
+        items: {
+          type: "object",
+          properties: { name: { type: "string" }, learn: { type: "array", minItems: 1, items: { type: "string", enum: [...REFERENCE_LESSONS] } }, ...quoted.properties },
+          required: ["name", "learn", ...quoted.required],
+        },
+      },
       direction: {
         type: "object",
         properties: {
@@ -105,11 +131,15 @@ export const DESIGN_BRIEF_TOOL = {
         required: ["item", "fields"],
       },
       care: { type: "array", items: { type: "object", properties: { flag: { type: "string" }, rule: { type: "string" } }, required: ["flag", "rule"] } },
-      placeholders: { type: "array", items: { type: "object", properties: { slot: { type: "string" }, what: { type: "string" } }, required: ["slot", "what"] } },
+      placeholders: {
+        type: "array",
+        description: "Only things the owner alone can supply, such as a legal notice. One short label each, not a sentence.",
+        items: { type: "object", properties: { slot: { type: "string" }, what: { type: "string", description: `A label of at most ${PLACEHOLDER_MAX_WORDS} words, no full stop.` } }, required: ["slot", "what"] },
+      },
       other_proposals: { type: "array", items: { type: "object", properties: { field: { type: "string" }, value: { type: "string" }, why: { type: "string" } }, required: ["field", "value", "why"] } },
       gaps: { type: "array", items: { type: "object", properties: { question: { type: "string" }, affects: { type: "array", items: { type: "string" } } }, required: ["question", "affects"] } },
     },
-    required: ["name", "audience", "voice", "owner_facts", "messages", "plans", "look_quotes", "direction", "sample_card", "care", "placeholders", "other_proposals", "gaps"],
+    required: ["name", "audience", "voice", "owner_facts", "messages", "plans", "look_quotes", "references", "direction", "sample_card", "care", "placeholders", "other_proposals", "gaps"],
   },
 } as const;
 
@@ -124,17 +154,18 @@ export function designBriefSystem(): string {
 
 Rules:
 1. Every owner fact carries a quote: words copied exactly, character for character, from one line marked Owner, and that line's number. Keep the owner's spelling and typos inside a quote. Never quote a Scout line. Keep quotes short: the few words that carry the fact, and at least 3 words or 12 characters. Only a name, a colour mode, a colour or a tone may be shorter. A bare "yes" or "ok" is never a quote: quote more of the owner's line, or leave the item out.
-2. No new facts about the business. No numbers, results, records, names, prices, dates, customers or promises the owner did not give. Write a number only if the owner typed it.
+2. No new facts about the business. No numbers, results, records, names, prices, dates, customers or promises the owner did not give. Write a number only if the owner typed it. Names the owner gave are kept, including sites, apps or brands they named as inspiration (see references).
 3. When the owner's words plainly expand (for example "all 4 major leagues in America" means NFL, NBA, MLB and NHL), put it in owner_facts with the quote and the plain meaning. That is the owner's fact, not a proposal.
 4. When the owner agreed to something Scout suggested (for example "yes, that's about right"), quote the owner's agreement and say in the meaning what they agreed to.
 5. Anything you suggest that the owner did not say is a proposal with a one-line reason: the direction choices, and anything in other_proposals.
 6. What is missing is a gap: one plain question for the owner. Never fill a gap with a guess.
-7. Sensitive topics (money, betting, health, legal, children, personal data) get care rules: the claims the site must not make. A notice only the owner can write (eligibility, a disclaimer) is a placeholder, never drafted by you.
+7. Sensitive topics (money, betting, health, legal, children, personal data) get care rules: the claims the site must not make. A notice only the owner can write (eligibility, a disclaimer) is a placeholder, never drafted by you. A placeholder is one short label for one thing only the owner can supply, at most ${PLACEHOLDER_MAX_WORDS} words and not a sentence, for example "Age and responsible-gambling notice". It is shown on the page as it is. Notes for the builder (links not set yet, a concept preview, pages that do not exist) are never placeholders: the brief and the pack already handle them.
 8. Direction: choose exactly one pairing, one motif, one hero kind and one or two signatures, by name, from the lists below only. Choose what fits the product, the audience and the tone. owner-art only if the brief has an image the owner supplied.
 9. Plans: copy name, price and length as the owner gave them. highlight is true only if the owner asked for a plan to stand out, with highlight_quote where they asked. Otherwise highlight is false and highlight_quote is null. Equal plans get equal treatment.
 10. look_quotes: where the owner chose the colour mode, the colour and the tone, or null.
-11. sample_card: what one item in the hero preview is (for a picks product, one pick) and two to four field labels with plainly generic filler, such as AWAY @ HOME, League, 0.0, Name or Date. No real names and no digits other than 0. Every sample card is marked Sample on the page.
-12. Plain, short words. The readers are a build agent and the owner, who is not technical.
+11. references: every site, app or brand the owner named as inspiration or as a look they like, with the owner's quote (it must contain the name as the owner wrote it) and what to learn from it, from this list only: ${REFERENCE_LESSONS.join(", ")}. Choose the lessons that match what the owner said about it; if they said only that they like it, choose pace, density and hero. Never more than that: a reference sets a direction, it is never copied.
+12. sample_card: what one item in the hero preview is (for a picks product, one pick) and two to four field labels with plainly generic filler, such as AWAY @ HOME, League, 0.0, Name or Date. No real names and no digits other than 0. Every sample card is marked Sample on the page.
+13. Plain, short words. The readers are a build agent and the owner, who is not technical.
 
 The lists (use these names exactly):
 ${JSON.stringify(lists, null, 2)}`;
@@ -159,6 +190,7 @@ export type DesignBrief = {
     accent: { value: string | null; quote: string | null; msg: number | null };
     tone: { value: string | null; quote: string | null; msg: number | null };
   };
+  references: ModelDesignBrief["references"];
   direction: {
     pairing: { value: string; proposal: string };
     motif: { value: string; proposal: string };
@@ -169,7 +201,8 @@ export type DesignBrief = {
   };
   sample_card: ModelDesignBrief["sample_card"] & { marked: "Sample" };
   care: ModelDesignBrief["care"];
-  placeholders: { slot: string; text: string }[];
+  /** label is the model's words; text is what the page shows, formatted by code. */
+  placeholders: { slot: string; label: string; text: string }[];
   proposals: { id: string; field: string; value: string; why: string }[];
   gaps: { id: string; question: string; affects: string[] }[];
 };
@@ -222,6 +255,12 @@ export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>
     messages: arr(m.messages),
     plans: arr<ModelDesignBrief["plans"][number]>(m.plans).map((p) => ({ ...p, highlight: p.highlight === true && !!q(p.highlight_quote), highlight_quote: p.highlight === true ? q(p.highlight_quote) : null })),
     look: { mode: lookQ(lq.mode, lv.mode), accent: lookQ(lq.accent, lv.accent), tone: lookQ(lq.tone, lv.tone) },
+    references: arr<ModelDesignBrief["references"][number]>(m.references).map((r) => ({
+      name: str(r.name),
+      learn: [...new Set(arr<string>(r.learn).map(String))] as ReferenceLesson[],
+      quote: typeof r.quote === "string" ? r.quote : "",
+      msg: Number(r.msg),
+    })),
     direction: {
       pairing,
       motif,
@@ -231,7 +270,10 @@ export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>
     },
     sample_card: { item: str(sc.item), fields: arr<{ label: string; filler: string }>(sc.fields).map((f) => ({ label: str(f.label), filler: str(f.filler) })), marked: "Sample" },
     care: arr<{ flag: string; rule: string }>(m.care).map((c) => ({ flag: str(c.flag), rule: str(c.rule) })),
-    placeholders: arr<{ slot: string; what: string }>(m.placeholders).map((p) => ({ slot: str(p.slot), text: `[${str(p.what).replace(/[[\]]/g, "")}: owner to supply]` })),
+    placeholders: arr<{ slot: string; what: string }>(m.placeholders).map((p) => {
+      const label = str(p.what).replace(/[[\]]/g, "").replace(/[.\s]+$/, "");
+      return { slot: str(p.slot), label, text: `[${label}: owner to supply]` };
+    }),
     proposals,
     gaps: arr<{ question: string; affects: string[] }>(m.gaps).map((g, i) => ({ id: `g${i + 1}`, question: str(g.question), affects: arr<string>(g.affects).map(String) })),
   };
@@ -256,6 +298,12 @@ export function quoteTooShort(path: string, quote: string, db: DesignBrief): boo
   if (t.split(" ").length >= 3 || t.length >= 12) return false;
   if (path === "name") return !(db.name.value && normalizeQuote(t).includes(normalizeQuote(db.name.value)));
   if (path.startsWith("look.")) return false;
+  // A site or brand the owner named may be quoted on its own, as long as the quote holds that name.
+  const ref = /^references\[(\d+)\]$/.exec(path);
+  if (ref) {
+    const name = db.references[Number(ref[1])]?.name ?? "";
+    return !(name && normalizeQuote(t).includes(normalizeQuote(name)));
+  }
   return true;
 }
 export type QuoteCheck = {
@@ -280,6 +328,7 @@ function quotesIn(db: DesignBrief): { path: string; ref: { quote: string | null;
     if (x.highlight_quote) out.push({ path: `plans[${i}].highlight_quote`, ref: x.highlight_quote });
   });
   for (const k of ["mode", "accent", "tone"] as const) if (db.look[k].quote !== null) out.push({ path: `look.${k}`, ref: db.look[k] });
+  db.references.forEach((x, i) => out.push({ path: `references[${i}]`, ref: x }));
   return out;
 }
 
@@ -297,6 +346,7 @@ function writtenText(db: DesignBrief): string[] {
     ...db.care.flatMap((c) => [c.flag, c.rule]),
     ...db.placeholders.map((p) => p.text),
     ...db.gaps.map((g) => g.question),
+    ...db.references.map((r) => r.name),
   ];
 }
 
@@ -360,6 +410,22 @@ export function checkDesignBrief(db: DesignBrief, messages: InterviewMessage[], 
   for (const f of db.sample_card.fields) if (/[1-9]/.test(f.filler)) problems.push(`sample_card filler "${f.filler}" has a digit other than 0`);
   for (const p of db.plans) if (p.highlight && !p.highlight_quote) problems.push(`plan "${p.name}" is highlighted without the owner asking`);
 
+  // References: the owner's quote holds the name, and the lessons come from creative.md's list only.
+  db.references.forEach((r, i) => {
+    if (!r.name) problems.push(`references[${i}] has no name`);
+    else if (!normalizeQuote(r.quote).includes(normalizeQuote(r.name))) problems.push(`references[${i}] "${r.name}": the quote does not hold the name as the owner wrote it`);
+    if (!r.learn.length) problems.push(`references[${i}] "${r.name}" says nothing to learn from it`);
+    for (const l of r.learn) if (!(REFERENCE_LESSONS as readonly string[]).includes(l)) problems.push(`references[${i}] "${r.name}": "${l}" is not one of ${REFERENCE_LESSONS.join(", ")}`);
+  });
+
+  // Placeholders are shown on the page as they are: one short label each, never a sentence or a note for the builder.
+  db.placeholders.forEach((p, i) => {
+    const words = p.label.split(/\s+/).filter(Boolean).length;
+    if (!words) problems.push(`placeholders[${i}] is empty`);
+    else if (words > PLACEHOLDER_MAX_WORDS) problems.push(`placeholders[${i}] "${p.label}" has ${words} words; a placeholder is a label of at most ${PLACEHOLDER_MAX_WORDS} words`);
+    if (/[.!?;:]/.test(p.label)) problems.push(`placeholders[${i}] "${p.label}" is a sentence or a note; a placeholder is one short label, with no full stop`);
+  });
+
   return { quoteCheck, problems, ok: quoteCheck.failed.length === 0 && problems.length === 0 };
 }
 
@@ -382,6 +448,10 @@ export function retryNote(r: CheckResult): string {
 
 // ---- specs/design-brief.md ----
 
+/** A sentence ends with exactly one full stop, whether or not the model wrote one. */
+const end = (t: string) => `${t.trim().replace(/[.\s]+$/, "")}.`;
+const bare = (t: string) => t.trim().replace(/[.\s]+$/, "");
+
 const said = (x: { quote: string | null; msg: number | null }) => (x.quote ? ` Owner said: "${x.quote.replace(/\s+/g, " ").trim()}" (message ${x.msg}).` : "");
 
 /** The design brief in plain words, for specs/design-brief.md. The build agent reads it after creative.md. */
@@ -395,18 +465,18 @@ export function renderDesignBrief(db: DesignBrief): string {
   p();
   p("## Audience and voice");
   p();
-  for (const a of db.audience) p(`- ${a.value}${a.meaning ? `: ${a.meaning}` : ""}.${said(a)}`);
-  if (db.voice.summary) p(`- Voice: ${db.voice.summary}${db.voice.quotes.map((x) => said(x)).join("")}`);
+  for (const a of db.audience) p(`- ${end(a.meaning ? `${bare(a.value)}: ${a.meaning}` : a.value)}${said(a)}`);
+  if (db.voice.summary) p(`- Voice: ${end(db.voice.summary)}${db.voice.quotes.map((x) => said(x)).join("")}`);
   p();
   if (db.owner_facts.length) {
     p("## What the owner told us");
     p();
-    for (const f of db.owner_facts) p(`- ${f.topic}: ${f.meaning}.${said(f)}`);
+    for (const f of db.owner_facts) p(`- ${bare(f.topic)}: ${end(f.meaning)}${said(f)}`);
     p();
   }
   p("## Messages to lead with");
   p();
-  db.messages.forEach((m, i) => p(`${i + 1}. ${m.text}${said(m)}`));
+  db.messages.forEach((m, i) => p(`${i + 1}. ${end(m.text)}${said(m)}`));
   p();
   if (db.plans.length) {
     p("## Plans");
@@ -420,6 +490,7 @@ export function renderDesignBrief(db: DesignBrief): string {
   if (db.look.mode.value) p(`- Colour mode: ${db.look.mode.value}.${said(db.look.mode)}`);
   if (db.look.accent.value) p(`- Accent colour: ${db.look.accent.value}, the one accent on the page.${said(db.look.accent)}`);
   if (db.look.tone.value) p(`- Tone: ${db.look.tone.value}.${said(db.look.tone)}`);
+  for (const r of db.references) p(`- A site the owner likes: ${r.name}. Learn only ${r.learn.map((l) => LESSON_WORDS[l] ?? l).join(", ")} from it. Never copy its layout, wording, logos, art or exact palette.${said(r)}`);
   p();
   p("## Recommended direction (our proposal)");
   p();
@@ -434,13 +505,13 @@ export function renderDesignBrief(db: DesignBrief): string {
   if (others.length) {
     p("## Other proposals");
     p();
-    for (const x of others) p(`- ${x.value} (${x.field}). Why: ${x.why}`);
+    for (const x of others) p(`- ${bare(x.value)} (${x.field}). Why: ${end(x.why)}`);
     p();
   }
   if (db.care.length || db.placeholders.length) {
     p("## Handle with care");
     p();
-    for (const c of db.care) p(`- ${c.flag}: ${c.rule}`);
+    for (const c of db.care) p(`- ${bare(c.flag)}: ${end(c.rule)}`);
     for (const x of db.placeholders) p(`- Show this placeholder, never drafted text: ${x.text} (${x.slot}).`);
     p();
   }

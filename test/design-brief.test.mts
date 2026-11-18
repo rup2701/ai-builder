@@ -240,7 +240,7 @@ await test("code fills the name, mode, accent and tone from the brief, numbers p
   assert.deepEqual(db.proposals.map((p) => [p.id, p.field]), [["p1", "direction.pairing"], ["p2", "direction.motif"], ["p3", "direction.hero_kind"], ["p4", "direction.signature"], ["p5", "hero.chips"]]);
   assert.equal(db.direction.pairing.proposal, "p1");
   assert.deepEqual(db.gaps.map((g) => g.id), ["g1"]);
-  assert.deepEqual(db.placeholders, [{ slot: "notice", text: "[Eligibility and responsible-gaming notice: owner to supply]" }]);
+  assert.deepEqual(db.placeholders, [{ slot: "notice", label: "Eligibility and responsible-gaming notice", text: "[Eligibility and responsible-gaming notice: owner to supply]" }]);
   assert.equal(db.sample_card.marked, "Sample");
 });
 
@@ -256,6 +256,85 @@ await test("the markdown has the plain sections, quotes with their message numbe
   assert.match(md, /\[Eligibility and responsible-gaming notice: owner to supply\]/);
   assert.match(md, /Do not answer these on the page/);
   assert.doesNotMatch(md, /\n{3}/);
+});
+
+// ---- references: sites and brands the owner named as inspiration ----
+
+const REF_MSGS: InterviewMessage[] = [
+  ...INTERVIEW,
+  { id: 20, kind: "bot", text: "Any sites or apps whose look you like?" },
+  { id: 21, kind: "user", text: "i like the vibe of Sleeper and the clean cards on Underdog Fantasy" },
+];
+const withRefs = (refs: unknown[]) => ({ ...goodAnswer(), references: refs });
+
+await test("a site or brand the owner named is kept with its quote and what to learn from it", () => {
+  const a = withRefs([
+    { name: "Sleeper", learn: ["pace", "density", "hero"], quote: "the vibe of Sleeper", msg: 21 },
+    { name: "Underdog Fantasy", learn: ["density", "proof"], quote: "Underdog Fantasy", msg: 21 },
+  ]);
+  const db = assembleDesignBrief(a, BRIEF);
+  const r = checkDesignBrief(db, REF_MSGS, BRIEF);
+  assert.deepEqual(r.problems, []);
+  assert.equal(r.quoteCheck.failed.length, 0, "a reference may be quoted by its name alone");
+  assert.ok(r.ok);
+  const md = renderDesignBrief(db);
+  assert.match(md, /- A site the owner likes: Sleeper\. Learn only pace \(how much per screen\), density, how the hero presents the product from it\. Never copy its layout, wording, logos, art or exact palette\. Owner said: "the vibe of Sleeper" \(message 21\)\./);
+  assert.match(md, /A site the owner likes: Underdog Fantasy\. Learn only density, how proof is shown/);
+  assert.ok(md.indexOf("A site the owner likes") > md.indexOf("## Look") && md.indexOf("A site the owner likes") < md.indexOf("## Recommended direction"));
+});
+
+await test("a reference fails when its quote lacks the name, the owner never wrote it, or a lesson is not on the list", () => {
+  const a = withRefs([
+    { name: "Sleeper", learn: ["pace"], quote: "the clean cards on", msg: 21 },
+    { name: "DraftKings", learn: ["hero"], quote: "the look of DraftKings", msg: 21 },
+    { name: "Underdog Fantasy", learn: ["logo", "density"], quote: "Underdog Fantasy", msg: 21 },
+  ]);
+  const r = checkDesignBrief(assembleDesignBrief(a, BRIEF), REF_MSGS, BRIEF);
+  assert.ok(r.problems.some((p) => /references\[0\] "Sleeper": the quote does not hold the name/.test(p)), r.problems.join("; "));
+  assert.ok(r.quoteCheck.failed.some((f) => f.path === "references[1]" && f.why === "not in an owner message"));
+  assert.ok(r.problems.some((p) => /references\[2\] "Underdog Fantasy": "logo" is not one of pace, density, contrast, hero, proof, motion/.test(p)));
+});
+
+await test("the model is told to keep the owner's inspiration names and given the lesson list", () => {
+  const s = designBriefSystem();
+  assert.match(s, /Names the owner gave are kept, including sites, apps or brands they named as inspiration/);
+  assert.match(s, /references: every site, app or brand the owner named/);
+  assert.match(s, /pace, density, contrast, hero, proof, motion/);
+  assert.ok((DESIGN_BRIEF_TOOL.input_schema.required as readonly string[]).includes("references"));
+});
+
+// ---- placeholders: one short label, shown on the page as it is ----
+
+await test("a placeholder is a short label; a sentence or a note for the builder fails", () => {
+  const a = goodAnswer();
+  a.placeholders = [
+    { slot: "notice", what: "Age and responsible-gambling notice." },
+    { slot: "buttons", what: "Join now and Sign in have no links yet. Mark each one Set your link." },
+    { slot: "hero", what: "A concept preview of sample pick cards until the owner sends a screenshot" },
+    { slot: "footer", what: "Pages: About, Contact" },
+  ];
+  const db = assembleDesignBrief(a, BRIEF);
+  assert.equal(db.placeholders[0].text, "[Age and responsible-gambling notice: owner to supply]", "code drops a closing full stop");
+  const r = checkDesignBrief(db, INTERVIEW, BRIEF);
+  const about = (i: number) => r.problems.filter((p) => p.startsWith(`placeholders[${i}]`));
+  assert.deepEqual(about(0), []);
+  assert.ok(about(1).some((p) => /is a sentence or a note/.test(p)) && about(1).some((p) => /has 15 words/.test(p)), about(1).join("; "));
+  assert.ok(about(2).some((p) => /has 13 words; a placeholder is a label of at most 8 words/.test(p)));
+  assert.ok(about(3).some((p) => /is a sentence or a note/.test(p)));
+  assert.match(designBriefSystem(), /Notes for the builder \(links not set yet, a concept preview, pages that do not exist\) are never placeholders/);
+});
+
+await test("each line ends with one full stop, whether or not the model wrote one", () => {
+  const a = goodAnswer();
+  a.audience[0].meaning = "fans who bet for fun and fans who take it seriously.";
+  a.owner_facts[0].meaning = "NFL, NBA, MLB and NHL.";
+  a.messages[0].text = "Simple, fun picks";
+  a.care[0].rule = "No win record";
+  const md = renderDesignBrief(assembleDesignBrief(a, BRIEF));
+  assert.doesNotMatch(md, /\.\./);
+  assert.match(md, /- casual and serious fans: fans who bet for fun and fans who take it seriously\. Owner said:/);
+  assert.match(md, /1\. Simple, fun picks\. Owner said:/);
+  assert.match(md, /- Betting: No win record\./);
 });
 
 // ---- the writer: one call, one retry ----
