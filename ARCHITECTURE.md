@@ -27,7 +27,7 @@ Vercel is the front desk; Fly is the workshop.
 1. The person picks a template on `/new` and chats with Scout. Scout's interviewer (`src/lib/agents/*-interviewer.ts`) asks questions; code picks the next question and checks every answer, the model only words them.
 2. The answers become a **brief** (`src/lib/builder/site-brief.ts`, validated). A **plan card** shows the sections. For a restaurant, empty sections show as placeholders (template mode).
 3. The build route (`src/app/api/projects/[id]/build`) queues a `site_build` job.
-4. The worker claims it and calls the runner: fresh folder, the pack's specs and reference components, the agent builds, then the runner runs typecheck and build by itself.
+4. The worker claims it and calls the runner: fresh folder, the pack's specs and reference components, the agent builds, then the runner runs typecheck and build by itself. For a showcase site the worker first writes a **design brief** from the interview (`worker/design-brief.ts`, `src/lib/builder/design-brief.ts`): one model call (`ANTHROPIC_DESIGN_BRIEF_MODEL`, default Opus), every owner quote checked word for word against the chat, direction names checked against the pack's lists, one retry. Only a brief that passes goes to the runner, as `specs/design-brief.md`; the build record keeps it either way. `WORKER_DESIGN_BRIEF=off` skips it.
 5. The worker deploys, takes preview pictures, builds the "Check these before you share it" list (`checklist()` in `worker/site-build.ts`) and posts the **ready card** and emails.
 6. Restaurant sites only: a `site_admin` job follows. It runs `deploy --add-database` (see below).
 7. After launch, changes go through `change-planner.ts` → plan → `site_change` job → preview → approve → `site_publish`, with undo.
