@@ -1,19 +1,22 @@
 import assert from "node:assert/strict";
-import { makeSiteInterviewer, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
+import { makeSiteInterviewer, MISSED_REPLY, replyMessage, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
 import { validateSiteBrief, briefCard } from "../src/lib/builder/site-brief";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { emptyState, pushMsg } from "../src/lib/workspace/state";
 import type { WorkspaceState } from "../src/lib/workspace/types";
 
 const usage = { inputTokens: 1000, outputTokens: 100, costUsd: 0.02 };
-type Reply = { text?: string; save?: unknown };
+type Reply = { text?: string; save?: unknown; reply?: unknown };
 const script = (...replies: Reply[]): { chat: Chat; calls: Parameters<Chat>[0][] } => {
   const calls: Parameters<Chat>[0][] = [];
   let i = 0;
   const chat: Chat = async (req) => {
     calls.push(JSON.parse(JSON.stringify(req)));
     const r = replies[Math.min(i++, replies.length - 1)];
-    const toolUses = r.save === undefined ? [] : [{ id: `tu${i}`, name: "save_brief", input: { brief: r.save } }];
+    const toolUses = [
+      ...(r.reply === undefined ? [] : [{ id: `rp${i}`, name: "reply", input: r.reply }]),
+      ...(r.save === undefined ? [] : [{ id: `tu${i}`, name: "save_brief", input: { brief: r.save } }]),
+    ];
     return { text: r.text ?? "", toolUses, content: [{ type: "text", text: r.text ?? "" }, ...toolUses.map((t) => ({ type: "tool_use", ...t }))], usage };
   };
   return { chat, calls };
@@ -34,7 +37,7 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   ok("the example brief validates and the card reads it");
 
   // 2. An ordinary reply is shown and the project stays in intake; usage is passed on.
-  let { chat, calls } = script({ text: "Who is it for?" });
+  let { chat, calls } = script({ reply: { question: "Who is it for?" } });
   let ai = makeSiteInterviewer(chat, "fake");
   let r = await ai.turn(start(), "It's called Mealwise, a dinner planner");
   assert.equal(r.state.phase, "intake");
@@ -109,6 +112,100 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   assert.equal(msgs.length, 3);
   assert.match(String(msgs[1].content), /second bot message/);
   ok("empty input is ignored and roles are merged");
+
+  // ---- APP-45: what Scout understood and the next question, as separate fields ----
+  // 10. The call offers both tools without forcing one (tool_choice any is refused for this model), and a reply shows understood and the question apart.
+  ({ chat, calls } = script({ reply: { understood: "GunnerWins gives members daily picks across the major US leagues.", question: "Who is it for: casual fans, serious bettors or both?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "It is called GunnerWins, daily picks for all major leagues");
+  assert.equal((calls[0] as { toolChoice?: unknown }).toolChoice, undefined, "no forced tool choice");
+  assert.deepEqual(calls[0].tools.map((t) => t.name), ["reply", "save_brief"]);
+  let last = r.state.msgs.at(-1) as Extract<WorkspaceState["msgs"][number], { kind: "bot" }>;
+  assert.equal(last.understood, "GunnerWins gives members daily picks across the major US leagues.");
+  assert.equal(last.question, "Who is it for: casual fans, serious bettors or both?");
+  assert.equal(last.parts, undefined);
+  assert.equal(last.text, "GunnerWins gives members daily picks across the major US leagues.\n\nWho is it for: casual fans, serious bettors or both?");
+  assert.equal(r.state.phase, "intake");
+  ok("a reply keeps what Scout understood apart from the question, and the full text for the model");
+
+  // 11. A question with several parts gets one line per part.
+  ({ chat } = script({ reply: { understood: "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.", question: "Now the look. Tell me:", parts: ["Tone: calm, bold, playful or serious", "Light or dark", "Main colour: blue, green, violet, orange, rose, slate, or your own"] } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "weekly 199, monthly 599");
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.deepEqual(last.parts, ["Tone: calm, bold, playful or serious", "Light or dark", "Main colour: blue, green, violet, orange, rose, slate, or your own"]);
+  assert.match(last.text, /Tell me:\n\n- Tone: calm, bold, playful or serious\n- Light or dark\n- Main colour/);
+  ok("a question with several parts is listed one part per line");
+
+  // 12. Code tidies what the model sends: no leading Got it, no empty or extra parts, and a first message with no understood part.
+  assert.equal(replyMessage({ understood: "Got it: two passes, no auto-renew.", question: "Next?" })?.understood, "Two passes, no auto-renew.");
+  assert.equal(replyMessage({ understood: "got it, it's for both", question: "Next?" })?.understood, "It's for both");
+  assert.deepEqual(replyMessage({ question: " Q ", parts: ["a", " ", "", 3, "b", "c", "d", "e", "f", "g"] })?.parts, ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual(replyMessage({ question: "What is your product?" }), { kind: "bot", text: "What is your product?", question: "What is your product?" });
+  assert.equal(replyMessage({ understood: "something" }), null);
+  assert.equal(replyMessage(null), null);
+  ok("the reply is checked and tidied by code");
+
+  // 13. A reply with no question is sent back once, then the corrected one is shown.
+  ({ chat, calls } = script({ reply: { understood: "Both." } }, { reply: { understood: "It is for both.", question: "What should the main button say?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "both");
+  assert.equal(calls.length, 2);
+  assert.match(JSON.stringify(calls[1].messages.at(-1)!.content), /question is required/);
+  assert.equal((r.state.msgs.at(-1) as typeof last).question, "What should the main button say?");
+  ok("a reply without a question is retried, never shown empty");
+
+  // 14. A reply next to an approved brief is shown, then the saved message.
+  ({ chat } = script({ reply: { understood: "You approved the review.", question: "Saving your brief now." }, save: good }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Yes, build it");
+  assert.equal(r.state.phase, "summary");
+  assert.equal(bots(r.state).at(-2), "You approved the review.\n\nSaving your brief now.");
+  assert.match(bots(r.state).at(-1)!, /brief is saved/);
+  ok("a reply with an approved brief is shown before the saved message");
+
+  // 15. When the brief is refused, every tool call in that answer gets a result, so the next call is accepted.
+  ({ chat, calls } = script({ reply: { question: "Saving." }, save: bad }, { save: good }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "yes");
+  const results = (calls[1].messages.at(-1)!.content as { tool_use_id: string; is_error?: boolean }[]);
+  assert.deepEqual(results.map((x) => x.tool_use_id).sort(), ["rp1", "tu1"]);
+  assert.equal(results.find((x) => x.tool_use_id === "tu1")!.is_error, true);
+  assert.equal(r.state.phase, "summary");
+  ok("a refused brief answers every tool call");
+
+  // 16. The rules tell Scout to use the fields and no longer forbid listing the parts of a question.
+  assert.match(calls[0].system, /reply tool/);
+  assert.match(calls[0].system, /Never start it with "Got it"/);
+  assert.doesNotMatch(calls[0].system, /no lists of questions/);
+  assert.match(calls[0].system, /Always answer by calling the reply tool/);
+  ok("the interview rules describe the reply fields");
+
+  // 17. Plain text with no reply call is a missed call: it is retried once with a reminder, and the reply that follows is shown.
+  ({ chat, calls } = script({ text: "Who is it for?" }, { reply: { understood: "It is a dinner planner.", question: "Who is it for?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Mealwise, a dinner planner");
+  assert.equal(calls.length, 2);
+  const retry = calls[1].messages;
+  assert.equal(retry.at(-2)!.role, "assistant");
+  assert.equal(retry.at(-1)!.role, "user");
+  assert.equal(retry.at(-1)!.content, MISSED_REPLY);
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.equal(last.understood, "It is a dinner planner.");
+  assert.equal(last.question, "Who is it for?");
+  assert.equal(r.usage?.costUsd, 0.04, "both calls are counted");
+  assert.ok(!bots(r.state).some((t) => t.includes(MISSED_REPLY)), "the reminder is never shown");
+  ok("plain text is retried once, asking for the reply tool");
+
+  // 18. Plain text again after the reminder is shown as the question, with no understood part: never blank, never an error.
+  ({ chat, calls } = script({ text: "Who is it for?" }, { text: "Who is it for, casual fans or serious ones?" }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Mealwise");
+  assert.equal(calls.length, 2, "only one retry");
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.deepEqual({ text: last.text, question: last.question, understood: last.understood, parts: last.parts }, { text: "Who is it for, casual fans or serious ones?", question: "Who is it for, casual fans or serious ones?", understood: undefined, parts: undefined });
+  assert.equal(r.state.phase, "intake");
+  ok("plain text after the reminder is shown as the question");
+
+  // 19. A reply without a question, then plain text: the reminder still comes once, and the chat ends with a real message.
+  ({ chat, calls } = script({ reply: { understood: "x" } }, { text: "What is it called?" }, { text: "What is it called, then?" }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "hi");
+  assert.equal(calls.length, 3);
+  assert.equal((r.state.msgs.at(-1) as typeof last).question, "What is it called, then?");
+  ok("a missing question and a missed call are each retried, within three calls");
 
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -850,10 +850,18 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                     </div>
                   );
                 case "bot": {
-                  const plan = site ? parsePlan(m.text) : null;
+                  // Website interview messages carry what Scout understood and the question apart (APP-45). Older messages only have text.
+                  const main = m.question ?? m.text;
+                  const plan = site ? parsePlan(main) : null;
                   return (
                     <div key={m.id} className="max-w-[92%]">
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
+                      {m.understood && (
+                        <div className="mb-2.5 rounded-xl border border-foreground/10 bg-foreground/[0.03] px-3 py-2" data-testid="understood">
+                          <p className="text-xs font-medium text-foreground/55">What I understood</p>
+                          <p className="mt-0.5 whitespace-pre-wrap text-md text-foreground/80">{boldText(m.understood)}</p>
+                        </div>
+                      )}
                       {plan ? (
                         <>
                           {plan.before && <p className="whitespace-pre-wrap text-md text-foreground">{boldText(plan.before)}</p>}
@@ -861,7 +869,17 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                           {plan.after && <p className="mt-2 whitespace-pre-wrap text-md text-foreground">{boldText(plan.after)}</p>}
                         </>
                       ) : (
-                        <p className="whitespace-pre-wrap text-md text-foreground">{boldText(m.text)}</p>
+                        <p className="whitespace-pre-wrap text-md text-foreground" data-testid={m.question ? "question" : undefined}>{boldText(main)}</p>
+                      )}
+                      {m.parts && m.parts.length > 0 && (
+                        <ul className="mt-1.5 space-y-1" data-testid="question-parts">
+                          {m.parts.map((part, i) => (
+                            <li key={i} className="flex gap-2 text-md text-foreground">
+                              <span className="select-none text-foreground/40" aria-hidden="true">•</span>
+                              <span className="min-w-0">{boldText(part)}</span>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                       {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (

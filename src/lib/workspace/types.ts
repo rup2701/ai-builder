@@ -6,7 +6,21 @@ export type Phase = "idle" | "intake" | "summary" | "build" | "verify" | "iterat
 
 type MsgBody =
   | { kind: "user"; text: string }
-  | { kind: "bot"; text: string; hint?: string; free?: true; options?: string[]; palette?: string[] }
+  | {
+      kind: "bot";
+      /** The whole message as plain text. Always set: it is what the model reads back and what older screens show. */
+      text: string;
+      hint?: string;
+      free?: true;
+      options?: string[];
+      palette?: string[];
+      /** Website interview (APP-45): what Scout took from the last answer, drawn as its own block so the owner can correct it. */
+      understood?: string;
+      /** Website interview: the next question (or the message itself, when it is not a question), drawn apart from understood. */
+      question?: string;
+      /** Website interview: the parts of a question with several parts, one short line each. */
+      parts?: string[];
+    }
   | { kind: "build" }
   | { kind: "recap"; items: { label: string; value: string }[] }
   | { kind: "summary"; data: BriefSummary }
