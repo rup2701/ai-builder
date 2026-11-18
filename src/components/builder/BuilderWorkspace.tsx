@@ -446,6 +446,15 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
     return () => clearInterval(t);
   }, [phase, projectId, changeOpen]);
 
+  // APP-49: once a showcase brief is saved at review, and each time it changes, the server writes the design brief in the
+  // background. Nothing is shown and nothing waits on it; the server skips a brief it already has.
+  const siteBrief = st.site?.brief as { site?: { kind?: string } } | undefined;
+  const reviewBrief = phase === "summary" && (siteBrief?.site?.kind === "product-showcase" || siteBrief?.site?.kind === "saas-showcase") ? JSON.stringify(siteBrief) : null;
+  useEffect(() => {
+    if (!reviewBrief) return;
+    void fetch(`/api/projects/${projectId}/design-brief`, { method: "POST" }).catch(() => {});
+  }, [reviewBrief, projectId]);
+
   // Save iterate-phase changes shortly after they happen.
   useEffect(() => {
     if (phase !== "iterate" || !dirty.current) return;

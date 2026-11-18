@@ -17,7 +17,7 @@ import { DONE_STAGE, SITE_STAGES, stageFromRunnerLine } from "../src/lib/builder
 import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify";
 import { addressClaim, addressTakenText, isAddressTaken, siteAddress, type Claim } from "../src/lib/project-archive";
 import { saveBuildRecord } from "./build-record";
-import { designBriefStep, type DesignBriefRecord } from "./design-brief";
+import { designBriefForBuild, type DesignBriefRecord } from "./design-brief";
 import type { ToolCall } from "../src/lib/agents/design-brief-writer";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
@@ -226,7 +226,7 @@ export const tail = (s: string, n = 400) => s.trim().split("\n").slice(-6).join(
 /** A stage-level failure. runSiteBuild records which stage it stopped at, then throws. */
 class BuildStop extends Error {}
 
-export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env, deps: { designBriefCall?: ToolCall } = {}) {
+export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = process.env, deps: { designBriefCall?: ToolCall; sleep?: (ms: number) => Promise<void> } = {}) {
   const runner = env.RUNNER_DIR;
   if (!runner) throw new Error("RUNNER_DIR is not set on the worker, so it cannot find the runner.");
   const { rows } = await db.query(
@@ -268,15 +268,17 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     await mkdir(path.dirname(briefFile), { recursive: true });
     await writeFile(briefFile, JSON.stringify(briefForRunner(brief, job.project_id, env), null, 2));
 
-    // 1b. Showcase sites: the design brief, written from the interview (APP-42). Only a brief that passed its checks goes to
+    // 1b. Showcase sites: the design brief, written from the interview (APP-42). The one written at review is used when it
+    // passed and matches the chat and brief (APP-49); otherwise it is written now. Only a brief that passed its checks goes to
     // the runner; any other outcome is kept in the build record and the build goes on as before.
     const pack = packFor(brief);
     const designArgs: string[] = [];
     if (pack.id === "showcase") {
-      record.designBrief = await designBriefStep({ msgs: start.msgs, brief, file: briefFile.replace(/\.json$/, ".design-brief.md"), env, call: deps.designBriefCall });
+      record.designBrief = await designBriefForBuild({ db, projectId: job.project_id, msgs: start.msgs, brief, file: briefFile.replace(/\.json$/, ".design-brief.md"), env, call: deps.designBriefCall, sleep: deps.sleep });
       if (record.designBrief.passedToRunner) designArgs.push("--design-brief", path.relative(runner, record.designBrief.file!));
       const step = record.designBrief;
-      if (step.skipped === null && step.costUsd > 0) {
+      // A brief from review was paid for (and logged) at review; only one written here is a cost of this build.
+      if (step.skipped === null && step.source === "build_start" && step.costUsd > 0) {
         const t = step.tokens;
         await db
           .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'design_brief', $3, $4, $5, $6)`, [job.project_id, job.id, step.model, t.input + t.cacheRead + t.cacheWrite, t.output, step.costUsd])

@@ -43,6 +43,13 @@
       "when": 1794856937527,
       "tag": "0005_build_records",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795035300950,
+      "tag": "0006_design_brief",
+      "breakpoints": true
     }
   ]
 }

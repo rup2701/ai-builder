@@ -12,6 +12,7 @@ import { DONE_STAGE } from "../src/lib/builder/site-stages";
 import { emptyState } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import type { ToolCall } from "../src/lib/agents/design-brief-writer";
+import { designBriefInput } from "../src/lib/agents/design-brief-step";
 
 let failed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -86,9 +87,16 @@ console.log("Live: https://" + name + ".appnomics.live");
 /** claimed: site addresses that another active project already uses (APP-29), with whether it is the same owner. */
 function fakeDb(email = "owner@example.com", brief: Record<string, unknown> = JSON.parse(SITE_EXAMPLE_BRIEF), claimed: Record<string, boolean> = {}) {
   const st: WorkspaceState = { ...emptyState(), phase: "build", jobId: "j1", site: { brief, build: { stage: 0, startedAt: new Date().toISOString(), files: 0 } } };
-  const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[], records: [] as { pack: string; outcome: string; details: any }[] };
+  const rec = { state: st, usage: [] as unknown[][], status: "building", jobs: [] as string[], records: [] as { pack: string; outcome: string; details: any }[], designBrief: null as any };
   const db: Db = {
     async query(text, params = []) {
+      // projects.design_brief (APP-49), with the store's compare-and-set on the token.
+      if (text.startsWith("SELECT design_brief FROM projects")) return { rows: [{ design_brief: rec.designBrief }] };
+      if (text.startsWith("UPDATE projects SET design_brief")) {
+        if ((rec.designBrief?.token ?? "") !== String(params[2] ?? "")) return { rows: [] };
+        rec.designBrief = JSON.parse(String(params[1]));
+        return { rows: [{ id: params[0] }] };
+      }
       if (text.includes("FROM projects p JOIN users")) return { rows: [{ state: rec.state, email }] };
       if (text.includes("AS same_owner")) {
         // The deploy check counts archived projects too: their sites keep running.
@@ -399,6 +407,9 @@ await test("a showcase build writes the design brief first and passes it to the 
   assert.equal(d.costUsd, 0.088);
   assert.equal(rec.usage.length, 2, "one usage row for the design brief, one for the build");
   assert.equal(rec.usage[0][2], "claude-opus-5-5");
+  assert.equal(d.source, "build_start");
+  assert.equal(rec.designBrief?.by, "build_start", "a brief written at build start is saved on the project too");
+  assert.equal(rec.designBrief?.status, "done");
   assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
 });
 
@@ -417,6 +428,29 @@ await test("a design brief that still fails after its retry is kept in the recor
   assert.deepEqual(d.quoteCheck.failed.map((f: { quote: string }) => f.quote), ["every sports fan in America"]);
   assert.ok(d.json && d.markdown, "the failing brief is saved for review");
   assert.equal(rec.state.site!.build!.stage, DONE_STAGE, "the build goes on");
+});
+
+await test("a showcase build uses the design brief saved at review, with no model call and no second cost", async () => {
+  const dir = await makeRunner({ static: true });
+  await mkdir(path.join(dir, "briefs"), { recursive: true });
+  const { db, rec } = fakeDb("owner@example.com", showcaseBrief());
+  rec.state = { ...rec.state, msgs: showcaseMsgs };
+  const md = "# Design brief: PickPal\n\nWritten at review.\n";
+  const { fingerprint, upToMsg } = designBriefInput(showcaseMsgs, showcaseBrief());
+  rec.designBrief = {
+    v: 1, fingerprint, upToMsg, status: "done", token: "t1", by: "review", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), reason: null,
+    result: { skipped: null, fingerprint, model: "claude-opus-5-5", attempts: 1, passed: true, quoteCheck: { checked: 3, passed: 3, failed: [], msgCorrected: 0 }, problems: [], firstAttempt: null, json: {}, markdown: md, costUsd: 0.2, tokens: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, durationMs: 1, error: null },
+  };
+  let called = false;
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick }, { designBriefCall: async () => { called = true; throw new Error("no"); } });
+  await recordsSettled();
+  assert.equal(called, false);
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  assert.equal(await readFile(path.join(dir, args[args.indexOf("--design-brief") + 1]), "utf8"), md);
+  const d = rec.records[0].details.designBrief;
+  assert.equal(d.source, "review");
+  assert.equal(d.passedToRunner, true);
+  assert.equal(rec.usage.length, 1, "only the build's own usage row: the brief was paid for at review");
 });
 
 await test("other packs get no design brief, and a showcase build without a key goes on without one", async () => {
