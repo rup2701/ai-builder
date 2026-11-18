@@ -43,6 +43,11 @@ export const projects = pgTable(
     state: jsonb("state").notNull(),
     /** Null means active. Set means archived: read-only in Builder, its site keeps running. See src/lib/project-archive.ts. */
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * The design brief written at review (APP-49), kept apart from state so the whole-state writers (turn, build, the
+     * interviewer's re-save) never drop it and the browser never polls it. See src/lib/design-brief-store.ts. Null: none yet.
+     */
+    designBrief: jsonb("design_brief"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

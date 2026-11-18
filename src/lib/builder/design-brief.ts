@@ -9,6 +9,7 @@
  *     proposals and gaps, formats the placeholders, and checks every quote word for word against the owner's own messages.
  * Nothing here calls a model or a database. The call and the retry are in src/lib/agents/design-brief-writer.ts.
  */
+import { createHash } from "node:crypto";
 import { SHOWCASE_DIRECTION_JSON } from "./site-pack.generated";
 
 // ---- the pack's closed lists ----
@@ -38,6 +39,33 @@ export function interviewText(messages: InterviewMessage[]): string {
     else if (m.kind === "recap" && Array.isArray(m.items)) lines.push(`[${n}] Scout recap: ${m.items.map((i) => `${i.label}: ${i.value}`).join("; ")}`);
   }
   return lines.join("\n");
+}
+
+/** JSON with object keys in a fixed order, so the same brief always gives the same text wherever it was read from. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(v ?? null);
+}
+
+/** The number of the owner's last message, or null when they wrote none. */
+export function lastOwnerMsg(messages: InterviewMessage[]): number | null {
+  let last: number | null = null;
+  for (const m of messages) if (m.kind === "user" && typeof m.id === "number") last = Math.max(last ?? m.id, m.id);
+  return last;
+}
+
+/**
+ * What a design brief was made from (APP-49): the owner's own messages, in order, and the approved brief. Scout's lines are
+ * left out, because quotes come only from the owner. upTo limits it to the owner's messages up to that number: a saved brief
+ * keeps the number of the last owner message it read, so a later "thanks" does not make it stale. A real change after review
+ * makes Scout save the brief again, and the brief is part of the fingerprint.
+ */
+export function designBriefFingerprint(messages: InterviewMessage[], brief: Record<string, unknown>, upTo: number | null = null): string {
+  const owner = messages
+    .filter((m) => m.kind === "user" && typeof m.text === "string" && (upTo === null || (typeof m.id === "number" && m.id <= upTo)))
+    .map((m) => [m.id ?? null, m.text]);
+  return createHash("sha256").update(canonical({ owner, brief })).digest("hex").slice(0, 32);
 }
 
 /** Case, spacing and curly quotes do not count when a quote is compared with the interview. */
