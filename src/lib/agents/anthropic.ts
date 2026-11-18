@@ -58,7 +58,7 @@ import type { Chat } from "./site-interviewer";
 export function anthropicChat(opts: { apiKey: string; model: string; timeoutMs?: number }): Chat {
   const priceIn = Number(process.env.ANTHROPIC_PRICE_IN_PER_MTOK ?? 0);
   const priceOut = Number(process.env.ANTHROPIC_PRICE_OUT_PER_MTOK ?? 0);
-  return async ({ system, messages, tools }) => {
+  return async ({ system, messages, tools, toolChoice = "auto" }) => {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -74,7 +74,8 @@ export function anthropicChat(opts: { apiKey: string; model: string; timeoutMs?:
         system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
         messages,
         tools,
-        tool_choice: { type: "auto" },
+        // "any": the model must answer through one of the tools, so the reply always has its parts as fields.
+        tool_choice: { type: toolChoice },
       }),
     });
     if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
