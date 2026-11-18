@@ -5,6 +5,7 @@
 //   npx tsx --env-file=.env scripts/design-brief-try.mts --name SureBetz --out <folder>
 //   npx tsx --env-file=.env scripts/design-brief-try.mts --record <build_records id> --out <folder>
 //   npx tsx --env-file=.env scripts/design-brief-try.mts --file record-details.json --out <folder>
+//   npx tsx --env-file=.env scripts/design-brief-try.mts --project <projects id> --out <folder>   (a project's saved chat, for local tests with no build record)
 // --name and --record read DATABASE_URL (the database that holds the record). Only records with details.interview count
 // (the interview is saved from PR 4 onward). When --name finds none, the script uses the latest record that has an
 // interview and says which one. --file takes a saved copy of the record's details (with interview and brief).
@@ -15,7 +16,7 @@ import path from "node:path";
 import pg from "pg";
 import { anthropicToolCall, designBriefModel, writeDesignBrief } from "../src/lib/agents/design-brief-writer";
 import type { InterviewMessage } from "../src/lib/builder/design-brief";
-import { redact } from "../worker/build-record";
+import { interviewForRecord, redact } from "../worker/build-record";
 
 const arg = (n: string) => {
   const i = process.argv.indexOf(`--${n}`);
@@ -62,6 +63,34 @@ async function fromDb(by: { record?: string; name?: string }): Promise<Source> {
   }
 }
 
+/** A project's saved chat (projects.state.msgs) and brief, for a project that was never built through the worker (a local test). */
+async function fromProject(id: string): Promise<Source> {
+  if (!process.env.DATABASE_URL) throw new Plain("Set DATABASE_URL to the database that holds the project.");
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  const dbError = (e: unknown) => new Plain(`Could not read the project from the database (error code ${(e as { code?: string })?.code ?? "unknown"}).`);
+  c.on("error", () => {});
+  try {
+    await c.connect();
+  } catch (e) {
+    throw dbError(e);
+  }
+  try {
+    await c.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+    await c.query("SET default_transaction_read_only = on");
+    // Only the project's id, title, date, chat and brief are read.
+    const { rows } = await c.query(`SELECT id, title, updated_at, state->'msgs' AS msgs, state->'site'->'brief' AS brief FROM projects WHERE id = $1::uuid`, [id]);
+    const row = rows[0];
+    if (!row) throw new Plain("That project does not exist.");
+    // The chat goes through the same masking as a build record, so the step reads exactly what a build would.
+    const interview = interviewForRecord(row.msgs) as { messages?: InterviewMessage[] } | null;
+    return { id: String(row.id), at: new Date(row.updated_at).toISOString(), site: row.title ?? null, interview, brief: row.brief, note: "Read from the project's saved chat, not from a build record." };
+  } catch (e) {
+    throw e instanceof Plain ? e : dbError(e);
+  } finally {
+    await c.end().catch(() => {});
+  }
+}
+
 async function main() {
   const out = path.resolve(arg("out") ?? "design-brief-try");
   let source: Source;
@@ -69,9 +98,10 @@ async function main() {
     const d = JSON.parse(await readFile(arg("file")!, "utf8"));
     const details = d.details ?? d;
     source = { id: arg("file")!, at: "", site: details.site?.name ?? null, interview: details.interview, brief: details.brief };
-  } else if (arg("record")) source = await fromDb({ record: arg("record")! });
+  } else if (arg("project")) source = await fromProject(arg("project")!);
+  else if (arg("record")) source = await fromDb({ record: arg("record")! });
   else if (arg("name")) source = await fromDb({ name: arg("name")! });
-  else throw new Plain("Give --name, --record or --file.");
+  else throw new Plain("Give --name, --record, --project or --file.");
 
   const messages = source.interview?.messages ?? [];
   if (!messages.length || !source.brief) throw new Plain("The record has no interview or no brief.");
