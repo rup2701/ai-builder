@@ -44,7 +44,7 @@ export function verify(c: StoreConfig): Check[] {
     });
   }
 
-  // Colour
+  // Color
   const body = contrast(pal.ink, pal.bg);
   const muted = contrast(pal.muted, pal.bg);
   out.push(

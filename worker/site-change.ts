@@ -34,7 +34,7 @@ export function parseFinal(text: string): { summary: string; anchor: string } {
   return { summary, anchor };
 }
 
-/** True when the agent's closing reply reads like plain words for a site owner: short, no code, files, colour codes or commands. */
+/** True when the agent's closing reply reads like plain words for a site owner: short, no code, files, color codes or commands. */
 export function isPlainSummary(s: string): boolean {
   if (!s || s.length > 320) return false;
   if ((s.match(/[.!?](\s|$)/g) ?? []).length > 3) return false;

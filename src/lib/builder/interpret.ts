@@ -172,7 +172,7 @@ export function applyInstruction(prev: StoreConfig, input: string): { config: St
 
   const rest = text.toLowerCase();
 
-  // Accent adjustments and colours
+  // Accent adjustments and colors
   if (/\b(darker|deeper)\s+(accent|colou?r)\b/.test(rest)) {
     cfg.accent = mix(cfg.accent, "#000000", 0.25);
     lines.push("Accent is darker.");
@@ -188,10 +188,10 @@ export function applyInstruction(prev: StoreConfig, input: string): { config: St
   }
 
   // Light and dark
-  const colourAdj = new RegExp(`\\b(dark|deep)\\s+(?:${COLOR_WORDS.join("|")})\\b`);
+  const colorAdj = new RegExp(`\\b(dark|deep)\\s+(?:${COLOR_WORDS.join("|")})\\b`);
   const darkWords = /\b(dark mode|dark theme|dark background|moody|night mode|go dark|make it darker|darker)\b/.test(rest);
   const lightWords = /\b(light mode|light theme|lighter background|brighter|make it lighter|go light)\b/.test(rest);
-  if (darkWords && !colourAdj.test(rest) && !/\b(darker|deeper)\s+(accent|colou?r)\b/.test(rest) && !cfg.dark) {
+  if (darkWords && !colorAdj.test(rest) && !/\b(darker|deeper)\s+(accent|colou?r)\b/.test(rest) && !cfg.dark) {
     cfg.dark = true;
     lines.push("Dark mode is on.");
   } else if (lightWords && cfg.dark) {

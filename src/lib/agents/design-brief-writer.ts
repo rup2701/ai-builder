@@ -119,7 +119,7 @@ export async function writeDesignBrief(opts: { messages: InterviewMessage[]; bri
         messages.push({ role: "user", content: [{ type: "text", text: `${why} Call write_design_brief once with the whole brief.` }] });
         continue;
       }
-      const json = assembleDesignBrief(r.toolUse.input, opts.brief);
+      const json = assembleDesignBrief(r.toolUse.input, opts.brief, opts.messages);
       const check = checkDesignBrief(json, opts.messages, opts.brief);
       last = { json, check };
       if (check.ok || attempt === 2) {

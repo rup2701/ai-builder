@@ -110,7 +110,7 @@ export function importToLocalBrief(r: ImportResult, consent: Consent, opts: { ac
       ...(reserve ? [`The Reserve button opens the site's own page (${reserve}). No booking service was found, so there is no booking form.`] : []),
       "The hero and about pictures were chosen only by their description on the site (dining, interior, chef, team). The owner can pick others.",
       "Menu text keeps the site's spelling. Nothing was corrected.",
-      "The accent colour is a default. The owner can ask for another.",
+      "The accent color is a default. The owner can ask for another.",
     ],
     placeholders: [],
     ...(isTest ? { private_test: true } : {}),

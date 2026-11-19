@@ -24,7 +24,7 @@ export type StoreConfig = {
   style: StyleId;
   tone: ToneId;
   dark: boolean;
-  /** Accent colour, #rrggbb. Every other colour is derived from it. */
+  /** Accent color, #rrggbb. Every other color is derived from it. */
   accent: string;
   headline: string;
   subhead: string;
@@ -37,7 +37,7 @@ export type StoreConfig = {
   locked: { name: boolean; headline: boolean; subhead: boolean };
 };
 
-/* ---------- Colour maths ---------- */
+/* ---------- Color maths ---------- */
 
 export type Palette = {
   bg: string;
@@ -62,7 +62,7 @@ export function rgbToHex([r, g, b]: [number, number, number]): string {
   return `#${c(r)}${c(g)}${c(b)}`;
 }
 
-/** Mix two colours. t is the share of b: 0 gives a, 1 gives b. */
+/** Mix two colors. t is the share of b: 0 gives a, 1 gives b. */
 export function mix(a: string, b: string, t: number): string {
   const x = hexToRgb(a);
   const y = hexToRgb(b);
@@ -104,7 +104,7 @@ export function paletteFor(accent: string, dark: boolean): Palette {
   const line = mix(ink, bg, 0.86);
   const accentInk = contrast("#ffffff", accent) >= contrast("#141414", accent) ? "#ffffff" : "#141414";
   const tint = mix(accent, bg, dark ? 0.78 : 0.84);
-  // Accent used as small text: nudged toward the ink colour only as far as needed to stay readable.
+  // Accent used as small text: nudged toward the ink color only as far as needed to stay readable.
   let accentText = accent;
   for (let t = 0.1; t <= 1 && contrast(accentText, bg) < 4.5; t += 0.1) accentText = mix(accent, ink, t);
   return { bg, surface, ink, muted, line, accent, accentText, accentInk, tint };

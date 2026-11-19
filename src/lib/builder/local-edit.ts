@@ -215,7 +215,7 @@ export type OwnerBasics = {
 
 /**
  * The brief for an owner with no website. Everything comes from OwnerBasics, which the caller has checked against the person's own messages.
- * No pictures (the hero is a colour field), no reviews, no links: those are not invented. What is missing is listed in not_found.
+ * No pictures (the hero is a color field), no reviews, no links: those are not invented. What is missing is listed in not_found.
  */
 export function briefFromOwner(b: OwnerBasics, consent: { by: string; at: string }): { brief: Brief; notFound: string[] } | { error: string } {
   const name = clean(b.name ?? "");
@@ -263,9 +263,9 @@ export function briefFromOwner(b: OwnerBasics, consent: { by: string; at: string
     not_in_this_version: ["checking which tables are free", "online ordering and payments", "an owner screen for table requests", "multiple locations", "languages other than English"],
     assumptions: [
       "There is no website, so everything here is what was typed in the chat. Nothing was added.",
-      "There are no pictures yet, so the top of the page is a colour field. The owner can add pictures later.",
+      "There are no pictures yet, so the top of the page is a color field. The owner can add pictures later.",
       "Prices are shown exactly as the owner typed them. The owner can hide them with one request.",
-      "The accent colour is a default. The owner can ask for another.",
+      "The accent color is a default. The owner can ask for another.",
     ],
     placeholders: [],
     consent: { owner_confirmed: true, by: consent.by, at: consent.at, source: "typed_by_the_person_building_the_site" },

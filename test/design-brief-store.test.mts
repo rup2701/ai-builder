@@ -43,7 +43,7 @@ function goodAnswer(): any {
     audience: [{ value: "casual and serious fans", quote: "for casual and  serious fans", msg: 4 }],
     voice: { summary: "Plain and confident.", quotes: [{ quote: "Bold is fine", msg: 8 }] },
     owner_facts: [{ topic: "Leagues", meaning: "NFL, NBA, MLB and NHL", quote: "all 4 major leagues in America", msg: 2 }],
-    messages: [{ text: "Daily picks for every major league", quote: "daily picks for all 4 major leagues", msg: 2 }],
+    messages: [{ text: "Daily picks for every major league", paraphrase: true, quote: "daily picks for all 4 major leagues", msg: 2 }],
     plans: [{ name: "Weekly", price: "$49", length: "7 days", highlight: false, highlight_quote: null, quote: "Weekly $49 for 7 days", msg: 6 }],
     look_quotes: { mode: { quote: "Dark", msg: 8 }, accent: { quote: "orange", msg: 8 }, tone: { quote: "Bold is fine", msg: 8 } },
     references: [],

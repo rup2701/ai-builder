@@ -130,11 +130,11 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   ok("a reply keeps what Scout understood apart from the question, and the full text for the model");
 
   // 11. A question with several parts gets one line per part.
-  ({ chat } = script({ reply: { understood: "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.", question: "Now the look. Tell me:", parts: ["Tone: calm, bold, playful or serious", "Light or dark", "Main colour: blue, green, violet, orange, rose, slate, or your own"] } }));
+  ({ chat } = script({ reply: { understood: "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.", question: "Now the look. Tell me:", parts: ["Tone: calm, bold, playful or serious", "Light or dark", "Main color: blue, green, violet, orange, rose, slate, or your own"] } }));
   r = await makeSiteInterviewer(chat, "fake").turn(start(), "weekly 199, monthly 599");
   last = r.state.msgs.at(-1) as typeof last;
-  assert.deepEqual(last.parts, ["Tone: calm, bold, playful or serious", "Light or dark", "Main colour: blue, green, violet, orange, rose, slate, or your own"]);
-  assert.match(last.text, /Tell me:\n\n- Tone: calm, bold, playful or serious\n- Light or dark\n- Main colour/);
+  assert.deepEqual(last.parts, ["Tone: calm, bold, playful or serious", "Light or dark", "Main color: blue, green, violet, orange, rose, slate, or your own"]);
+  assert.match(last.text, /Tell me:\n\n- Tone: calm, bold, playful or serious\n- Light or dark\n- Main color/);
   ok("a question with several parts is listed one part per line");
 
   // 12. Code tidies what the model sends: no leading Got it, no empty or extra parts, and a first message with no understood part.
@@ -252,9 +252,9 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   ({ chat } = script({ reply: { understood: "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.", question: "Now the look." } }));
   r = await makeSiteInterviewer(chat, "fake").turn(asked(), "weekly 199, monthly 599");
   assert.equal((r.state.msgs.at(-1) as typeof last).understood, "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.");
-  ({ chat } = script({ reply: { understood: "No colour given, so I picked blue.", question: "Light or dark?" } }));
+  ({ chat } = script({ reply: { understood: "No color given, so I picked blue.", question: "Light or dark?" } }));
   r = await makeSiteInterviewer(chat, "fake").turn(asked(), "calm tone");
-  assert.equal((r.state.msgs.at(-1) as typeof last).understood, "No colour given, so I picked blue.");
+  assert.equal((r.state.msgs.at(-1) as typeof last).understood, "No color given, so I picked blue.");
   assert.equal(restates("It's called Mealwise.", "it's called mealwise"), true);
   assert.equal(restates("Mealwise is for busy parents.", "mealwise"), false);
   ok("a restating understood part is dropped, an interpreted or decided one is kept");
@@ -264,6 +264,11 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   const tool = calls[0].tools.find((t) => t.name === "reply") as unknown as { input_schema: { properties: { understood: { description: string } } } };
   assert.match(tool.input_schema.properties.understood.description, /interpreted.*decided something on their behalf.*first reply.*repeat their words/s);
   ok("the prompt and the reply tool say when understood is shown");
+
+  // 24. Money terms are asked directly, never assumed with an escape clause.
+  assert.match(calls[0].system, /Ask about money terms directly, as a question: for example "Does Monthly renew on its own\?"/);
+  assert.match(calls[0].system, /Never state a guess and add an escape such as "Tell me if it does"/);
+  ok("Scout asks money terms directly and never assumes them");
 
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

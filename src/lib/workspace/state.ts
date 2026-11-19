@@ -151,7 +151,7 @@ export function undoState(s: WorkspaceState): WorkspaceState {
   return { ...n, history: s.history.slice(0, -1) };
 }
 
-/** One chat instruction after the store exists: rename, recolour, headline, undo and so on. */
+/** One chat instruction after the store exists: rename, recolor, headline, undo and so on. */
 export function iterateTurn(prev: WorkspaceState, raw: string): WorkspaceState {
   const text = raw.trim();
   if (!text) return prev;

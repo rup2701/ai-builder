@@ -55,6 +55,9 @@ export function yearlyPrice(monthly: number, discountPercent: number): number {
   return (total - (total % 10000)) / 10000;
 }
 /** The per-month equivalent of a yearly price, whole dollars rounded down. */
+/** What Scout says when the brief is saved. The design brief finds the approved review by it: the Scout message the owner answered just before it. */
+export const BRIEF_SAVED_TEXT = "Your brief is saved. You can read it next to this chat and download it. If anything looks off, tell me and I'll change it. When it looks right, press Build my site.";
+
 export const perMonthOf = (yearly: number) => Math.floor(yearly / 12);
 
 const Plan = z.object({ name: z.string().trim().min(1).max(40), monthly_price: z.number().nonnegative() }).passthrough();
@@ -119,7 +122,7 @@ const Https = z.string().refine((u) => /^https:\/\/\S+$/i.test(u) && u.length < 
 export const LocalBusinessBrief = z
   .object({
     site: z.object({ name: z.string().trim().min(1).max(80), kind: z.literal("local-business"), business_type: z.string().trim().min(1).max(40) }).passthrough(),
-    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex colour like #c2410c").nullable().optional() }).passthrough(),
+    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex color like #c2410c").nullable().optional() }).passthrough(),
     contact: z.object({ hours: z.array(z.string()).default([]) }).passthrough(),
     links: z.object({}).passthrough().nullable().optional(),
     menu: z
