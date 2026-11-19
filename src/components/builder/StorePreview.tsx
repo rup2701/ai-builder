@@ -4,8 +4,8 @@
  * Draws a store's home page from a StoreConfig.
  *
  * It sizes itself to its container (container queries), so the same component fills the
- * desktop preview and the phone frame. Colours come from CSS variables set at the top,
- * which keeps the Appnomics page styles (including its global heading colour) out of the
+ * desktop preview and the phone frame. Colors come from CSS variables set at the top,
+ * which keeps the Appnomics page styles (including its global heading color) out of the
  * store. Headings here are h3 and h4 for that reason.
  */
 

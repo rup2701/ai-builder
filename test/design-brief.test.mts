@@ -200,7 +200,7 @@ await test("a trivial quote fails: yes, ok, or fewer than 3 words and 12 charact
   assert.equal(quoteTooShort("messages[0]", "yes ok", db), true);
 });
 
-await test("short owner values pass where the quote is the value: the name, and the colour mode, colour and tone", () => {
+await test("short owner values pass where the quote is the value: the name, and the color mode, color and tone", () => {
   const db = assembleDesignBrief(goodAnswer(), BRIEF);
   assert.equal(quoteTooShort("name", "PickPal", db), false);
   assert.equal(quoteTooShort("name", "it is", db), true, "a short name quote must hold the name");

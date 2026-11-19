@@ -122,7 +122,7 @@ const Https = z.string().refine((u) => /^https:\/\/\S+$/i.test(u) && u.length < 
 export const LocalBusinessBrief = z
   .object({
     site: z.object({ name: z.string().trim().min(1).max(80), kind: z.literal("local-business"), business_type: z.string().trim().min(1).max(40) }).passthrough(),
-    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex colour like #c2410c").nullable().optional() }).passthrough(),
+    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex color like #c2410c").nullable().optional() }).passthrough(),
     contact: z.object({ hours: z.array(z.string()).default([]) }).passthrough(),
     links: z.object({}).passthrough().nullable().optional(),
     menu: z

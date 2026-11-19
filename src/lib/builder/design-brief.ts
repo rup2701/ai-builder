@@ -103,7 +103,7 @@ export type Quoted = { quote: string; msg: number; from?: "owner" | "review" };
  * What a line or a gap is about, from a closed list. A gap and a line about the same thing conflict: a line may not state
  * what a gap leaves open, and a fact the owner gave or approved at review is not a gap. "other" never conflicts.
  */
-export const ABOUT = ["product", "audience", "coverage", "plans", "prices", "lengths", "renewal", "billing", "main_button", "sign_in", "buttons", "links", "look", "sections", "notice", "proof", "people", "other"] as const;
+export const ABOUT = ["product", "audience", "coverage", "plans", "prices", "lengths", "renewal", "billing", "main_button", "sign_in", "buttons", "links", "named_items", "look", "sections", "notice", "proof", "people", "other"] as const;
 export type About = (typeof ABOUT)[number];
 /** What a plan line states, set by code: its name, price and length. */
 const PLAN_ABOUT: About[] = ["plans", "prices", "lengths"];
@@ -228,7 +228,7 @@ export function designBriefSystem(): string {
   return `You write the design brief for one website, before it is built. You get the interview between the owner and Scout (the builder's interviewer) and the brief Scout wrote, which the owner approved. The build agent never sees the interview, so this brief carries the owner's own words to it. Call the write_design_brief tool once with the whole brief.
 
 Rules:
-1. Every owner fact carries a quote: words copied exactly, character for character, from one line marked Owner, or from the Scout line marked as the review the owner approved, and that line's number. Keep the owner's spelling and typos inside a quote. Never quote any other Scout line. Keep quotes short: the few words that carry the fact, and at least 3 words or 12 characters. Only a name, a colour mode, a colour or a tone may be shorter. A bare "yes" or "ok" is never a quote: quote more of the owner's line, or leave the item out.
+1. Every owner fact carries a quote: words copied exactly, character for character, from one line marked Owner, or from the Scout line marked as the review the owner approved, and that line's number. Keep the owner's spelling and typos inside a quote. Never quote any other Scout line. Keep quotes short: the few words that carry the fact, and at least 3 words or 12 characters. Only a name, a color mode, a color or a tone may be shorter. A bare "yes" or "ok" is never a quote: quote more of the owner's line, or leave the item out.
 2. No new facts about the business. No numbers, results, records, names, prices, dates, customers or promises the owner did not give. Write a number only if the owner typed it. Names the owner gave are kept, including sites, apps or brands they named as inspiration (see references).
 3. When the owner's words plainly expand (for example "all 4 major leagues in America" means NFL, NBA, MLB and NHL), put it in owner_facts with the quote and the plain meaning. That is the owner's fact, not a proposal.
 4. When the owner agreed to something Scout suggested (for example "yes, that's about right"), quote the owner's agreement and say in the meaning what they agreed to.
@@ -237,15 +237,16 @@ Rules:
 7. Sensitive topics (money, betting, health, legal, children, personal data) get care rules: the claims the site must not make. A notice only the owner can write (eligibility, a disclaimer) is a placeholder, never drafted by you. A placeholder is one short label for one thing only the owner can supply, at most ${PLACEHOLDER_MAX_WORDS} words and not a sentence, for example "Age and responsible-gambling notice". It is shown on the page as it is. Notes for the builder (links not set yet, a concept preview, pages that do not exist) are never placeholders: the brief and the pack already handle them.
 8. Direction: choose exactly one pairing, one motif, one hero kind and one or two signatures, by name, from the lists below only. Choose what fits the product, the audience and the tone. owner-art only if the brief has an image the owner supplied.
 9. Plans: copy name, price and length as the owner gave them. highlight is true only if the owner asked for a plan to stand out, with highlight_quote where they asked. Otherwise highlight is false and highlight_quote is null. Equal plans get equal treatment.
-10. look_quotes: where the owner chose the colour mode, the colour and the tone, or null.
+10. look_quotes: where the owner chose the color mode, the color and the tone, or null. A hex color is like a price: when an owner line or the approved review holds the accent's hex, the accent's quote holds the hex itself (for example the review line "mint-cyan accent (#2EE6C4)"). When none holds it, quote the owner's color word.
 11. references: every site, app or brand the owner named as inspiration or as a look they like, with the owner's quote (it must contain the name as the owner wrote it) and what to learn from it, from this list only: ${REFERENCE_LESSONS.join(", ")}. Choose the lessons that match what the owner said about it; if they said only that they like it, choose pace, density and hero. Never more than that: a reference sets a direction, it is never copied.
 12. sample_card: what one item in the hero preview is (for a picks product, one pick) and two to four field labels with plainly generic filler, such as AWAY @ HOME, League, 0.0, Name or Date. No real names and no digits other than 0. Every sample card is marked Sample on the page.
 13. The approved review is evidence. What it states (for example "Both are one-time passes") the owner approved, so it is shown as Owner approved at review, it is never a gap, and messages may use it. Never ask in a gap what the review already says.
 14. A line with a number quotes text that holds that number. Plans first: a plan's quote holds its price. If the plan names and the prices are on different lines of the owner's message, quote the line that holds the price, and if the length is on yet another line, give it as length_quote.
-15. about: tag every owner fact, message and gap with what it is about, from this list only: ${ABOUT.join(", ")}. A plan states plans, prices and lengths. Where a button or the Sign in link goes, when it is not set yet, is about links: a line that says a button or Sign in exists is about main_button, sign_in or buttons, and does not settle where it goes. A line may not state what a gap leaves open: a gap and a line with the same about (other aside) is a conflict. Either the fact is known and there is no gap, or it is open and no line states it.
-16. Messages to lead with: text is the quote itself, word for word, with paraphrase false. When you reword it, set paraphrase true; it is labelled paraphrase on the page.
-17. Betting, health and money products: we advise leaving Testimonials out, and code adds that care rule. Never write sample testimonials or a rule that keeps them as samples.
-18. Plain, short words. The readers are a build agent and the owner, who is not technical.
+15. about: tag every owner fact, message and gap with what it is about, from this list only: ${ABOUT.join(", ")}. A plan states plans, prices and lengths. Where a button or the Sign in link goes, when it is not set yet, is about links: a line that says a button or Sign in exists is about main_button, sign_in or buttons, and does not settle where it goes. Code adds the gaps for links not set yet; do not write them. When the owner said all (sports, leagues, services) without naming them, a line saying all is about coverage, and which ones by name is a gap about named_items. A line may not state what a gap leaves open: a gap and a line with the same about (other aside) is a conflict. Either the fact is known and there is no gap, or it is open and no line states it.
+16. One line per fact. A claim about both or all plans quotes text that covers them all (often the approved review), never one plan's line; when two lines say the same thing, merge them into the one with the better quote.
+17. Messages to lead with: text is the quote itself, word for word, with paraphrase false. When you reword it, set paraphrase true; it is labelled paraphrase on the page.
+18. Betting, health and money products: we advise leaving Testimonials out, and code adds that care rule and its question for the owner. The care rule wins over a Testimonials section the owner approved, until the owner says otherwise. Never write sample testimonials or a rule that keeps them as samples.
+19. Plain, short words. The readers are a build agent and the owner, who is not technical.
 
 The lists (use these names exactly):
 ${JSON.stringify(lists, null, 2)}`;
@@ -285,7 +286,8 @@ export type DesignBrief = {
   /** label is the model's words; text is what the page shows, formatted by code. */
   placeholders: { slot: string; label: string; text: string }[];
   proposals: { id: string; field: string; value: string; why: string }[];
-  gaps: { id: string; question: string; affects: string[]; about: About }[];
+  /** by "code": a gap code adds from the brief (a link not set yet, the testimonials question), not the model's words. */
+  gaps: { id: string; question: string; affects: string[]; about: About; by?: "code" }[];
 };
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -310,6 +312,31 @@ export function sensitiveVertical(brief: Record<string, unknown>, care: { flag?:
 
 /** The care rule code adds for a sensitive product. The model never writes sample testimonials for one. */
 export const TESTIMONIALS_RULE = "We advise leaving the Testimonials section out. On a betting, health or money site, sample quotes read as real results. Do not show sample testimonials; show testimonials only if the owner supplies real ones";
+/** Added when the owner approved a plan with Testimonials: the care rule wins over the approved section until the owner says otherwise. */
+export const TESTIMONIALS_WINS = "The owner approved a plan with a Testimonials section, and this care rule wins until the owner says otherwise: build the page without it, even though specs/brief.json lists it";
+/** Added when the owner asked for testimonials in the chat: their word stands, with real quotes only. */
+export const TESTIMONIALS_OWNER_ASKED = "The owner asked for testimonials, so the section stays, with real quotes the owner supplies only. Until they arrive, show a marked placeholder, never sample quotes";
+
+/** Whether the approved brief has a Testimonials section. */
+const hasTestimonials = (brief: Record<string, unknown>) =>
+  arr<{ type?: string }>(brief.blocks).some((b) => b.type === "testimonials") || arr<string>((brief.page_plan as { order?: unknown } | undefined)?.order).includes("testimonials");
+/** The owner raised testimonials themselves, in their own words: that is the owner saying otherwise. */
+const ownerAskedTestimonials = (messages: InterviewMessage[]) => messages.some((m) => m.kind === "user" && typeof m.text === "string" && /testimonial/i.test(m.text));
+
+/** Buttons whose link is not set yet: code asks where each goes, so the gap never depends on the model. */
+function linkGaps(brief: Record<string, unknown>): { question: string; affects: string[]; label: string }[] {
+  const out: { question: string; affects: string[]; label: string }[] = [];
+  const btn = (k: string) => brief[k] as { label?: string; link?: string | null } | null | undefined;
+  for (const [k, ask] of [
+    ["main_button", (l: string) => `Where should the "${l}" button take people?`],
+    ["secondary_button", (l: string) => `Where should the "${l}" button take people?`],
+    ["sign_in", (l: string) => `What is the link for ${l}?`],
+  ] as const) {
+    const b = btn(k);
+    if (b && typeof b.label === "string" && b.label.trim() && !(typeof b.link === "string" && b.link.trim())) out.push({ question: ask(b.label.trim()), affects: [k], label: b.label.trim() });
+  }
+  return out;
+}
 
 /** The look values come from the approved brief, not the model. */
 function lookFromBrief(brief: Record<string, unknown>) {
@@ -319,7 +346,7 @@ function lookFromBrief(brief: Record<string, unknown>) {
 }
 
 /** Turns the model's answer into the saved shape. Code numbers the proposals and gaps, formats the placeholders and looks up the fonts. */
-export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>): DesignBrief {
+export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>, messages: InterviewMessage[] = []): DesignBrief {
   const m = (raw ?? {}) as Partial<ModelDesignBrief>;
   const site = (brief.site ?? {}) as { name?: string };
   const lv = lookFromBrief(brief);
@@ -343,6 +370,17 @@ export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>
     return { value, quote: y?.quote ?? null, msg: y ? y.msg : null };
   };
   const sc = (m.sample_card ?? {}) as Partial<ModelDesignBrief["sample_card"]>;
+  // Betting, health and money: code adds the testimonials rule. When the owner approved a Testimonials section, the rule wins
+  // until the owner says otherwise (raises testimonials in their own words), and code asks them.
+  const care: DesignBrief["care"] = arr<{ flag: string; rule: string }>(m.care).map((c) => ({ flag: str(c.flag), rule: str(c.rule) }));
+  const vertical = sensitiveVertical(brief, care);
+  let testimonialsGap: string | null = null;
+  if (vertical) {
+    const asked = ownerAskedTestimonials(messages);
+    const approved = hasTestimonials(brief);
+    care.push({ flag: "Testimonials", rule: asked ? `${TESTIMONIALS_RULE}. ${TESTIMONIALS_OWNER_ASKED}` : approved ? `${TESTIMONIALS_RULE}. ${TESTIMONIALS_WINS}` : TESTIMONIALS_RULE, by: "code" });
+    if (approved && !asked) testimonialsGap = `We advise leaving Testimonials out on a ${vertical} site. Do you have real quotes from members that you want to show?`;
+  }
   return {
     version: 1,
     name: { value: str(site.name), quote: nameQ?.quote ?? null, msg: nameQ ? nameQ.msg : null },
@@ -372,17 +410,22 @@ export function assembleDesignBrief(raw: unknown, brief: Record<string, unknown>
       fonts: pair ? { heading: pair.heading, body: pair.body, accent: pair.accentFont, headingWeight: pair.headingWeight, capsLabels: pair.capsLabels } : null,
     },
     sample_card: { item: str(sc.item), fields: arr<{ label: string; filler: string }>(sc.fields).map((f) => ({ label: str(f.label), filler: str(f.filler) })), marked: "Sample" },
-    care: (() => {
-      const care: DesignBrief["care"] = arr<{ flag: string; rule: string }>(m.care).map((c) => ({ flag: str(c.flag), rule: str(c.rule) }));
-      if (sensitiveVertical(brief, care)) care.push({ flag: "Testimonials", rule: TESTIMONIALS_RULE, by: "code" });
-      return care;
-    })(),
+    care,
     placeholders: arr<{ slot: string; what: string }>(m.placeholders).map((p) => {
       const label = str(p.what).replace(/[[\]]/g, "").replace(/[.\s]+$/, "");
       return { slot: str(p.slot), label, text: `[${label}: owner to supply]` };
     }),
     proposals,
-    gaps: arr<{ question: string; affects: string[]; about?: string }>(m.gaps).map((g, i) => ({ id: `g${i + 1}`, question: str(g.question), affects: arr<string>(g.affects).map(String), about: aboutOf(g.about) })),
+    gaps: [
+      // Code owns the gaps for links not set yet and the testimonials question, so the model's own versions of them are dropped.
+      ...arr<{ question: string; affects: string[]; about?: string }>(m.gaps)
+        .map((g) => ({ question: str(g.question), affects: arr<string>(g.affects).map(String), about: aboutOf(g.about) }))
+        .filter((g) => g.about !== "links" && !(testimonialsGap && /testimonial/i.test(g.question)))
+        // A model gap that asks where a code-handled button goes, whatever it was tagged.
+        .filter((g) => !linkGaps(brief).some((c) => c.label && g.question.toLowerCase().includes(c.label.toLowerCase()) && /\b(link|links|go|goes|take|lead|point)\b/i.test(g.question))),
+      ...linkGaps(brief).map(({ label: _l, ...g }) => g).map((g) => ({ ...g, about: "links" as About, by: "code" as const })),
+      ...(testimonialsGap ? [{ question: testimonialsGap, affects: ["testimonials"], about: "proof" as About, by: "code" as const }] : []),
+    ].map((g, i) => ({ id: `g${i + 1}`, ...g })),
   };
 }
 
@@ -395,7 +438,7 @@ const TRIVIAL = new Set(["yes", "ok", "okay", "sure", "correct", "right", "yep",
 
 /**
  * A quote must carry the fact: at least 3 words or 12 characters. Short owner values are allowed where the quote is the
- * value itself: the product name (when the quote holds the name) and the colour mode, colour and tone (for example "Dark",
+ * value itself: the product name (when the quote holds the name) and the color mode, color and tone (for example "Dark",
  * "orange", "#F97316"). A bare "yes" or "ok" never passes.
  */
 export function quoteTooShort(path: string, quote: string, db: DesignBrief): boolean {
@@ -458,7 +501,10 @@ function writtenText(db: DesignBrief): string[] {
   ];
 }
 
-const numbers = (s: string) => (s.replace(/(\d),(\d{3})/g, "$1$2").match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n)));
+/** Hex colors in a text, lower case. They are colors, not numbers: the number checks leave them out. */
+const HEX = /#(?:[0-9a-f]{6}|[0-9a-f]{3})\b/gi;
+const hexes = (s: string) => (s.match(HEX) ?? []).map((h) => h.toLowerCase());
+const numbers = (s: string) => (s.replace(HEX, " ").replace(/(\d),(\d{3})/g, "$1$2").match(/\d+(?:\.\d+)?/g) ?? []).map((n) => String(Number(n)));
 
 /**
  * Checks the design brief against the interview. Quotes: each must be long enough to carry the fact (quoteTooShort) and
@@ -532,11 +578,31 @@ export function checkDesignBrief(db: DesignBrief, messages: InterviewMessage[], 
   for (const l of lines) {
     const m = missing(l.text, l.quote);
     if (m.length) problems.push(`${l.path}: ${m.join(", ")} is not in its quote "${l.quote}". A line with a number quotes text that holds that number.`);
+    const h = hexes(l.text).filter((x) => !hexes(l.quote).includes(x));
+    if (h.length) problems.push(`${l.path}: the color ${h.join(", ")} is not in its quote "${l.quote}". A hex color quotes text that holds it.`);
+  }
+  // A hex accent is like a price: its quote holds the hex (often the approved review line where Scout offered it).
+  // When no owner line and no review holds the hex (the owner said "orange" and the pack chose the shade), the owner's color word stands.
+  const accentHex = hexes(db.look.accent.value ?? "");
+  const hexSaid = accentHex.length > 0 && [...messages.filter((m) => m.kind === "user").map((m) => String(m.text ?? "")), review?.text ?? ""].some((t) => hexes(t).includes(accentHex[0]));
+  if (hexSaid && db.look.accent.quote !== null && !hexes(db.look.accent.quote).includes(accentHex[0]))
+    problems.push(`look.accent: the color ${db.look.accent.value} is not in its quote "${db.look.accent.quote}". Quote the text that holds the hex (the approved review, where Scout offered it).`);
+
+  // A claim about both or all plans quotes text that covers them all, not one plan's line.
+  if (db.plans.length >= 2) {
+    const allPlans = /\b(both|all|every|each)\b[^.]*\b(plans?|passes|pass|memberships?|tiers?)\b|\b(plans|passes)\b[^.]*\b(both|all)\b/i;
+    const covers = (quote: string) =>
+      db.plans.filter((p) => normalizeQuote(quote).includes(normalizeQuote(p.name)) || [...numbers(`${p.price ?? ""} ${p.length ?? ""}`)].some((n) => numbers(quote).includes(n)));
+    for (const l of lines.filter((x) => !x.path.startsWith("plans") && !x.path.startsWith("audience"))) {
+      const c = covers(l.quote);
+      if (allPlans.test(l.text) && c.length === 1)
+        problems.push(`${l.path} says something about every plan, but its quote "${l.quote}" covers only ${c[0].name}. Quote text that covers them all (often the approved review), or merge it into the line that does.`);
+    }
   }
 
   // A line may not state what a gap leaves open, and a fact the owner gave or approved at review is not a gap.
   for (const g of db.gaps) {
-    if (g.about === "other") continue;
+    if (g.about === "other" || g.by === "code") continue;
     for (const l of lines.filter((x) => x.about.includes(g.about))) {
       problems.push(`gap ${g.id} "${g.question}" leaves ${g.about} open, but ${l.path} states it (quote "${l.quote}"). If the owner said it or approved it at review, drop the gap; if it is open, drop or change the line.`);
     }
@@ -621,7 +687,7 @@ const end = (t: string) => `${t.trim().replace(/[.\s]+$/, "")}.`;
 const bare = (t: string) => t.trim().replace(/[.\s]+$/, "");
 
 const said = (x: { quote: string | null; msg: number | null; from?: "owner" | "review" }) =>
-  x.quote ? ` ${x.from === "review" ? "Owner approved at review" : "Owner said"}: "${x.quote.replace(/\s+/g, " ").trim()}" (message ${x.msg}).` : "";
+  x.quote ? ` ${x.from === "review" ? "Owner approved at review" : "Owner said"}: "${x.quote.replace(/\s+/g, " ").trim().replace(/"/g, "'")}" (message ${x.msg}).` : "";
 
 /** The design brief in plain words, for specs/design-brief.md. The build agent reads it after creative.md. */
 export function renderDesignBrief(db: DesignBrief): string {
@@ -656,8 +722,8 @@ export function renderDesignBrief(db: DesignBrief): string {
   }
   p("## Look");
   p();
-  if (db.look.mode.value) p(`- Colour mode: ${db.look.mode.value}.${said(db.look.mode)}`);
-  if (db.look.accent.value) p(`- Accent colour: ${db.look.accent.value}, the one accent on the page.${said(db.look.accent)}`);
+  if (db.look.mode.value) p(`- Color mode: ${db.look.mode.value}.${said(db.look.mode)}`);
+  if (db.look.accent.value) p(`- Accent color: ${db.look.accent.value}, the one accent on the page.${said(db.look.accent)}`);
   if (db.look.tone.value) p(`- Tone: ${db.look.tone.value}.${said(db.look.tone)}`);
   for (const r of db.references) p(`- A site the owner likes: ${r.name}. Learn only ${r.learn.map((l) => LESSON_WORDS[l] ?? l).join(", ")} from it. Never copy its layout, wording, logos, art or exact palette.${said(r)}`);
   p();

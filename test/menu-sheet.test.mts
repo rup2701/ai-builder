@@ -98,7 +98,7 @@ await test("the menu goes into the brief, replaces the old one, and clears the n
   assert.ok(!(b.not_found as string[]).includes("menu"));
   assert.equal(b.menu.highlights.length, 0);
   assert.match(localPlanText(out.brief), /Menu/);
-  // Highlights now come from the real dishes, as colour blocks, in template mode.
+  // Highlights now come from the real dishes, as color blocks, in template mode.
 });
 
 await test("an .xlsx is read: first sheet by its relationship, inline and rich text, entities, gaps, numbers as stored", () => {

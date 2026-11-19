@@ -49,7 +49,7 @@ export function attachmentNote(assets: { id: string; name: string; width: number
   const lines = assets.map((a) => `- /art/${a.id}.webp (${a.width} by ${a.height} pixels, from the owner's file "${a.name}")`);
   return [
     "",
-    "The owner attached these pictures. They are already saved in the site's public/art folder and are served at the paths below. Use them exactly as given: do not recolour, redraw, crop or stretch them.",
+    "The owner attached these pictures. They are already saved in the site's public/art folder and are served at the paths below. Use them exactly as given: do not recolor, redraw, crop or stretch them.",
     ...lines,
     "Look at each picture and write a short plain alt text that describes what it shows. Show it inside its frame with object-fit contain or cover, whichever suits its shape. If it fails to load, the page must still look right (no broken-image icon).",
   ].join("\n");

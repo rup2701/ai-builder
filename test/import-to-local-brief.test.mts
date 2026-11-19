@@ -112,7 +112,7 @@ await test("a private test is marked so the runner refuses to deploy it", () => 
   assert.equal((o.images as { owner_confirmed: boolean }).owner_confirmed, true);
   assert.equal((t.images as { owner_confirmed: boolean }).owner_confirmed, false);
 });
-await test("the accent is a default unless a valid colour is given", () => {
+await test("the accent is a default unless a valid color is given", () => {
   assert.equal((importToLocalBrief(r, test_).brief.look as { accent: string }).accent, "#c2410c");
   assert.equal((importToLocalBrief(r, test_, { accent: "#112233" }).brief.look as { accent: string }).accent, "#112233");
   assert.equal((importToLocalBrief(r, test_, { accent: "red; x" }).brief.look as { accent: string }).accent, "#c2410c");

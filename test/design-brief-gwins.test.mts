@@ -19,7 +19,9 @@ import {
   interviewText,
   renderDesignBrief,
   sensitiveVertical,
+  TESTIMONIALS_OWNER_ASKED,
   TESTIMONIALS_RULE,
+  TESTIMONIALS_WINS,
   type DesignBrief,
   type InterviewMessage,
 } from "../src/lib/builder/design-brief";
@@ -65,7 +67,7 @@ function asWritten(): any {
   };
 }
 const check = (raw: unknown) => {
-  const db = assembleDesignBrief(raw, G.brief);
+  const db = assembleDesignBrief(raw, G.brief, G.messages);
   return { db, r: checkDesignBrief(db, G.messages, G.brief) };
 };
 
@@ -86,11 +88,10 @@ function fixed(): any {
     { ...a.messages[2], paraphrase: true, about: "audience" },
   ];
   // 1 and 3. No gap asks what the review settled (Monthly renewal, Per week), and the sports gap goes: the owner said all sports.
-  a.gaps = [
-    { question: 'Where should the "Get my picks" button take people?', affects: ["main_button"], about: "main_button" },
-    { question: "What is the link for Sign in?", affects: ["sign_in"], about: "sign_in" },
-    { question: "What age rule and responsible-gambling notice should the page show?", affects: ["footer"], about: "notice" },
-  ];
+  // The link gaps are code's, from the brief.
+  a.gaps = [{ question: "What age rule and responsible-gambling notice should the page show?", affects: ["footer"], about: "notice" }];
+  // A hex color is quoted from text that holds it: the review line where Scout offered it.
+  a.look_quotes.accent = { quote: "mint-cyan accent (#2EE6C4)", msg: 16 };
   // 5. No sample testimonials: code adds the rule that advises leaving them out.
   a.care = a.care.filter((c: { flag: string }) => c.flag !== "Proof");
   a.care.push({ flag: "Proof", rule: "No invented member counts, logos or results" });
@@ -124,7 +125,13 @@ await test("GWins as written fails: plan quotes without their price, a number no
   // 5.
   assert.equal(sensitiveVertical(G.brief), "betting");
   assert.match(p, /betting product: do not keep sample testimonials/);
-  assert.ok(db.care.some((c) => c.by === "code" && c.rule === TESTIMONIALS_RULE));
+  assert.ok(db.care.some((c) => c.by === "code" && c.rule.startsWith(TESTIMONIALS_RULE)));
+  // The accent hex quotes the owner's color words, which do not hold it, though the review does.
+  assert.match(p, /look\.accent: the color #2EE6C4 is not in its quote "lightgreen\/cyan"/);
+  // The weak line from the first rerun: a claim about both passes that quotes only the Weekly text.
+  const a = asWritten();
+  a.owner_facts[5] = { topic: "No auto-renewal", meaning: "Passes do not renew on their own. Both are one-time passes", quote: "7 Days (non-recurring)", msg: 11 };
+  assert.ok(check(a).r.problems.some((x) => /^owner_facts\[5\] says something about every plan, but its quote "7 Days \(non-recurring\)" covers only Weekly/.test(x)), check(a).r.problems.join("\n"));
 });
 
 await test("GWins with what each line is about: the Monthly renewal gap conflicts with the lines that state renewal", () => {
@@ -133,7 +140,7 @@ await test("GWins with what each line is about: the Monthly renewal gap conflict
   a.messages[1].about = "renewal";
   a.gaps[2].about = "renewal";
   const { r } = check(a);
-  const conflicts = r.problems.filter((x) => x.startsWith("gap g3 "));
+  const conflicts = r.problems.filter((x) => x.startsWith("gap ") && x.includes("Does the Monthly pass also end on its own"));
   assert.equal(conflicts.length, 2, r.problems.join("\n"));
   assert.match(conflicts[0], /leaves renewal open, but owner_facts\[5\] states it/);
   assert.match(conflicts[1], /leaves renewal open, but messages\[1\] states it/);
@@ -143,7 +150,7 @@ await test("a gap about prices conflicts with the plans, which state names, pric
   const a = asWritten();
   a.gaps[3].about = "prices";
   const { r } = check(a);
-  assert.ok(r.problems.some((x) => /^gap g4 .* leaves prices open, but plans\[0\] states it/.test(x)), r.problems.join("\n"));
+  assert.ok(r.problems.some((x) => /^gap g\d+ "You wrote "Per week".* leaves prices open, but plans\[0\] states it/.test(x)), r.problems.join("\n"));
 });
 
 // ---- the brief written to the new rules passes ----
@@ -188,10 +195,12 @@ await test("the markdown says Owner approved at review, labels paraphrase, advis
 await test("a link not set yet is its own topic: a line that says Sign in exists does not block the gap for its link", () => {
   const a = fixed();
   a.owner_facts.push({ topic: "Sign in", meaning: "Sign in is shown in the header and footer", about: "sign_in", quote: '"Sign in" appears in the header and footer', msg: 16 });
-  a.gaps[1].about = "links";
+  // The code gap for the Sign in link stands next to the line that says Sign in exists.
   assert.ok(check(a).r.ok, check(a).r.problems.join("\n"));
-  a.gaps[1].about = "sign_in";
-  assert.ok(check(a).r.problems.some((x) => /^gap g2 .* leaves sign_in open/.test(x)));
+  assert.ok(check(a).db.gaps.some((g) => g.by === "code" && g.question === "What is the link for Sign in?"));
+  // A model gap that leaves Sign in itself open still conflicts with that line.
+  a.gaps.push({ question: "Should Sign in show in the header at all?", affects: ["nav"], about: "sign_in" });
+  assert.ok(check(a).r.problems.some((x) => /^gap g\d+ "Should Sign in show in the header at all\?" leaves sign_in open/.test(x)));
   assert.match(designBriefSystem(), /Where a button or the Sign in link goes, when it is not set yet, is about links/);
 });
 
@@ -201,6 +210,80 @@ await test("the review label is not repeated inside a fact's own words", () => {
   const { db } = check(a);
   assert.equal(db.owner_facts.at(-1)!.meaning, "both passes are one-time");
   assert.doesNotMatch(renderDesignBrief(db), /Owner approved at review: .*Owner approved at review/);
+});
+
+await test("a hex the owner never typed and the review never showed is not required: the owner's color word stands", () => {
+  const a = fixed();
+  a.look_quotes.accent = { quote: "lightgreen/cyan", msg: 13 };
+  const review = G.messages.find((m) => m.id === 16)!;
+  const messages = G.messages.map((m) => (m === review ? { ...m, text: String(m.text).replace(/ \(#2EE6C4\)/g, "") } : m));
+  const db = assembleDesignBrief(a, G.brief, messages);
+  assert.ok(!checkDesignBrief(db, messages, G.brief).problems.some((x) => x.startsWith("look.accent")));
+});
+
+await test("a line with a hex quotes text that holds it", () => {
+  const a = fixed();
+  a.owner_facts.push({ topic: "Accent", meaning: "mint-cyan, #2EE6C4", about: "look", quote: "lightgreen/cyan for primary color", msg: 13 });
+  assert.ok(check(a).r.problems.some((x) => /owner_facts\[\d+\]: the color #2ee6c4 is not in its quote/.test(x)));
+});
+
+await test("a quote with double quotes inside is shown with single quotes, never doubled", () => {
+  const a = fixed();
+  a.owner_facts.push({ topic: "Sign in", meaning: "Sign in is shown in the header and footer", about: "sign_in", quote: '"Sign in" appears in the header and footer', msg: 16 });
+  const md = renderDesignBrief(check(a).db);
+  assert.match(md, /Owner approved at review: "'Sign in' appears in the header and footer" \(message 16\)\./);
+  assert.doesNotMatch(md, /""/);
+});
+
+await test("the link gaps come from the brief, by code: the model's own link gaps are dropped, never lost", () => {
+  const a = fixed();
+  a.gaps = a.gaps.filter((g: { about: string }) => g.about !== "links" && g.about !== "main_button" && g.about !== "sign_in");
+  const { db, r } = check(a);
+  const code = db.gaps.filter((g) => g.by === "code").map((g) => g.question);
+  assert.deepEqual(code.slice(0, 2), ['Where should the "Get my picks" button take people?', "What is the link for Sign in?"]);
+  assert.ok(r.ok, r.problems.join("\n"));
+  const b = fixed();
+  b.gaps.push({ question: "Where does Get my picks go?", affects: ["main_button"], about: "links" });
+  assert.equal(check(b).db.gaps.filter((g) => /Get my picks/.test(g.question)).length, 1, "one gap per link");
+  const linked = { ...G.brief, main_button: { ...(G.brief.main_button as object), link: "https://example.com/join" } };
+  assert.ok(!assembleDesignBrief(fixed(), linked, G.messages).gaps.some((g) => /Get my picks/.test(g.question)), "no gap once the link is set");
+});
+
+await test("all sports is coverage; which sports by name is its own gap, with no conflict", () => {
+  const a = fixed();
+  a.owner_facts.find((f: { topic: string }) => f.topic === "Sports covered").about = "coverage";
+  a.gaps.push({ question: "Which sports do you cover, so we can name them?", affects: ["benefits"], about: "named_items" });
+  const { r } = check(a);
+  assert.ok(r.ok, r.problems.join("\n"));
+  assert.match(designBriefSystem(), /which ones by name is a gap about named_items/);
+});
+
+await test("the care rule wins over an approved Testimonials section until the owner says otherwise, and code asks the owner", () => {
+  const { db } = check(fixed());
+  const rule = db.care.find((c) => c.by === "code")!;
+  assert.equal(rule.rule, `${TESTIMONIALS_RULE}. ${TESTIMONIALS_WINS}`);
+  const ask = db.gaps.filter((g) => g.by === "code" && g.about === "proof");
+  assert.deepEqual(ask.map((g) => g.question), ["We advise leaving Testimonials out on a betting site. Do you have real quotes from members that you want to show?"]);
+  const md = renderDesignBrief(db);
+  assert.match(md, /this care rule wins until the owner says otherwise: build the page without it, even though specs\/brief\.json lists it/);
+  // The model's own testimonials question is dropped for code's.
+  const a = fixed();
+  a.gaps.push({ question: "Do you have real testimonials, or should we remove the section?", affects: ["testimonials"], about: "proof" });
+  assert.equal(check(a).db.gaps.filter((g) => /testimonial/i.test(g.question)).length, 1);
+  // The owner said otherwise: real quotes only, and no question.
+  const asked = [...G.messages, { id: 99, kind: "user", text: "please keep testimonials, I will send real ones from members" }];
+  const db2 = assembleDesignBrief(fixed(), G.brief, asked);
+  assert.equal(db2.care.find((c) => c.by === "code")!.rule, `${TESTIMONIALS_RULE}. ${TESTIMONIALS_OWNER_ASKED}`);
+  assert.ok(!db2.gaps.some((g) => g.about === "proof"));
+});
+
+await test("American spelling: color, never colour", () => {
+  const md = renderDesignBrief(check(fixed()).db);
+  assert.match(md, /- Color mode: dark\./);
+  assert.match(md, /- Accent color: #2EE6C4/);
+  assert.doesNotMatch(md, /colour/i);
+  // The pack's own lists (runner direction.json) still say colour; they change in the runner.
+  assert.doesNotMatch(designBriefSystem().split("The lists (use these names exactly)")[0], /colour/i);
 });
 
 await test("no testimonials rule for a product that is not betting, health or money", () => {

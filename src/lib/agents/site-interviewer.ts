@@ -59,7 +59,7 @@ const REPLY: Tool = {
     properties: {
       understood: { type: "string", description: "Only when the person's last message gave a fact, a choice or a number that you interpreted (for example 'weekly 199' read as a one-time pass of $199 for 7 days), or when you decided something on their behalf (a default they did not pick). One or two short lines in plain words, so they can correct it. Leave it out for your first reply, and whenever it would only repeat their words back. Never start with 'Got it'." },
       question: { type: "string", description: "The one thing you ask next, in at most two short sentences. When the message is not a question (the page plan, the review), the whole message goes here." },
-      parts: { type: "array", items: { type: "string" }, description: "Only for a question with several parts (for example tone, light or dark, and colour): one short line per part, and question is then a short lead-in. Leave out otherwise." },
+      parts: { type: "array", items: { type: "string" }, description: "Only for a question with several parts (for example tone, light or dark, and color): one short line per part, and question is then a short lead-in. Leave out otherwise." },
     },
     required: ["question"],
   },
@@ -121,7 +121,7 @@ How to talk:
 - Always answer by calling the reply tool, for every message, and never in plain text (save the brief with save_brief). Its parts are shown to the person as separate blocks:
   - understood: only when their last message gave a fact, a choice or a number that you interpreted (for example "weekly 199" read as a one-time pass of $199 for 7 days), or when you decided something on their behalf (a default they did not pick). One or two short lines, so they can correct it. Leave it out for your first reply, and leave it out whenever it would only repeat their words back. Never start it with "Got it".
   - question: the one thing you ask next, in at most two short sentences.
-  - parts: only when a question has several parts (for example tone, light or dark, and colour). One short line per part, and question is then a short lead-in.
+  - parts: only when a question has several parts (for example tone, light or dark, and color). One short line per part, and question is then a short lead-in.
 - Ask about money terms directly, as a question: for example "Does Monthly renew on its own?" or "Is $599 charged once or every week?". Never state a guess and add an escape such as "Tell me if it does". Until the person answers, the term is not settled.
 - One question per message.${showcase ? " The page plan is shown in question as a short list of sections with the optional ones marked on or off." : ""}
 - Keep the person's own words in the brief where you can. You write the headline, benefit titles and ${showcase ? "FAQ answers" : "thank-you message"}, and the person approves them on the review.
