@@ -102,6 +102,16 @@ async function main() {
         const v = validateSiteBrief(brief, pack);
         const keys = brief && typeof brief === "object" ? Object.keys(brief).join(", ") : typeof brief;
         console.log(`  save_brief: brief with keys [${keys}]`);
+        const b = (brief ?? {}) as Record<string, any>;
+        for (const k of ["main_button", "secondary_button", "sign_in"]) console.log(`  ${k}: ${cut(b[k] === undefined ? "(left out)" : b[k], 200)}`);
+        const pricing = Array.isArray(b.blocks) ? b.blocks.find((x: any) => x?.type === "pricing") : undefined;
+        if (pricing) {
+          console.log(`  pricing: billing ${cut(pricing.billing ?? null, 40)}`);
+          for (const pl of (Array.isArray(pricing.plans) ? pricing.plans : []) as Record<string, unknown>[]) {
+            const rest = Object.keys(pl).filter((x) => !["name", "monthly_price", "features"].includes(x));
+            console.log(`    plan ${cut(pl.name ?? null, 40)}: monthly_price ${cut(pl.monthly_price ?? null, 20)}; ${rest.map((x) => `${x} ${cut(pl[x], 80)}`).join("; ")}`);
+          }
+        }
         console.log(v.ok ? "  validation: passed" : `  validation: FAILED\n${v.error.split("\n").slice(1).map((l) => `    ${cut(l, 200)}`).join("\n")}`);
       } else console.log(`  tool ${t.name}: ${cut(t.input)}`);
     }

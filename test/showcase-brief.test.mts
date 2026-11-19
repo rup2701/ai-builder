@@ -104,6 +104,29 @@ test("a secondary button is optional, limited to https or mailto, and may have n
   const b3 = example(); b3.secondary_button = { label: "Watch demo", link: "javascript:alert(1)" };
   assert.equal(validateSiteBrief(b3, "showcase").ok, false);
 });
+test("a main button and sign in with no secondary button saves: a null secondary button means none, and is taken out", () => {
+  // The 18 November review step failure: the owner gave Get picks and Sign in, the model wrote secondary_button: null.
+  const b = example(); b.main_button = { label: "Get picks", link: null }; b.sign_in = { label: "Sign in", link: null }; b.secondary_button = null;
+  const v = validateSiteBrief(b, "showcase");
+  assert.equal(v.ok, true);
+  assert.equal("secondary_button" in (v as { brief: Record<string, unknown> }).brief, false, "no null button in the saved brief");
+  assert.equal((v as { brief: Record<string, any> }).brief.main_button.label, "Get picks");
+  assert.equal(b.secondary_button, null, "the input is not changed");
+  const s = example(); s.sign_in = null;
+  assert.equal("sign_in" in (validateSiteBrief(s, "showcase") as { brief: Record<string, unknown> }).brief, false, "a null sign in is taken out too");
+});
+test("a half-filled optional button is still refused, and the error says to leave it out", () => {
+  for (const sb of [{ label: null }, { label: "" }]) {
+    const b = example(); b.secondary_button = sb;
+    const v = validateSiteBrief(b, "showcase");
+    assert.equal(v.ok, false);
+    assert.match((v as { error: string }).error, /secondary_button is optional: if the person did not ask for it, leave secondary_button out of the brief entirely/);
+  }
+  const b = example(); b.sign_in = { label: "" };
+  assert.match((validateSiteBrief(b, "showcase") as { error: string }).error, /sign_in is optional/);
+  const m = example(); m.main_button = { label: "" };
+  assert.doesNotMatch((validateSiteBrief(m, "showcase") as { error: string }).error, /is optional/, "the main button is never optional");
+});
 test("the brief card reads the bento benefits, the tone and the placeholders", () => {
   const c = briefCard(example());
   assert.equal(c.benefits.length, 3);

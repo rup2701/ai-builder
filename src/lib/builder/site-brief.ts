@@ -166,11 +166,22 @@ export const isLocal = (p?: string | null) => normalizePack(p) === "local";
 /** A link asked for the product showcase pack (pack=showcase, product-showcase or the old saas). */
 export const isShowcase = (p?: string | null) => normalizePack(p) === "showcase";
 
+/** Showcase buttons the owner may not want. A null one means "none": it is taken out, so the saved brief never holds a null button. */
+const OPTIONAL_BUTTONS = ["secondary_button", "sign_in"] as const;
+
 export function validateSiteBrief(input: unknown, pack: SitePack | "saas" = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
   const n = normalizePack(pack);
+  if (n === "showcase" && input && typeof input === "object" && !Array.isArray(input)) {
+    const copy = { ...(input as Record<string, unknown>) };
+    for (const k of OPTIONAL_BUTTONS) if (copy[k] === null) delete copy[k];
+    input = copy;
+  }
   const r = (n === "showcase" ? ShowcaseBrief : n === "local" ? LocalBusinessBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };
   const lines = r.error.issues.slice(0, 6).map((i) => `${i.path.join(".") || "brief"}: ${i.message}`);
+  // The model tends to fill an optional button it should drop (the 18 November review step failure): say how to have none.
+  const optional = n === "showcase" ? OPTIONAL_BUTTONS.filter((k) => r.error.issues.some((i) => i.path[0] === k)) : [];
+  for (const k of optional) lines.push(`${k} is optional: if the person did not ask for it, leave ${k} out of the brief entirely (no empty label).`);
   return { ok: false, error: `The brief is not valid. Fix these and call save_brief again:\n${lines.join("\n")}` };
 }
 
