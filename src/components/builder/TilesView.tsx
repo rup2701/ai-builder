@@ -1,0 +1,135 @@
+"use client";
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { TileChecks } from "@/lib/builder/tile-checks";
+
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
+const WIDTH = { desktop: 1280, phone: 390 } as const;
+
+type Got = { tile: { html: string | null; checks: TileChecks | null; renderedAt: string; error: string | null } | null; stale?: boolean; why: string | null };
+
+/**
+ * The style tile for a project (APP-43, admin only): drawn in a frame that really is 1280 or 390 pixels wide, so the
+ * page's own container queries apply. Desktop is scaled down to fit the pane. The frame runs no scripts.
+ */
+export default function TilesView({ projectId }: { projectId: string }) {
+  const [got, setGot] = useState<Got | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [device, setDevice] = useState<keyof typeof WIDTH>("desktop");
+  const [rendering, setRendering] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  const load = useCallback(async () => {
+    setError(null);
+    const r = await fetch(`/api/projects/${projectId}/tile`, { cache: "no-store" }).catch(() => null);
+    if (!r || !r.ok) return setError("Could not load the tile.");
+    setGot(await r.json());
+  }, [projectId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [got]);
+
+  const render = async () => {
+    setRendering(true);
+    setError(null);
+    const r = await fetch(`/api/projects/${projectId}/tile`, { method: "POST" }).catch(() => null);
+    if (!r || !r.ok) setError(((await r?.json().catch(() => null)) as { error?: string } | null)?.error ?? "Could not render the tile.");
+    await load();
+    setRendering(false);
+  };
+
+  const tile = got?.tile ?? null;
+  const width = WIDTH[device];
+  // Both frames keep their real width; on a pane narrower than that (a phone), the frame is scaled down to fit.
+  const pad = device === "phone" ? 24 : 0;
+  const scale = size.w ? Math.min(1, (size.w - pad) / width) : 1;
+  const frameH = size.h ? Math.round((size.h - pad) / scale) : 800;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="tiles-view">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {tile && (got?.stale ? (
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800" data-testid="tile-stale">Stale</span>
+          ) : (
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800">Up to date</span>
+          ))}
+          {tile?.checks && (
+            <span className={`rounded-full px-2 py-0.5 ${tile.checks.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"}`}>
+              {tile.checks.checks.filter((c) => c.ok).length} of {tile.checks.checks.length} checks pass
+            </span>
+          )}
+          {tile && <span className="text-foreground/60">Drawn {new Date(tile.renderedAt).toLocaleString()}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={render} disabled={rendering} className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 hover:border-foreground/50 disabled:opacity-50 ${focusRing}`}>
+            {rendering ? "Rendering…" : "Render tile"}
+          </button>
+          <div role="group" aria-label="Tile width" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
+            {(["desktop", "phone"] as const).map((d) => (
+              <button
+                key={d}
+                type="button"
+                aria-pressed={device === d}
+                onClick={() => setDevice(d)}
+                className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/72"}`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {(error || got?.why || tile?.error) && (
+        <p className="border-b border-foreground/10 bg-foreground/[0.03] px-4 py-2 text-xs text-foreground/80" role="status">
+          {error ?? tile?.error ?? got?.why}
+        </p>
+      )}
+
+      {tile?.checks && (
+        <details className="border-b border-foreground/10 px-4 py-2 text-xs">
+          <summary className="cursor-pointer text-foreground/80">Checks</summary>
+          <ul className="mt-2 space-y-1">
+            {tile.checks.checks.map((c) => (
+              <li key={c.id} className="flex gap-2">
+                <span className={c.ok ? "text-emerald-700" : "text-red-700"}>{c.ok ? "Pass" : "Fail"}</span>
+                <span>
+                  <span className="text-foreground">{c.id}. {c.name}.</span> <span className="text-foreground/70">{c.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      <div ref={box} className="relative min-h-0 flex-1 overflow-hidden bg-foreground/[0.04]">
+        {tile?.html ? (
+          <div className={device === "phone" ? "flex h-full justify-center pt-3" : "h-full"}>
+            <div style={{ width: width * scale, height: frameH * scale }} className={device === "phone" ? "overflow-hidden rounded-t-3xl border border-b-0 border-foreground/15 shadow-sm" : ""}>
+              <iframe
+                title={`Style tile, ${device}`}
+                srcDoc={tile.html}
+                sandbox=""
+                data-testid="tile-frame"
+                style={{ width, height: frameH, transform: `scale(${scale})`, transformOrigin: "0 0", border: 0 }}
+              />
+            </div>
+          </div>
+        ) : (
+          !error && !got?.why && <p className="p-5 text-sm text-foreground/60">Loading…</p>
+        )}
+      </div>
+    </div>
+  );
+}

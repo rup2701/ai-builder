@@ -160,6 +160,22 @@ await test("review writes the brief on the project and logs its cost; the owner'
   assert.equal(m.calls(), 1, "the same chat and brief are never written twice");
 });
 
+await test("review draws the style tile from a brief that passed, and keeps the old tile while a new brief is written", async () => {
+  const { db, row } = fakeDb();
+  const m = model(goodAnswer);
+  await designBriefAtReview({ db, projectId: "p1", env, call: m.call, sleep: noWait });
+  const tile = row.design_brief?.tile;
+  assert.ok(tile?.html?.includes("PickPal"));
+  assert.equal(tile?.checks?.checks.length, 5);
+  assert.equal(tile?.error, null);
+  // The owner changes the brief: while the new brief is written the old tile stays, and the new one replaces it after.
+  row.state.site.brief = { ...BRIEF, look: { ...BRIEF.look, tone: "calm" } };
+  let during: unknown;
+  await designBriefAtReview({ db, projectId: "p1", env, call: async (...a) => { during = row.design_brief?.tile?.fingerprint; return m.call(...a); }, sleep: noWait });
+  assert.equal(during, tile?.fingerprint, "the old tile was kept while writing");
+  assert.notEqual(row.design_brief?.tile?.fingerprint, tile?.fingerprint, "a new tile for the new brief");
+});
+
 await test("edits that come quickly write only the latest brief", async () => {
   const { db, row } = fakeDb();
   const m = model(goodAnswer);

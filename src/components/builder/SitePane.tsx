@@ -2,12 +2,17 @@
 
 import { briefCard, localCard } from "@/lib/builder/site-brief";
 import { SECTION_LABEL, sectionsOff, type Switchable } from "@/lib/builder/local-edit";
+import { useState } from "react";
 import SiteTimeline from "./SiteTimeline";
+import TilesView from "./TilesView";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
 /** The side panel for a website project: the brief as the interview saved it, until the site is built. */
-export default function SitePane({ st, projectId, busy, visible, onBuild, starting }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean }) {
+export default function SitePane({ st, projectId, busy, visible, onBuild, starting, admin = false }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean; admin?: boolean }) {
+  /** Admins (APP-43) also see the style tile; owners see only the brief or the build. */
+  const [view, setView] = useState<"build" | "tiles">("build");
+  const tiles = admin && view === "tiles";
   const brief = st.site?.brief;
   const local = (brief?.site as { kind?: string } | undefined)?.kind === "local-business";
   const c = brief ? briefCard(brief) : null;
@@ -43,8 +48,25 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
   return (
     <section aria-label="Website brief" className={`${visible ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`} data-testid="site-pane">
       <div className="flex items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
-        <p className="text-sm text-foreground/72">{build ? "Your site" : "Your brief"}</p>
-        {c && (
+        {admin ? (
+          <div role="group" aria-label="Pane" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
+            {(["build", "tiles"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => setView(v)}
+                className={`rounded-full px-3 py-1 text-xs capitalize focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${view === v ? "bg-white shadow-sm" : "text-foreground/72"}`}
+                data-testid={`pane-${v}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-foreground/72">{build ? "Your site" : "Your brief"}</p>
+        )}
+        {c && !tiles && (
           <a
             href={`/api/projects/${projectId}/brief`}
             className="rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 hover:border-foreground/50"
@@ -53,6 +75,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
           </a>
         )}
       </div>
+      {tiles ? <TilesView projectId={projectId} /> : (
       <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm leading-relaxed">
         {build && c ? (
           <div>
@@ -77,6 +100,7 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }

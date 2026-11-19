@@ -5,6 +5,7 @@ import { addressOf, shortDate } from "@/lib/project-archive";
 import BuilderWorkspace from "@/components/builder/BuilderWorkspace";
 import type { WorkspaceState } from "@/lib/workspace/types";
 import { restoreAction } from "../actions";
+import { isAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const address = addressOf(project.state);
   return (
     <>
-      <BuilderWorkspace projectId={project.id} initial={project.state as WorkspaceState} homeHref="/projects" title={project.title} kind={project.kind === "site" ? "site" : "store"} />
+      <BuilderWorkspace projectId={project.id} initial={project.state as WorkspaceState} homeHref="/projects" title={project.title} kind={project.kind === "site" ? "site" : "store"} admin={isAdmin(user)} />
       {project.archivedAt && (
         // Read-only: this bar sits over the chat box. The server refuses changes on its own; this says why and offers Restore.
         <div role="region" aria-label="Archived project" className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background px-4 py-4 shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">

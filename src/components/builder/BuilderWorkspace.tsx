@@ -41,6 +41,8 @@ type Props = {
   publishNote?: string;
   /** "site" runs the website interview; the default is the store builder. */
   kind?: "store" | "site";
+  /** RP (ADMIN_EMAILS): also sees the internal design stages, such as the style tile (APP-43). */
+  admin?: boolean;
 };
 
 type StepState = "todo" | "active" | "done";
@@ -349,7 +351,7 @@ function boldText(text: string) {
 
 /* ---------- Workspace ---------- */
 
-export default function BuilderWorkspace({ projectId, initial, homeHref, title, publishNote, kind = "store" }: Props) {
+export default function BuilderWorkspace({ projectId, initial, homeHref, title, publishNote, kind = "store", admin = false }: Props) {
   const site = kind === "site";
   const [st, setSt] = useState<WorkspaceState>(initial);
   /** Pictures attached to the message being written (live sites only). They are uploaded as soon as they are picked. */
@@ -759,7 +761,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
 
       <div className={`grid min-h-0 flex-1 gap-3 px-3 pb-3 ${expanded ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]" : "lg:grid-cols-[minmax(0,1fr)_minmax(340px,430px)]"}`}>
         {site ? (
-          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} />
+          <SitePane st={st} projectId={projectId} busy={busy} visible={pane === "preview"} onBuild={startBuild} starting={starting} admin={admin} />
         ) : (
           <>
         <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
