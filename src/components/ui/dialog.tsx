@@ -28,7 +28,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
 }
 
 function DialogDescription({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) {
-  return <DialogPrimitive.Description className={cn("mt-3 text-sm leading-relaxed text-foreground/70", className)} {...props} />;
+  return <DialogPrimitive.Description className={cn("mt-3 text-sm leading-relaxed text-foreground/80", className)} {...props} />;
 }
 
 export { Dialog, DialogTrigger, DialogClose, DialogContent, DialogTitle, DialogDescription };

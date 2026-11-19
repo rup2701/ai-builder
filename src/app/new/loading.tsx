@@ -5,7 +5,7 @@ export default function Loading() {
       <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-2 border-foreground/15 border-t-foreground" />
       <div>
         <p className="text-xl">Setting up your project…</p>
-        <p className="mt-1 text-sm text-foreground/60">Reading your idea. This takes a few seconds.</p>
+        <p className="mt-1 text-sm text-foreground/72">Reading your idea. This takes a few seconds.</p>
       </div>
     </main>
   );

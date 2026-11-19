@@ -11,11 +11,15 @@ const NAV = [
 
 export type NavId = (typeof NAV)[number]["id"];
 
-/** The frame for the builder's main pages: a sidebar on a wide screen, a top bar on a phone. The project workspace has its own header and does not use this. */
+/**
+ * The frame for the builder's main pages: a sidebar on a wide screen, a top bar on a phone. The project workspace has its own
+ * header and does not use this. On a wide screen the sidebar and the page are white cards on the grey background, like the
+ * chat and preview panels in the project workspace. Both stay within the window; the page card scrolls inside.
+ */
 export default function AppShell({ active, email, children }: { active: NavId; email: string | null; children: ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground md:flex">
-      <aside className="flex items-center gap-1 border-b border-foreground/10 px-3 py-2.5 md:sticky md:top-0 md:h-[100dvh] md:w-56 md:shrink-0 md:flex-col md:items-stretch md:gap-1 md:border-b-0 md:border-r md:p-4">
+    <div className="min-h-[100dvh] bg-background text-foreground md:flex md:h-[100dvh] md:gap-3 md:overflow-hidden md:p-3">
+      <aside className="flex items-center gap-1 border-b border-foreground/10 px-3 py-2.5 md:h-full md:w-56 md:shrink-0 md:flex-col md:items-stretch md:gap-1 md:rounded-3xl md:border md:border-foreground/10 md:bg-white md:p-4">
         <Link href="/" className="rounded-lg px-2 py-1.5 text-base font-medium tracking-tight md:mb-3">
           Appnomics
         </Link>
@@ -26,7 +30,7 @@ export default function AppShell({ active, email, children }: { active: NavId; e
               href={n.href}
               aria-current={n.id === active ? "page" : undefined}
               className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-colors md:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${
-                n.id === active ? "bg-foreground/[0.07] text-foreground" : "text-foreground/65 hover:bg-foreground/[0.04] hover:text-foreground"
+                n.id === active ? "bg-foreground/[0.07] text-foreground" : "text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground"
               }`}
             >
               <svg viewBox="0 0 24 24" className="hidden h-[18px] w-[18px] md:block" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -39,7 +43,7 @@ export default function AppShell({ active, email, children }: { active: NavId; e
             href={DOCS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm text-foreground/65 transition-colors hover:bg-foreground/[0.04] hover:text-foreground md:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+            className="flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm text-foreground/75 transition-colors hover:bg-foreground/[0.04] hover:text-foreground md:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
           >
             <svg viewBox="0 0 24 24" className="hidden h-[18px] w-[18px] md:block" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" />
@@ -50,15 +54,15 @@ export default function AppShell({ active, email, children }: { active: NavId; e
           </a>
         </nav>
         <div className="hidden md:mt-auto md:block">
-          {email && <p className="truncate px-2 text-xs text-foreground/55" title={email}>{email}</p>}
+          {email && <p className="truncate px-2 text-xs text-foreground/65" title={email}>{email}</p>}
           <form action={signOutAction}>
-            <button type="submit" className="mt-1 rounded-lg px-2 py-1.5 text-sm text-foreground/65 hover:text-foreground">
+            <button type="submit" className="mt-1 rounded-lg px-2 py-1.5 text-sm text-foreground/75 hover:text-foreground">
               Sign out
             </button>
           </form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1 md:h-full md:overflow-y-auto md:rounded-3xl md:border md:border-foreground/10 md:bg-white">{children}</main>
     </div>
   );
 }

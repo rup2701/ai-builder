@@ -43,7 +43,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
           /* clipboard can be blocked; the text is still on screen */
         }
       }}
-      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
+      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/72 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
     >
       <Icon d={done ? CHECK : COPY} />
     </button>
@@ -118,7 +118,7 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
                     aria-label={show ? "Hide password" : "Show password"}
                     title={show ? "Hide password" : "Show password"}
                     onClick={() => setShow((v) => !v)}
-                    className={`grid h-8 w-8 place-items-center rounded-lg text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
+                    className={`grid h-8 w-8 place-items-center rounded-lg text-foreground/72 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
                   >
                     <Icon d={show ? EYE_OFF : EYE} />
                   </button>
@@ -126,7 +126,7 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
                 </span>
               </span>
             ) : (
-              <span className="text-foreground/60">Removed from this page</span>
+              <span className="text-foreground/72">Removed from this page</span>
             )}
           </dd>
         </div>
@@ -137,7 +137,7 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
       {!adminUrl || !ownerEmail ? null : password ? (
         <div className="mt-1 rounded-xl bg-foreground/[0.04] p-3 text-sm">
           <p className="font-semibold text-foreground">Save the password now.</p>
-          <p className="mt-0.5 text-foreground/70">A password manager is best. When you have saved it, I'll remove it from this page.</p>
+          <p className="mt-0.5 text-foreground/80">A password manager is best. When you have saved it, I'll remove it from this page.</p>
           <button
             type="button"
             onClick={saved}
@@ -148,13 +148,13 @@ export default function SiteReadyCard({ name, url, adminUrl, ownerEmail, passwor
           </button>
         </div>
       ) : (
-        <p className="mt-1 text-xs text-foreground/55">The password is not kept here. If you lose it, a new one can be set.</p>
+        <p className="mt-1 text-xs text-foreground/65">The password is not kept here. If you lose it, a new one can be set.</p>
       )}
 
       {checks.length > 0 && (
         <div className="mt-4">
           <p className="text-sm font-semibold text-foreground">Check these before you share it</p>
-          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-relaxed text-foreground/85">
+          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-relaxed text-foreground/90">
             {checks.map((c) => (
               <li key={c}>{c}</li>
             ))}

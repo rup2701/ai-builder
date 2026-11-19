@@ -42,7 +42,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ i
             <span className="min-w-0 truncate">
               <span className="font-medium">{building.title}</span> is building · {step}
             </span>
-            <span className="shrink-0 text-foreground/60">Open →</span>
+            <span className="shrink-0 text-foreground/72">Open →</span>
           </Link>
         </div>
       )}

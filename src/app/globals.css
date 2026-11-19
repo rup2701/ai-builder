@@ -2,19 +2,19 @@
 
 :root {
   --background: #f5f5f5;
-  --foreground: #171717;
+  --foreground: #0d0d0d;
   --card: #ffffff;
-  --card-foreground: #171717;
+  --card-foreground: #0d0d0d;
   --popover: #ffffff;
-  --popover-foreground: #171717;
+  --popover-foreground: #0d0d0d;
   --primary: #171717;
   --primary-foreground: #f5f5f5;
   --secondary: #ececec;
-  --secondary-foreground: #171717;
+  --secondary-foreground: #0d0d0d;
   --muted: #ececec;
-  --muted-foreground: #5c5c5c;
+  --muted-foreground: #474747;
   --accent: #ececec;
-  --accent-foreground: #171717;
+  --accent-foreground: #0d0d0d;
   --destructive: #b3261e;
   --border: rgb(23 23 23 / 0.12);
   --input: rgb(23 23 23 / 0.2);
@@ -63,11 +63,18 @@ body {
   overflow-x: clip;
 }
 
-/* Same base rule as the marketing site. The store preview uses h3/h4 for this reason. */
+/* Same base rules as the marketing site: Sora for h1 to h3. The store preview sets its own heading font inline. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-sora), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+}
+
+/* The store preview uses h3/h4 for this reason. */
 h1,
 h2 {
   font-weight: 400;
-  letter-spacing: -0.07rem;
+  letter-spacing: -0.04em;
   color: var(--foreground) !important;
 }
 /* ---- Website build timeline (SiteTimeline). Motion only when the visitor has not asked for less. ---- */

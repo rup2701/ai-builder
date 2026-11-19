@@ -32,17 +32,17 @@ export function PlanCard({ plan, active, onSend }: { plan: Plan; active: boolean
             onChange={() => toggle(name)}
             className={`h-4 w-4 shrink-0 accent-foreground ${focusRing}`}
           />
-          <span className={checked ? "text-foreground" : "text-foreground/55"}>{name}</span>
-          {locked && <span className="ml-auto text-xs text-foreground/45">always included</span>}
+          <span className={checked ? "text-foreground" : "text-foreground/65"}>{name}</span>
+          {locked && <span className="ml-auto text-xs text-foreground/55">always included</span>}
         </label>
       </li>
     );
   };
   return (
     <div className="mt-2 rounded-2xl border border-foreground/10 bg-white p-3" data-testid="plan-card">
-      <p className="px-3 pb-1 pt-1 text-xs font-medium uppercase tracking-wide text-foreground/50">Your page</p>
+      <p className="px-3 pb-1 pt-1 text-xs font-medium uppercase tracking-wide text-foreground/60">Your page</p>
       <ul>{plan.added.map(row)}</ul>
-      <p className="px-3 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-foreground/50">More sections to add</p>
+      <p className="px-3 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-foreground/60">More sections to add</p>
       <ul>{plan.extra.map(row)}</ul>
       {live ? (
         <div className="mt-2 flex flex-wrap items-center gap-3 px-3 pb-1 pt-2">
@@ -56,7 +56,7 @@ export function PlanCard({ plan, active, onSend }: { plan: Plan; active: boolean
           >
             Looks good
           </button>
-          <span className="text-xs text-foreground/55">Or type a section of your own below.</span>
+          <span className="text-xs text-foreground/65">Or type a section of your own below.</span>
         </div>
       ) : null}
     </div>
