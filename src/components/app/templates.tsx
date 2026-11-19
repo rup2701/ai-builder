@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** The starter cards on Home. Copy and art match the Appnomics site's hero. Store cards use a screenshot from /public/images when it is there, and the drawing otherwise. */
+/** The starter cards on Home. Copy, demo links and art match the Appnomics site's hero (appnomics-landing HeroPrompt.tsx); keep them in step. Store cards use a screenshot from /public/images when it is there, and the drawing otherwise. */
 
 const artProps = { viewBox: "0 0 320 240", preserveAspectRatio: "xMidYMid slice", className: "h-full w-full", "aria-hidden": true } as const;
 
@@ -69,7 +69,7 @@ export type Template = {
 export const STORE_TEMPLATES: Template[] = [
   { id: "fernhollow", caption: "Handmade goods", text: "A handmade ceramics store with mugs, bowls and custom engraving", image: "/images/fernhollow-store-template.png", art: <CeramicsArt />, demos: [{ label: "Fernhollow", url: "https://fernhollow.store" }] },
   { id: "boutique", caption: "Designer fashion", text: "A boutique clothing shop with seasonal drops and local pickup", image: "/images/aldervale-template.png", art: <BoutiqueArt />, demos: [{ label: "Alder & Vale", url: "https://aldervale.appnomics.live" }] },
-  { id: "art", caption: "Art and prints", text: "A shop for a painter selling original work and prints", art: <PortfolioArt />, soon: true },
+  { id: "art", caption: "Art and portfolio", text: "A portfolio and shop for a painter", image: "/images/avant-store-template.png", art: <PortfolioArt />, demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }] },
 ];
 
 export const SITE_TEMPLATES: Template[] = [
@@ -78,9 +78,9 @@ export const SITE_TEMPLATES: Template[] = [
     caption: "Waitlist site",
     text: "A waitlist website for ___, with a product overview, features and a signup form.",
     demos: [
+      { label: "Joyride", url: "https://joyride-opus.appnomics.live/" },
       { label: "Ksandra", url: "https://ksandra.appnomics.live/" },
       { label: "Tidewell Ring", url: "https://tidewell-ring.appnomics.live/" },
-      { label: "DispatchOS", url: "https://dispatchos-waitlist.appnomics.live" },
     ],
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-emerald-50 p-5 text-emerald-950 sm:p-8">
@@ -96,7 +96,11 @@ export const SITE_TEMPLATES: Template[] = [
     caption: "Product showcase",
     text: "A product website for ___, with features, pricing and how it works.",
     pack: "showcase",
-    demos: [{ label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live" }],
+    demos: [
+      { label: "SureBetz", url: "https://sbetz.appnomics.live" },
+      { label: "Ledgerline", url: "https://ledgerline.appnomics.live" },
+      { label: "DispatchOS", url: "https://dispatchos-9901.appnomics.live/" },
+    ],
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-indigo-50 p-5 text-indigo-950 sm:p-8">
         <span className="font-mono text-[10px]">YOUR PRODUCT</span>
@@ -111,6 +115,7 @@ export const SITE_TEMPLATES: Template[] = [
     text: "A website for my restaurant, with the menu, our story, a gallery and ways to book or order.",
     pack: "local",
     soon: true,
+    demos: [{ label: "Curryleaf", url: "https://curryleaf.appnomics.live" }],
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-orange-50 p-5 text-orange-950 sm:p-8">
         <span className="font-mono text-[10px]">YOUR RESTAURANT</span>
@@ -123,7 +128,6 @@ export const SITE_TEMPLATES: Template[] = [
     id: "website-portfolio",
     caption: "Portfolio site",
     text: "A personal portfolio website with selected projects, an about section and a contact form",
-    demos: [{ label: "Studio Avant", url: "https://studioavant.appnomics.live" }],
     soon: true,
     art: (
       <div className="flex h-full flex-col justify-center gap-3 bg-sky-50 p-5 text-sky-950 sm:p-8">

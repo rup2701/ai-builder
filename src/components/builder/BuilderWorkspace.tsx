@@ -87,7 +87,7 @@ function ChecksList({ results }: { results: Check[] }) {
           <StatusIcon status={c.status} />
           <div className="min-w-0">
             <p className="text-sm text-foreground">{c.label}</p>
-            <p className="text-xs leading-relaxed text-foreground/60">{c.detail}</p>
+            <p className="text-xs leading-relaxed text-foreground/72">{c.detail}</p>
           </div>
         </li>
       ))}
@@ -109,7 +109,7 @@ function AgentAvatar() {
 
 function AgentLabel() {
   return (
-    <p className="mb-1 flex items-center gap-2 text-xs font-medium text-foreground/60">
+    <p className="mb-1 flex items-center gap-2 text-xs font-medium text-foreground/72">
       <AgentAvatar />
       {AGENT_NAME}
     </p>
@@ -121,7 +121,7 @@ function Typing() {
   return (
     <div data-testid="typing">
       <AgentLabel />
-      <p className="flex items-center gap-1.5 text-sm text-foreground/60">
+      <p className="flex items-center gap-1.5 text-sm text-foreground/72">
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((i) => (
             <span key={i} className="h-1.5 w-1.5 rounded-full bg-foreground/40 motion-safe:animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
@@ -165,8 +165,8 @@ function SummarySection({ label, items }: { label: string; items: string[] }) {
   if (!items.length) return null;
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-foreground/50">{label}</p>
-      <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-foreground/85">
+      <p className="text-[11px] uppercase tracking-wide text-foreground/60">{label}</p>
+      <ul className="mt-1 list-disc space-y-1 pl-4 text-sm leading-relaxed text-foreground/90">
         {items.map((t) => (
           <li key={t}>{t}</li>
         ))}
@@ -185,7 +185,7 @@ function Stepper({ states }: { states: StepState[] }) {
             {i > 0 && <span aria-hidden="true" className="mx-1 h-px w-3 bg-foreground/20 sm:w-8" />}
             <span
               className={`flex items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors sm:px-3 ${
-                st === "active" ? "bg-foreground text-background" : st === "done" ? "text-foreground" : "text-foreground/45"
+                st === "active" ? "bg-foreground text-background" : st === "done" ? "text-foreground" : "text-foreground/55"
               }`}
             >
               <span
@@ -270,17 +270,17 @@ function PublishDialog({
         </h2>
         {done ? (
           <>
-            <p className="mt-3 text-sm leading-relaxed text-foreground/70">
+            <p className="mt-3 text-sm leading-relaxed text-foreground/80">
               We'll send your plan to {email}, with a link to launch this store when publishing opens.
             </p>
-            {note && <p className="mt-2 text-xs text-foreground/50">{note}</p>}
+            {note && <p className="mt-2 text-xs text-foreground/60">{note}</p>}
             <button type="button" onClick={onClose} className={`mt-6 rounded-xl bg-foreground px-4 py-2 text-sm text-background ${focusRing}`}>
               Back to my store
             </button>
           </>
         ) : (
           <form onSubmit={submit} noValidate className="mt-3">
-            <p className="text-sm leading-relaxed text-foreground/70">
+            <p className="text-sm leading-relaxed text-foreground/80">
               Publishing isn't open yet. Leave your email and we'll send your plan and a link when it is. Your store is saved as you left it.
             </p>
             <label htmlFor="publish-email" className="mt-5 block text-sm text-foreground">
@@ -327,7 +327,7 @@ function PublishDialog({
               <button type="submit" className={`rounded-xl bg-foreground px-4 py-2 text-sm text-background ${focusRing}`}>
                 Send me the plan
               </button>
-              <button type="button" onClick={onClose} className={`rounded-xl px-3 py-2 text-sm text-foreground/70 hover:text-foreground ${focusRing}`}>
+              <button type="button" onClick={onClose} className={`rounded-xl px-3 py-2 text-sm text-foreground/80 hover:text-foreground ${focusRing}`}>
                 Not now
               </button>
             </div>
@@ -689,7 +689,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
   const lastChangeId = [...msgs].reverse().find((m) => m.kind === "change")?.id;
 
   const back: ReactNode = (
-    <span className="flex items-center gap-2 text-sm text-foreground/70 hover:text-foreground">
+    <span className="flex items-center gap-2 text-sm text-foreground/80 hover:text-foreground">
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M15 6l-6 6 6 6" />
       </svg>
@@ -720,7 +720,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             href={DOCS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className={`rounded-lg px-2 py-1.5 text-sm text-foreground/65 transition-colors hover:text-foreground ${focusRing}`}
+            className={`rounded-lg px-2 py-1.5 text-sm text-foreground/75 transition-colors hover:text-foreground ${focusRing}`}
           >
             Help
             <span className="sr-only"> (opens in a new tab)</span>
@@ -748,7 +748,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             type="button"
             aria-selected={pane === p}
             onClick={() => setPane(p)}
-            className={`rounded-full px-4 py-1.5 text-sm capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/60"}`}
+            className={`rounded-full px-4 py-1.5 text-sm capitalize ${focusRing} ${pane === p ? "bg-white shadow-sm" : "text-foreground/72"}`}
           >
             {p}
           </button>
@@ -762,7 +762,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
           <>
         <section aria-label="Store preview" className={`${pane === "preview" ? "flex" : "hidden"} relative min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
-            <p className="flex items-center gap-2 text-sm text-foreground/60">
+            <p className="flex items-center gap-2 text-sm text-foreground/72">
               Preview
               {cur && (
                 <span className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-xs text-foreground" data-testid="version">
@@ -776,7 +776,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                   type="button"
                   aria-expanded={checksOpen}
                   onClick={() => setChecksOpen((o) => !o)}
-                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/80 hover:border-foreground/50 ${focusRing}`}
+                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 hover:border-foreground/50 ${focusRing}`}
                 >
                   <span className="sr-only">Checks: </span>
                   <Summary results={results} />
@@ -789,7 +789,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                     type="button"
                     aria-pressed={device === d}
                     onClick={() => setDevice(d)}
-                    className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/60"}`}
+                    className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/72"}`}
                   >
                     {d}
                   </button>
@@ -808,7 +808,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 </div>
               )
             ) : (
-              <div className="grid h-full min-h-48 place-items-center p-6 text-center text-sm text-foreground/50">
+              <div className="grid h-full min-h-48 place-items-center p-6 text-center text-sm text-foreground/60">
                 {busy ? "Drawing your store…" : "Your store appears here."}
               </div>
             )}
@@ -820,7 +820,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                 <p className="text-sm text-foreground">
                   Checks: <Summary results={results} />
                 </p>
-                <button type="button" onClick={() => setChecksOpen(false)} className={`rounded-lg px-2 py-1 text-xs text-foreground/70 hover:text-foreground ${focusRing}`}>
+                <button type="button" onClick={() => setChecksOpen(false)} className={`rounded-lg px-2 py-1 text-xs text-foreground/80 hover:text-foreground ${focusRing}`}>
                   Close
                 </button>
               </div>
@@ -834,14 +834,14 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
         {/* Chat */}
         <section aria-label="Chat" className={`${pane === "chat" ? "flex" : "hidden"} min-h-0 flex-col overflow-hidden rounded-3xl border border-foreground/10 bg-white lg:flex`}>
           <div className="hidden items-center justify-between border-b border-foreground/10 px-4 py-2 lg:flex">
-            <p className="text-sm text-foreground/60">Chat with {AGENT_NAME}</p>
+            <p className="text-sm text-foreground/72">Chat with {AGENT_NAME}</p>
             <button
               type="button"
               onClick={toggleExpanded}
               aria-pressed={expanded}
               aria-label={expanded ? "Make chat smaller" : "Make chat larger"}
               title={expanded ? "Make chat smaller" : "Make chat larger"}
-              className={`grid h-8 w-8 place-items-center rounded-lg text-foreground/60 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
+              className={`grid h-8 w-8 place-items-center rounded-lg text-foreground/72 hover:bg-foreground/[0.06] hover:text-foreground ${focusRing}`}
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d={expanded ? "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" : "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"} />
@@ -867,8 +867,8 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
                       {m.understood && (
                         <div className="mb-2.5 rounded-xl border border-foreground/10 bg-foreground/[0.03] px-3 py-2" data-testid="understood">
-                          <p className="text-xs font-medium text-foreground/55">What I understood</p>
-                          <p className="mt-0.5 whitespace-pre-wrap text-md text-foreground/80">{boldText(m.understood)}</p>
+                          <p className="text-xs font-medium text-foreground/65">What I understood</p>
+                          <p className="mt-0.5 whitespace-pre-wrap text-md text-foreground/88">{boldText(m.understood)}</p>
                         </div>
                       )}
                       {plan ? (
@@ -890,7 +890,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                           ))}
                         </ul>
                       )}
-                      {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/55">{m.hint}</p>}
+                      {m.hint && <p className="mt-0.5 text-xs leading-relaxed text-foreground/65">{m.hint}</p>}
                       {m.palette && m.id === msgs[msgs.length - 1]?.id && phase === "intake" && (
                         <div className="mt-2 flex flex-wrap gap-2" data-testid="palette">
                           {m.palette.map((name) => (
@@ -942,11 +942,11 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                   if (m.id !== lastRecapId || phase !== "intake") return null;
                   return (
                     <div key={m.id} className="max-w-[92%] rounded-2xl bg-foreground/[0.04] px-3 py-2.5" data-testid="recap">
-                      <p className="text-xs text-foreground/60">What I know so far</p>
+                      <p className="text-xs text-foreground/72">What I know so far</p>
                       <ul className="mt-1 space-y-0.5 text-sm leading-relaxed text-foreground">
                         {m.items.map((it) => (
                           <li key={it.label}>
-                            <span className="text-foreground/60">{it.label}:</span> {it.value}
+                            <span className="text-foreground/72">{it.label}:</span> {it.value}
                           </li>
                         ))}
                       </ul>
@@ -980,7 +980,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                         Checks: <Summary results={m.results} />
                       </p>
                       <ChecksList results={m.results} />
-                      <p className="mt-3 text-xs text-foreground/55">Ask for a change below. I'll re-run these after each one.</p>
+                      <p className="mt-3 text-xs text-foreground/65">Ask for a change below. I'll re-run these after each one.</p>
                     </div>
                   );
                 case "change": {
@@ -989,11 +989,11 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                     <div key={m.id} className="rounded-2xl border border-foreground/10 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm text-foreground">Version {m.version}</p>
-                        <p className="text-xs text-foreground/60">
+                        <p className="text-xs text-foreground/72">
                           Checks: <Summary results={m.results} />
                         </p>
                       </div>
-                      <ul className="mt-2 space-y-1 text-sm text-foreground/80">
+                      <ul className="mt-2 space-y-1 text-sm text-foreground/88">
                         {m.lines.map((l) => (
                           <li key={l}>{l}</li>
                         ))}
@@ -1015,7 +1015,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
             })}
             {pending && phase !== "build" && phase !== "verify" && <Typing />}
             {phase === "build" && (
-              <p className="text-xs leading-relaxed text-foreground/55" data-testid="step-away">
+              <p className="text-xs leading-relaxed text-foreground/65" data-testid="step-away">
                 This takes a minute or so. You can close this tab. The build keeps running, and your project will be waiting in Your projects.
               </p>
             )}
@@ -1036,7 +1036,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       inputRef.current?.focus();
                     }
                   }}
-                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/80 transition-colors hover:border-foreground/50 hover:text-foreground ${focusRing}`}
+                  className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 transition-colors hover:border-foreground/50 hover:text-foreground ${focusRing}`}
                 >
                   {s.label}
                 </button>
@@ -1073,12 +1073,12 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={`/api/projects/${projectId}/assets/${a.id}`} alt="" className="h-8 w-8 rounded object-cover" />
                       <span className="max-w-40 truncate">{a.name}</span>
-                      <button type="button" aria-label={`Remove ${a.name}`} onClick={() => setAttached((x) => x.filter((y) => y.id !== a.id))} className={`text-foreground/50 hover:text-foreground ${focusRing}`}>
+                      <button type="button" aria-label={`Remove ${a.name}`} onClick={() => setAttached((x) => x.filter((y) => y.id !== a.id))} className={`text-foreground/60 hover:text-foreground ${focusRing}`}>
                         ×
                       </button>
                     </span>
                   ))}
-                  {uploading && <span className="text-xs text-foreground/60">Attaching…</span>}
+                  {uploading && <span className="text-xs text-foreground/72">Attaching…</span>}
                   {uploadError && (
                     <span role="alert" className="text-xs text-red-700">
                       {uploadError}
@@ -1095,7 +1095,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                     onClick={() => fileRef.current?.click()}
                     title={editing ? "Attach a picture (JPG, PNG or WebP, up to 3 MB)" : "You can attach pictures once your site is live"}
                     aria-label="Attach a picture"
-                    className={`grid h-8 w-8 place-items-center rounded-lg ${editing && !busy && !uploading && attached.length < 3 ? "text-foreground/60 hover:bg-foreground/5" : "text-foreground/30"} ${focusRing}`}
+                    className={`grid h-8 w-8 place-items-center rounded-lg ${editing && !busy && !uploading && attached.length < 3 ? "text-foreground/72 hover:bg-foreground/5" : "text-foreground/30"} ${focusRing}`}
                   >
                     <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -1110,7 +1110,7 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                         onClick={() => sheetRef.current?.click()}
                         title="Add your menu from a spreadsheet (.csv or .xlsx). Columns: Section, Dish, Price, Description"
                         aria-label="Add your menu from a spreadsheet"
-                        className={`grid h-8 w-8 place-items-center rounded-lg ${busy ? "text-foreground/30" : "text-foreground/60 hover:bg-foreground/5"} ${focusRing}`}
+                        className={`grid h-8 w-8 place-items-center rounded-lg ${busy ? "text-foreground/30" : "text-foreground/72 hover:bg-foreground/5"} ${focusRing}`}
                       >
                         <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <rect x="3" y="4" width="18" height="16" rx="2" />

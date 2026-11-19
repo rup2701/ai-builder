@@ -12,7 +12,7 @@ export default function ProjectProgress({ name, progress }: { name: string; prog
           {name}
         </p>
         <span aria-hidden="true" className="h-4 w-px bg-foreground/20" />
-        <span className="flex items-center gap-1.5 text-xs text-foreground/70">
+        <span className="flex items-center gap-1.5 text-xs text-foreground/80">
           <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-600" />
           Live
         </span>
@@ -35,7 +35,7 @@ export default function ProjectProgress({ name, progress }: { name: string; prog
           return (
             <li key={label} aria-current={isActive ? "step" : undefined} className="flex items-center gap-1.5">
               {i > 0 && <span aria-hidden="true" className={`h-px w-4 sm:w-6 ${done || isActive ? "bg-foreground/40" : "bg-foreground/15"}`} />}
-              <span className={`flex items-center gap-1.5 ${done ? "text-foreground/70" : isActive ? (bad ? "text-destructive" : "text-foreground") : "text-foreground/35"}`}>
+              <span className={`flex items-center gap-1.5 ${done ? "text-foreground/80" : isActive ? (bad ? "text-destructive" : "text-foreground") : "text-foreground/35"}`}>
                 <span
                   aria-hidden="true"
                   className={`grid h-4 w-4 place-items-center rounded-full border text-[10px] leading-none ${

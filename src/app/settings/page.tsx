@@ -18,11 +18,11 @@ export default async function Settings() {
 
         <dl className="mt-8 divide-y divide-foreground/10 rounded-3xl border border-foreground/10 bg-white">
           <div className="flex items-center justify-between gap-4 p-5">
-            <dt className="text-sm text-foreground/60">Signed in as</dt>
+            <dt className="text-sm text-foreground/72">Signed in as</dt>
             <dd className="min-w-0 truncate text-sm">{user.email}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 p-5">
-            <dt className="text-sm text-foreground/60">Website builds used</dt>
+            <dt className="text-sm text-foreground/72">Website builds used</dt>
             <dd className="text-sm">{limit > 0 ? `${used} of ${limit}` : `${used} (no limit)`}</dd>
           </div>
         </dl>

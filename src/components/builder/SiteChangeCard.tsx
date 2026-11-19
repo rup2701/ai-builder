@@ -27,12 +27,12 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
   const [feedback, setFeedback] = useState("");
   const pic = (which: "before" | "after") => `/api/projects/${projectId}/snapshot?msg=${msg.id}&which=${which}&v=${msg.snapJobId ?? msg.jobId ?? ""}`;
 
-  if (msg.status === "cancelled") return <p className="text-md text-foreground/50">Cancelled. Nothing was changed on your site.</p>;
-  if (msg.status === "removed") return <p className="text-md text-foreground/60">Removed: “{msg.title ?? msg.instruction}”. Your site is as it was.</p>;
+  if (msg.status === "cancelled") return <p className="text-md text-foreground/60">Cancelled. Nothing was changed on your site.</p>;
+  if (msg.status === "removed") return <p className="text-md text-foreground/72">Removed: “{msg.title ?? msg.instruction}”. Your site is as it was.</p>;
 
   const live = msg.status === "done";
   const adjustmentsList = msg.adjustments?.length ? (
-    <div className="mt-3 text-xs text-foreground/60">
+    <div className="mt-3 text-xs text-foreground/72">
       <p className="font-medium">Your adjustments</p>
       <ol className="mt-1 list-decimal space-y-0.5 pl-5">
         {msg.adjustments.map((a, i) => (
@@ -46,7 +46,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
       <div className="mt-3 space-y-3">
         {msg.snaps.before && (
           <figure>
-            <figcaption className="mb-1 text-xs text-foreground/60">{live ? "Before" : "Before (your live site)"}</figcaption>
+            <figcaption className="mb-1 text-xs text-foreground/72">{live ? "Before" : "Before (your live site)"}</figcaption>
             <a href={pic("before")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={pic("before")} alt="The section before the change" className="block w-full" loading="lazy" />
@@ -55,14 +55,14 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         )}
         {msg.snaps.after && (
           <figure>
-            <figcaption className="mb-1 text-xs text-foreground/60">{msg.anchor?.startsWith("/") ? (live ? `The page ${msg.anchor}` : `The page ${msg.anchor} (preview, not live yet)`) : live ? "After" : "After (preview, not live yet)"}</figcaption>
+            <figcaption className="mb-1 text-xs text-foreground/72">{msg.anchor?.startsWith("/") ? (live ? `The page ${msg.anchor}` : `The page ${msg.anchor} (preview, not live yet)`) : live ? "After" : "After (preview, not live yet)"}</figcaption>
             <a href={pic("after")} target="_blank" rel="noopener noreferrer" className={`block overflow-hidden rounded-xl border border-foreground/10 ${focusRing}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={pic("after")} alt="The section after the change" className="block w-full" loading="lazy" />
             </a>
           </figure>
         )}
-        <p className="text-xs text-foreground/50">Click a picture to see it full size.</p>
+        <p className="text-xs text-foreground/60">Click a picture to see it full size.</p>
       </div>
     ) : null;
 
@@ -80,7 +80,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
           ) : (
             <p className="mt-1.5 line-clamp-6 whitespace-pre-line rounded-xl bg-foreground/[0.04] px-3 py-2 text-md leading-relaxed text-foreground">{msg.instruction}</p>
           )}
-          <p className="mt-2 text-xs leading-relaxed text-foreground/60">
+          <p className="mt-2 text-xs leading-relaxed text-foreground/72">
             {msg.size === "small"
               ? "This is a small wording change, so it goes live as soon as it is made. You can undo it afterwards."
               : "I’ll make the change and show you a preview. Nothing goes live until you approve it."}
@@ -102,19 +102,19 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
             {msg.action === "discard" ? (msg.published ? "Undoing the change…" : "Removing the change…") : msg.status === "queued" ? "Waiting to start…" : msg.feedback ? "Revising the change…" : "Making the change…"}
           </p>
           {!msg.feedback && msg.changes?.length ? (
-            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-md leading-relaxed text-foreground/70">
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-md leading-relaxed text-foreground/80">
               {msg.changes.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}
             </ul>
           ) : (
-            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-md leading-relaxed text-foreground/70">{msg.lastFeedback ?? msg.feedback ?? msg.instruction}</p>
+            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-md leading-relaxed text-foreground/80">{msg.lastFeedback ?? msg.feedback ?? msg.instruction}</p>
           )}
-          {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
+          {msg.action !== "discard" && <p className="mt-2 text-xs text-foreground/72">This takes a few minutes. You can close this tab; I’ll keep going.</p>}
           {/* While a revision is made, the last preview stays in view (dimmed) until the new one is ready. */}
           {msg.feedback && msg.action !== "discard" && pictures && (
             <div className="opacity-60">
-              <p className="mt-3 text-xs text-foreground/60">Current preview, until the new one is ready:</p>
+              <p className="mt-3 text-xs text-foreground/72">Current preview, until the new one is ready:</p>
               {pictures}
             </div>
           )}
@@ -126,15 +126,15 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
           <p className="text-md font-medium text-foreground">
             {msg.phase === "repairing" ? "A check found a problem. Fixing it, then checking again…" : msg.phase === "deploying" ? "Checks passed. Making it permanent on your live site…" : "Approved. Checking it before it goes live…"}
           </p>
-          <p className="mt-2 text-xs text-foreground/60">This takes a few minutes. You can keep working while we make the change permanent, or close this tab. I’ll tell you here if anything needs your attention.</p>
+          <p className="mt-2 text-xs text-foreground/72">This takes a few minutes. You can keep working while we make the change permanent, or close this tab. I’ll tell you here if anything needs your attention.</p>
         </div>
       )}
 
       {msg.status === "failed" && (
         <div role="alert">
           <p className="text-md font-medium text-foreground">That change didn’t work</p>
-          <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.error ?? "Something went wrong."}</p>
-          <p className="mt-2 text-xs text-foreground/60">Your live site is the way it was. You can ask again, in different words if you like.</p>
+          <p className="mt-1.5 text-md leading-relaxed text-foreground/80">{msg.error ?? "Something went wrong."}</p>
+          <p className="mt-2 text-xs text-foreground/72">Your live site is the way it was. You can ask again, in different words if you like.</p>
         </div>
       )}
 
@@ -142,7 +142,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         <>
           <p className="text-md font-medium text-foreground">Here’s the change. It isn’t live yet.</p>
           {msg.note && (
-            <p role="status" className="mt-2 rounded-xl bg-foreground/[0.05] px-3 py-2 text-xs leading-relaxed text-foreground/80">
+            <p role="status" className="mt-2 rounded-xl bg-foreground/[0.05] px-3 py-2 text-xs leading-relaxed text-foreground/88">
               {msg.note}
             </p>
           )}
@@ -161,7 +161,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
                   Cancel
                 </button>
               </div>
-              {(msg.revisions ?? 0) >= MAX_REVISIONS && <p className="mt-2 text-xs text-foreground/60">That is the most rounds for this change. Approve it, or cancel and ask again.</p>}
+              {(msg.revisions ?? 0) >= MAX_REVISIONS && <p className="mt-2 text-xs text-foreground/72">That is the most rounds for this change. Approve it, or cancel and ask again.</p>}
             </>
           ) : (
             <form
@@ -175,7 +175,7 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
                 onAction({ revise: msg.id, text });
               }}
             >
-              <label htmlFor={`feedback-${msg.id}`} className="text-xs text-foreground/60">
+              <label htmlFor={`feedback-${msg.id}`} className="text-xs text-foreground/72">
                 What should be different? (Round {(msg.revisions ?? 0) + 1} of {MAX_REVISIONS})
               </label>
               <textarea
@@ -204,11 +204,11 @@ export default function SiteChangeCard({ msg, projectId, siteUrl, busy, onAction
         <>
           <p className="text-md font-medium text-foreground">Published</p>
           {adjustmentsList}
-          {msg.note && <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.note}</p>}
+          {msg.note && <p className="mt-1.5 text-md leading-relaxed text-foreground/80">{msg.note}</p>}
           {msg.summary && msg.summary !== "The change is ready." ? (
-            <p className="mt-1.5 text-md leading-relaxed text-foreground/70">{msg.summary}</p>
+            <p className="mt-1.5 text-md leading-relaxed text-foreground/80">{msg.summary}</p>
           ) : msg.changes?.length ? (
-            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-md leading-relaxed text-foreground/70">
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-md leading-relaxed text-foreground/80">
               {msg.changes.map((c, i) => (
                 <li key={i}>{c}</li>
               ))}

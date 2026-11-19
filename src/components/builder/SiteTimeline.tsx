@@ -91,7 +91,7 @@ export default function SiteTimeline({ build, siteName, projectId }: { build: Si
   return (
     <div data-testid="site-timeline">
       <p className="text-lg text-foreground">{build.stage >= DONE_STAGE ? `${siteName} is ready` : build.failedStage !== undefined ? "The build stopped" : `Building ${siteName}`}</p>
-      {running && <p className="mt-0.5 text-sm text-foreground/60">Usually takes about 45 minutes.</p>}
+      {running && <p className="mt-0.5 text-sm text-foreground/72">Usually takes about 45 minutes.</p>}
       {finished && build.heroJobId && build.url && (
         <a href={build.url} target="_blank" rel="noreferrer" className="mt-4 block overflow-hidden rounded-xl border border-foreground/10 lg:rounded-[26px]" data-testid="hero-shot">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -113,7 +113,7 @@ export default function SiteTimeline({ build, siteName, projectId }: { build: Si
             <li key={st.id} className="relative grid grid-cols-[2.5rem_1fr] gap-3 pb-7 last:pb-0" aria-label={`${st.label}: ${status === "done" ? "done" : status === "active" ? "in progress" : status === "failed" ? "stopped here" : "waiting"}`}>
               {!last && (
                 <span
-                  className={`tl-line absolute left-5 top-10 bottom-0 w-0.5 -translate-x-1/2 ${nextDone ? "text-[#1b6b3a]/60" : status === "active" ? "tl-line-active text-foreground/50" : "text-foreground/20"}`}
+                  className={`tl-line absolute left-5 top-10 bottom-0 w-0.5 -translate-x-1/2 ${nextDone ? "text-[#1b6b3a]/60" : status === "active" ? "tl-line-active text-foreground/60" : "text-foreground/20"}`}
                   aria-hidden="true"
                 />
               )}
@@ -128,9 +128,9 @@ export default function SiteTimeline({ build, siteName, projectId }: { build: Si
                 )}
               </span>
               <div className="min-w-0 pt-1.5">
-                <p className={`text-sm ${status === "waiting" ? "text-foreground/45" : "text-foreground"}`}>{st.label}</p>
+                <p className={`text-sm ${status === "waiting" ? "text-foreground/55" : "text-foreground"}`}>{st.label}</p>
                 {status === "active" && (
-                  <p className="mt-0.5 text-sm text-foreground/60">
+                  <p className="mt-0.5 text-sm text-foreground/72">
                     {st.blurb}
                     {st.id === "build" && build.files > 0 && ` Working for ${mins} min · ${build.files} files written.`}
                   </p>
@@ -144,13 +144,13 @@ export default function SiteTimeline({ build, siteName, projectId }: { build: Si
       )}
 
       {running && (
-        <p className="mt-6 rounded-xl bg-foreground/[0.04] p-3 text-sm leading-relaxed text-foreground/70" data-testid="step-away-site">
+        <p className="mt-6 rounded-xl bg-foreground/[0.04] p-3 text-sm leading-relaxed text-foreground/80" data-testid="step-away-site">
           You can close this window and come back. The build keeps running.
           {build.notifyEmail ? ` You'll get an email at ${build.notifyEmail} when your site is ready.` : " Your project will be waiting under Your projects."}
         </p>
       )}
       {build.stage >= DONE_STAGE && build.fake && (
-        <p className="mt-6 rounded-xl bg-foreground/[0.04] p-3 text-sm text-foreground/70">Practice run: the stages ran, but no site was built.</p>
+        <p className="mt-6 rounded-xl bg-foreground/[0.04] p-3 text-sm text-foreground/80">Practice run: the stages ran, but no site was built.</p>
       )}
       {build.stage >= DONE_STAGE && build.url && (
         <p className="mt-6 text-sm">

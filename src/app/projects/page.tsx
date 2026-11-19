@@ -39,7 +39,7 @@ async function noticeText(notice: string, projectId: string, rows: Row[]): Promi
   return null;
 }
 
-const button = "rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/75 transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+const button = "rounded-lg border border-border px-3 py-1.5 text-xs text-foreground/85 transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 export default async function Projects({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await getUser();
@@ -65,28 +65,28 @@ export default async function Projects({ searchParams }: { searchParams: Promise
         </div>
 
         <nav aria-label="Show projects" className="mt-6 flex gap-2 text-sm">
-          <Link href="/projects" aria-current={showArchived ? undefined : "page"} className={`rounded-full px-3 py-1 ${showArchived ? "text-foreground/65 hover:text-foreground" : "bg-foreground/[0.06] text-foreground"}`}>
+          <Link href="/projects" aria-current={showArchived ? undefined : "page"} className={`rounded-full px-3 py-1 ${showArchived ? "text-foreground/75 hover:text-foreground" : "bg-foreground/[0.06] text-foreground"}`}>
             Active
           </Link>
-          <Link href="/projects?show=archived" aria-current={showArchived ? "page" : undefined} className={`rounded-full px-3 py-1 ${showArchived ? "bg-foreground/[0.06] text-foreground" : "text-foreground/65 hover:text-foreground"}`}>
+          <Link href="/projects?show=archived" aria-current={showArchived ? "page" : undefined} className={`rounded-full px-3 py-1 ${showArchived ? "bg-foreground/[0.06] text-foreground" : "text-foreground/75 hover:text-foreground"}`}>
             Archived{archivedCount ? ` (${archivedCount})` : ""}
           </Link>
         </nav>
 
         {notice && (
-          <p role="status" className={`mt-5 rounded-2xl px-4 py-3 text-sm ${notice.warn ? "bg-destructive/[0.07] text-destructive" : "bg-foreground/[0.05] text-foreground/80"}`}>
+          <p role="status" className={`mt-5 rounded-2xl px-4 py-3 text-sm ${notice.warn ? "bg-destructive/[0.07] text-destructive" : "bg-foreground/[0.05] text-foreground/88"}`}>
             {notice.text}
           </p>
         )}
 
         {showArchived && rows.length > 0 && (
-          <p className="mt-5 text-sm text-foreground/65">
+          <p className="mt-5 text-sm text-foreground/75">
             Archived projects are read-only. Their sites keep running and keep their address. Restore one to change it again.
           </p>
         )}
 
         {rows.length === 0 ? (
-          <p className="mt-10 text-foreground/70">
+          <p className="mt-10 text-foreground/80">
             {showArchived ? (
               "No archived projects."
             ) : (
@@ -107,7 +107,7 @@ export default async function Projects({ searchParams }: { searchParams: Promise
                       <Link href={`/projects/${p.id}`} className="min-w-0 flex-1 rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                         <p className="truncate text-base">{p.title}</p>
                         {/* Two projects can share a name: the address and the date tell them apart. */}
-                        <p className="mt-0.5 truncate text-xs text-foreground/55">
+                        <p className="mt-0.5 truncate text-xs text-foreground/65">
                           {p.kind === "site" ? "Website" : "Store"}
                           {address ? ` · ${address}` : ""} · Created {shortDate(p.createdAt)}
                         </p>

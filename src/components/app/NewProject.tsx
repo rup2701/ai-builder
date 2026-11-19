@@ -103,12 +103,12 @@ export default function NewProject({ localOn = false }: { localOn?: boolean }) {
           className="field-sizing-content block max-h-64 min-h-[4.5rem] w-full resize-none bg-transparent text-xl leading-snug text-foreground outline-none placeholder:text-foreground/35 sm:text-2xl"
         />
         {kind === "site" && (
-          <p className="mt-2 text-right text-xs text-foreground/50">
+          <p className="mt-2 text-right text-xs text-foreground/60">
             {text.length}/{MAX.toLocaleString("en-US")} characters · minimum {MIN_SITE}
           </p>
         )}
         <div className="mt-4 flex items-center justify-between gap-4">
-          <p role="status" aria-live="polite" className="min-h-5 text-sm text-foreground/60">
+          <p role="status" aria-live="polite" className="min-h-5 text-sm text-foreground/72">
             {status}
           </p>
           <button
@@ -121,16 +121,18 @@ export default function NewProject({ localOn = false }: { localOn?: boolean }) {
           </button>
         </div>
       </div>
-      <p className="mt-3 text-left text-sm text-foreground/60">
-        {kind === "site" ? "Describe your idea and get a live waitlist site in about 45 minutes." : "Describe it and our agents build it, starting from a tested foundation."}
-      </p>
 
-      <p className="mt-10 text-sm text-foreground/60">Start with a template</p>
-      <ul data-testid="templates" className="mx-auto mt-4 grid max-w-3xl grid-cols-3 gap-2 sm:gap-4">
+      <p className="mt-10 text-sm text-foreground">Start with a template</p>
+      <ul
+        data-testid="templates"
+        aria-label="Starter templates"
+        tabIndex={0}
+        className={`mx-auto mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto p-1 pb-4 sm:grid sm:grid-cols-3 sm:gap-y-8 sm:overflow-visible sm:p-0 ${focusRing}`}
+      >
         {templates.map((t) => {
           const selected = template === t.id;
           return (
-            <li key={t.id} className="min-w-0">
+            <li key={t.id} className="w-[min(260px,85%)] min-w-0 shrink-0 snap-start sm:w-auto">
               <button
                 type="button"
                 aria-pressed={selected}
@@ -155,11 +157,11 @@ export default function NewProject({ localOn = false }: { localOn?: boolean }) {
                     t.art
                   )}
                 </span>
-                <span className="mt-3 block truncate pl-2 text-sm text-foreground">{t.caption}</span>
+                <span className="mt-4 block pl-2 text-sm font-semibold text-[#333] sm:truncate">{t.caption}</span>
               </button>
-              {t.soon && <span className="block pl-2 text-left text-xs text-foreground/50">Coming soon</span>}
+              {t.soon && <span className="block pl-2 text-left text-xs text-foreground/60">Coming soon</span>}
               {t.demos?.map((d) => (
-                <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs underline-offset-4 hover:underline">
+                <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs text-foreground/72 underline-offset-4 hover:underline">
                   {d.label} ↗
                 </a>
               ))}

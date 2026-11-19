@@ -58,7 +58,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
       <section className="relative flex min-h-[100dvh] flex-col justify-center px-6 py-24 sm:px-10">
         <div className="absolute inset-x-6 top-6 flex items-center justify-between sm:inset-x-10 sm:top-8 lg:top-8">
           <Image src="/images/appnomics-logo.svg" height={24} width={132} alt="Joyride" className="h-6" />
-          <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/70">Private beta</span>
+          <span className="rounded-full bg-foreground/[0.06] px-2.5 py-0.5 text-xs text-foreground/80">Private beta</span>
         </div>
 
         <div className="mx-auto w-full max-w-[24rem]">
@@ -95,7 +95,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
                     placeholder="NAME-XXXX-XXXX-XXXX"
                     className="mt-1.5 h-11 uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal"
                   />
-                  <p id="code-hint" className="mt-1.5 text-xs text-foreground/60">
+                  <p id="code-hint" className="mt-1.5 text-xs text-foreground/72">
                     First time here? Enter the code you were sent. Signing in again? Leave it empty.
                   </p>
                 </div>
@@ -103,7 +103,7 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
                   <GoogleMark />
                   Continue with Google
                 </Button>
-                <p className="text-center text-sm text-foreground/60">
+                <p className="text-center text-sm text-foreground/72">
                   No code?{" "}
                   <a href={REQUEST_ACCESS_HREF} className="text-foreground underline underline-offset-4 hover:no-underline">
                     Request access
@@ -123,10 +123,10 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
                 </Button>
               </form>
             )}
-            {!google && !dev && <p className="text-sm text-foreground/70">No sign-in method is configured. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET.</p>}
+            {!google && !dev && <p className="text-sm text-foreground/80">No sign-in method is configured. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET.</p>}
           </div>
 
-          <p className="mt-6 text-center text-xs text-foreground/55">Google is only used to sign you in.</p>
+          <p className="mt-6 text-center text-xs text-foreground/65">Google is only used to sign you in.</p>
         </div>
       </section>
 
