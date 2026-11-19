@@ -98,9 +98,9 @@ Every model call, as of 19 Nov 2026. All of them use `ANTHROPIC_API_KEY`. The Bu
 No model runs in the store build (`build`, logged as model `rules`), the restaurant owner area (`site_admin`), deploys, the hero snapshot or emails.
 
 How cost is worked out:
-- **Interview, change plan and imports:** tokens times `ANTHROPIC_PRICE_IN_PER_MTOK` and `ANTHROPIC_PRICE_OUT_PER_MTOK`. These are optional settings that default to 0. Where they are not set, these rows keep their tokens but show a cost of $0. Cache tokens are not priced.
-- **Design brief:** a price table in `src/lib/agents/design-brief-writer.ts`.
-- **Build, look pass and changes:** the runner's price table in `appnomics-runner/src/config.ts`. Both tables cover Opus and Sonnet, including cache reads and writes. A model that is not in a table is priced as Opus.
+- **Interview, change plan, imports and the design brief:** one price table in `src/lib/agents/prices.ts`, for Opus, Sonnet and Haiku, including cache reads and writes (PR 20). Before PR 20, the interview, change plan and import rows were priced from two settings that defaulted to 0, so those rows show $0.
+- **Build, look pass and changes:** the runner's price table in `appnomics-runner/src/config.ts`, for Opus and Sonnet.
+- A model that is not in a table is priced as Opus.
 
 Known gaps in what is recorded:
 - **Publish repair:** no `usage` row.
