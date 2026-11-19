@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { makeSiteInterviewer, MISSED_REPLY, replyMessage, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
+import { makeSiteInterviewer, MISSED_REPLY, replyMessage, restates, toMessages, SITE_OPENER, type Chat } from "../src/lib/agents/site-interviewer";
 import { validateSiteBrief, briefCard } from "../src/lib/builder/site-brief";
 import { SITE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { emptyState, pushMsg } from "../src/lib/workspace/state";
@@ -22,6 +22,8 @@ const script = (...replies: Reply[]): { chat: Chat; calls: Parameters<Chat>[0][]
   return { chat, calls };
 };
 const start = (): WorkspaceState => pushMsg({ ...emptyState(), phase: "intake" }, { kind: "bot", text: SITE_OPENER });
+/** An interview past the owner's first message, so Scout's reply may show what it understood. */
+const asked = (): WorkspaceState => pushMsg(pushMsg(start(), { kind: "user", text: "I have an idea for a website" }), { kind: "bot", text: "What is it called?" });
 const bots = (s: WorkspaceState) => s.msgs.filter((m) => m.kind === "bot").map((m) => (m as { text: string }).text);
 let n = 0;
 const ok = (name: string) => console.log("PASS", ++n, name);
@@ -116,7 +118,7 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   // ---- APP-45: what Scout understood and the next question, as separate fields ----
   // 10. The call offers both tools without forcing one (tool_choice any is refused for this model), and a reply shows understood and the question apart.
   ({ chat, calls } = script({ reply: { understood: "GunnerWins gives members daily picks across the major US leagues.", question: "Who is it for: casual fans, serious bettors or both?" } }));
-  r = await makeSiteInterviewer(chat, "fake").turn(start(), "It is called GunnerWins, daily picks for all major leagues");
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "It is called GunnerWins, daily picks for all major leagues");
   assert.equal((calls[0] as { toolChoice?: unknown }).toolChoice, undefined, "no forced tool choice");
   assert.deepEqual(calls[0].tools.map((t) => t.name), ["reply", "save_brief"]);
   let last = r.state.msgs.at(-1) as Extract<WorkspaceState["msgs"][number], { kind: "bot" }>;
@@ -154,7 +156,7 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
 
   // 14. A reply next to an approved brief is shown, then the saved message.
   ({ chat } = script({ reply: { understood: "You approved the review.", question: "Saving your brief now." }, save: good }));
-  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Yes, build it");
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "Yes, build it");
   assert.equal(r.state.phase, "summary");
   assert.equal(bots(r.state).at(-2), "You approved the review.\n\nSaving your brief now.");
   assert.match(bots(r.state).at(-1)!, /brief is saved/);
@@ -178,7 +180,7 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
 
   // 17. Plain text with no reply call is a missed call: it is retried once with a reminder, and the reply that follows is shown.
   ({ chat, calls } = script({ text: "Who is it for?" }, { reply: { understood: "It is a dinner planner.", question: "Who is it for?" } }));
-  r = await makeSiteInterviewer(chat, "fake").turn(start(), "Mealwise, a dinner planner");
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "Mealwise, a planner");
   assert.equal(calls.length, 2);
   const retry = calls[1].messages;
   assert.equal(retry.at(-2)!.role, "assistant");
@@ -228,6 +230,40 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
     assert.doesNotMatch(line, /secret words|Plain words|Saving|failed validation three times/, "no model words in the log");
     ok("the failure log line gives the reason for each attempt, without the model's words");
   }
+
+  // ---- The understood part only when Scout interpreted or decided something ----
+  // 21. The first reply never has an understood part, even when the model sends one; the full text is the question alone.
+  ({ chat } = script({ reply: { understood: "GunnerWins sells daily picks for the major US leagues.", question: "Who is it for?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(start(), "GunnerWins, daily picks for all major leagues");
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.equal(last.understood, undefined);
+  assert.equal(last.text, "Who is it for?");
+  ok("the first reply has no understood part");
+
+  // 22. A reply that only repeats the owner's words drops the understood part; one that interprets them keeps it.
+  ({ chat } = script({ reply: { understood: "It is for both.", question: "What should the main button say?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "both");
+  last = r.state.msgs.at(-1) as typeof last;
+  assert.equal(last.understood, undefined);
+  assert.equal(last.text, "What should the main button say?");
+  ({ chat } = script({ reply: { understood: "Your main button says Get picks.", question: "And the second button?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "main button: Get picks");
+  assert.equal((r.state.msgs.at(-1) as typeof last).understood, undefined);
+  ({ chat } = script({ reply: { understood: "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.", question: "Now the look." } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "weekly 199, monthly 599");
+  assert.equal((r.state.msgs.at(-1) as typeof last).understood, "Two one-time passes: Weekly at $199 for 7 days and Monthly at $599 for 30 days.");
+  ({ chat } = script({ reply: { understood: "No colour given, so I picked blue.", question: "Light or dark?" } }));
+  r = await makeSiteInterviewer(chat, "fake").turn(asked(), "calm tone");
+  assert.equal((r.state.msgs.at(-1) as typeof last).understood, "No colour given, so I picked blue.");
+  assert.equal(restates("It's called Mealwise.", "it's called mealwise"), true);
+  assert.equal(restates("Mealwise is for busy parents.", "mealwise"), false);
+  ok("a restating understood part is dropped, an interpreted or decided one is kept");
+
+  // 23. The rules and the reply tool say when to show understood.
+  assert.match(calls[0].system, /Leave it out for your first reply, and leave it out whenever it would only repeat their words back/);
+  const tool = calls[0].tools.find((t) => t.name === "reply") as unknown as { input_schema: { properties: { understood: { description: string } } } };
+  assert.match(tool.input_schema.properties.understood.description, /interpreted.*decided something on their behalf.*first reply.*repeat their words/s);
+  ok("the prompt and the reply tool say when understood is shown");
 
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

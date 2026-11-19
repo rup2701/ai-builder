@@ -57,7 +57,7 @@ const REPLY: Tool = {
   input_schema: {
     type: "object",
     properties: {
-      understood: { type: "string", description: "One or two short lines: what you took from the person's last message, in plain words, so they can correct it. Leave out for your first message, or when their message held nothing new. Never start with 'Got it'." },
+      understood: { type: "string", description: "Only when the person's last message gave a fact, a choice or a number that you interpreted (for example 'weekly 199' read as a one-time pass of $199 for 7 days), or when you decided something on their behalf (a default they did not pick). One or two short lines in plain words, so they can correct it. Leave it out for your first reply, and whenever it would only repeat their words back. Never start with 'Got it'." },
       question: { type: "string", description: "The one thing you ask next, in at most two short sentences. When the message is not a question (the page plan, the review), the whole message goes here." },
       parts: { type: "array", items: { type: "string" }, description: "Only for a question with several parts (for example tone, light or dark, and colour): one short line per part, and question is then a short lead-in. Leave out otherwise." },
     },
@@ -68,15 +68,33 @@ const REPLY: Tool = {
 const MAX_PARTS = 6;
 const tidy = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
+/** Words that carry no fact of their own, so a line made only of these and the owner's words adds nothing. */
+const FILLER = new Set("a an the and or but so to of in on at for with by from as is are was be will would it its this that these those you your yours i me my mine we our us they them their he she his her want wants wanted said say says called named just also only".split(" "));
+const words = (t: string) => t.toLowerCase().replace(/['\u2019]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/**
+ * True when understood only repeats the owner's words: every word in it that is not filler is one the owner wrote.
+ * Then it shows nothing Scout interpreted or decided, so the Builder leaves it out. An empty line counts as repeating.
+ */
+export function restates(understood: string, owner: string): boolean {
+  const said = new Set(words(owner));
+  return words(understood).every((w) => FILLER.has(w) || said.has(w));
+}
+
 /**
  * The message drawn from a reply call, or null when it has no question. "Got it" at the start of understood is dropped,
  * since the Builder already labels that part. text joins the parts, so older screens and the model's own history read the same words.
  */
-export function replyMessage(input: unknown): { kind: "bot"; text: string; understood?: string; question: string; parts?: string[] } | null {
+export function replyMessage(
+  input: unknown,
+  ctx: { first?: boolean; owner?: string } = {},
+): { kind: "bot"; text: string; understood?: string; question: string; parts?: string[] } | null {
   const i = (input ?? {}) as { understood?: unknown; question?: unknown; parts?: unknown };
   const question = tidy(i.question);
   if (!question) return null;
   let understood = tidy(i.understood).replace(/^got it\b[\s,.:;!-]*/i, "");
+  // No understood part on the first reply, and none that only repeats the owner's words.
+  if (ctx.first || (ctx.owner !== undefined && restates(understood, ctx.owner))) understood = "";
   understood = understood ? understood[0].toUpperCase() + understood.slice(1) : "";
   const parts = (Array.isArray(i.parts) ? i.parts : []).map(tidy).filter(Boolean).slice(0, MAX_PARTS);
   const text = [understood, question, parts.map((p) => `- ${p}`).join("\n")].filter(Boolean).join("\n\n");
@@ -101,7 +119,7 @@ ${showcase ? SHOWCASE_EXAMPLE_BRIEF : SITE_EXAMPLE_BRIEF}
 
 How to talk:
 - Always answer by calling the reply tool, for every message, and never in plain text (save the brief with save_brief). Its parts are shown to the person as separate blocks:
-  - understood: one or two short lines with what you took from their last message, so they can correct it. Leave it out for your first message and when their message held nothing new. Never start it with "Got it".
+  - understood: only when their last message gave a fact, a choice or a number that you interpreted (for example "weekly 199" read as a one-time pass of $199 for 7 days), or when you decided something on their behalf (a default they did not pick). One or two short lines, so they can correct it. Leave it out for your first reply, and leave it out whenever it would only repeat their words back. Never start it with "Got it".
   - question: the one thing you ask next, in at most two short sentences.
   - parts: only when a question has several parts (for example tone, light or dark, and colour). One short line per part, and question is then a short lead-in.
 - One question per message.${showcase ? " The page plan is shown in question as a short list of sections with the optional ones marked on or off." : ""}
@@ -149,6 +167,8 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
     async turn(prev, raw) {
       const text = raw.trim();
       if (!text) return { state: prev };
+      // The owner's first message: Scout has nothing to have interpreted yet, so its reply has no understood part.
+      const first = !prev.msgs.some((m) => m.kind === "user");
       let s = pushMsg(prev, { kind: "user", text });
       const saved = prev.site?.brief;
       const pack: SitePack = normalizePack(prev.sitePack);
@@ -171,7 +191,7 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
           cost += r.usage.costUsd;
           const tu = r.toolUses.find((t) => t.name === SAVE_BRIEF.name);
           const rep = r.toolUses.find((t) => t.name === REPLY.name);
-          const said = rep ? replyMessage(rep.input) : null;
+          const said = rep ? replyMessage(rep.input, { first, owner: text }) : null;
           if (!tu) {
             if (rep && !said) {
               fails.push(`attempt ${attempt + 1}: reply with no question (${attemptShape(r)})`);
