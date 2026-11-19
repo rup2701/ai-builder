@@ -14,6 +14,7 @@ Read `ARCHITECTURE.md` (the map) and `AGENTS.md` (this Next.js version has break
 - Changes under `worker/` or in the runner need `fly deploy` to take effect; a push does not.
 
 ## Rules from the owner (RP)
+- Follow `UX_PRINCIPLES.md` for anything we build and anything built with the Builder: make what is possible visible, show what the system understood and changed, use constraints as guides. Keep it the same as the copy in `../appnomics-runner`.
 - Commit messages: plain words, no quotes, no apostrophes, no escapes.
 - Never print, ask for or write keys, passwords or hashes in chat, logs or files. Names of variables only.
 - Nothing invented in a customer's site: no made-up prices, hours, address, phone, story or reviews. If the owner did not give it, the site shows a placeholder or leaves it out, and the check list says so.
