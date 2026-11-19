@@ -14,6 +14,8 @@
 
 import { PlanCard } from "./PlanCard";
 import { parsePlan } from "@/lib/builder/plan-card";
+import { parseReview } from "@/lib/builder/review-card";
+import { ReviewCard } from "./ReviewCard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import StorePreview from "./StorePreview";
@@ -862,6 +864,9 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                   // Website interview messages carry what Scout understood and the question apart (APP-45). Older messages only have text.
                   const main = m.question ?? m.text;
                   const plan = site ? parsePlan(main) : null;
+                  // Scout's review (and short updates to it) as a card. The text itself is unchanged.
+                  const review = site && !plan ? parseReview(main) : null;
+                  const latest = m.id === msgs[msgs.length - 1]?.id && !busy;
                   return (
                     <div key={m.id} className="max-w-[92%]">
                       {msgs[idx - 1]?.kind !== "bot" && <AgentLabel />}
@@ -876,6 +881,12 @@ export default function BuilderWorkspace({ projectId, initial, homeHref, title, 
                           {plan.before && <p className="whitespace-pre-wrap text-md text-foreground">{boldText(plan.before)}</p>}
                           <PlanCard plan={plan} active={m.id === msgs[msgs.length - 1]?.id && !busy} onSend={(t) => send(t)} />
                           {plan.after && <p className="mt-2 whitespace-pre-wrap text-md text-foreground">{boldText(plan.after)}</p>}
+                        </>
+                      ) : review ? (
+                        <>
+                          {review.before && <p className="whitespace-pre-wrap text-md text-foreground">{boldText(review.before)}</p>}
+                          <ReviewCard review={review} active={latest && (phase === "intake" || phase === "summary")} onSend={(t) => send(t)} />
+                          {review.after && <p className="mt-2 whitespace-pre-wrap text-md text-foreground" data-testid={m.question ? "question" : undefined}>{boldText(review.after)}</p>}
                         </>
                       ) : (
                         <p className="whitespace-pre-wrap text-md text-foreground" data-testid={m.question ? "question" : undefined}>{boldText(main)}</p>
