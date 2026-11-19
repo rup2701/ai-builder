@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { briefCard, isShowcase, normalizePack, validateSiteBrief, yearlyPrice, perMonthOf } from "../src/lib/builder/site-brief";
+import { briefCard, isShowcase, normalizePack, validateSiteBrief, yearlyPrice, perMonthOf, SiteBrief, SaasBrief, ShowcaseBrief, LocalBusinessBrief } from "../src/lib/builder/site-brief";
+import { z } from "zod";
 import { checklist } from "../worker/site-build";
-import { SHOWCASE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
+import { LOCAL_EXAMPLE_BRIEF, SHOWCASE_EXAMPLE_BRIEF } from "../src/lib/builder/site-pack.generated";
 import { makeSiteInterviewer } from "../src/lib/agents/site-interviewer";
 import { sectionsOf } from "../src/lib/agents/change-planner";
 import { initialState } from "../src/lib/workspace/state";
@@ -104,6 +105,31 @@ test("a secondary button is optional, limited to https or mailto, and may have n
   const b3 = example(); b3.secondary_button = { label: "Watch demo", link: "javascript:alert(1)" };
   assert.equal(validateSiteBrief(b3, "showcase").ok, false);
 });
+test("a main button and sign in with no secondary button saves: a null secondary button means none, and only that one is taken out", () => {
+  // The 18 November review step failure: the owner gave Get picks and Sign in, the model wrote secondary_button: null.
+  const b = example(); b.main_button = { label: "Get picks", link: null }; b.sign_in = { label: "Sign in", link: null }; b.secondary_button = null;
+  const v = validateSiteBrief(b, "showcase");
+  assert.equal(v.ok, true);
+  assert.equal("secondary_button" in (v as { brief: Record<string, unknown> }).brief, false, "no null button in the saved brief");
+  assert.equal((v as { brief: Record<string, any> }).brief.main_button.label, "Get picks");
+  assert.equal(b.secondary_button, null, "the input is not changed");
+  const s = example(); s.sign_in = null;
+  const vs = validateSiteBrief(s, "showcase") as { ok: boolean; brief: Record<string, unknown> };
+  assert.equal(vs.ok, true);
+  assert.equal(vs.brief.sign_in, null, "a null sign in is kept, as the pack's own example has it");
+});
+test("a half-filled optional button is still refused, and the error says to leave it out", () => {
+  for (const sb of [{ label: null }, { label: "" }]) {
+    const b = example(); b.secondary_button = sb;
+    const v = validateSiteBrief(b, "showcase");
+    assert.equal(v.ok, false);
+    assert.match((v as { error: string }).error, /secondary_button is optional: if the person did not ask for it, leave secondary_button out of the brief entirely/);
+  }
+  const b = example(); b.sign_in = { label: "" };
+  assert.match((validateSiteBrief(b, "showcase") as { error: string }).error, /sign_in is optional/);
+  const m = example(); m.main_button = { label: "" };
+  assert.doesNotMatch((validateSiteBrief(m, "showcase") as { error: string }).error, /is optional/, "the main button is never optional");
+});
 test("the brief card reads the bento benefits, the tone and the placeholders", () => {
   const c = briefCard(example());
   assert.equal(c.benefits.length, 3);
@@ -188,5 +214,45 @@ test("a sign-in link and a different pair of closing buttons are accepted; bad l
   b.sign_in.link = null;
   closing.cta.link = "javascript:alert(1)";
   assert.equal(validateSiteBrief(b, "showcase").ok, false);
+});
+test("every optional field in every brief schema accepts null", () => {
+  // null is the brief's word for "none" or "not given yet". An optional field that refuses it fails a whole save (18 November).
+  // Zod's own type names, not instanceof, so the walk works whichever copy of zod loaded the schemas.
+  type Node = { _def: { typeName: string; innerType?: Node; schema?: Node; type?: Node; shape?: () => Record<string, Node> }; safeParse: (v: unknown) => { success: boolean } };
+  const optionals: { path: string; null: boolean }[] = [];
+  let fields = 0;
+  const walk = (t: Node, path: string, underNullable = false): void => {
+    const d = t._def;
+    switch (d.typeName) {
+      case "ZodOptional": optionals.push({ path, null: underNullable || t.safeParse(null).success }); return walk(d.innerType!, path);
+      case "ZodNullable": return walk(d.innerType!, path, true);
+      case "ZodDefault": return walk(d.innerType!, path);
+      case "ZodEffects": return walk(d.schema!, path);
+      case "ZodArray": return walk(d.type!, `${path}[]`);
+      case "ZodObject": for (const [k, v] of Object.entries(d.shape!())) { fields++; walk(v, path ? `${path}.${k}` : k); }
+    }
+  };
+  const schemas = { SiteBrief, SaasBrief, ShowcaseBrief, LocalBusinessBrief } as unknown as Record<string, Node>;
+  const bad: string[] = [];
+  for (const [name, schema] of Object.entries(schemas)) {
+    optionals.length = 0;
+    fields = 0;
+    walk(schema, "");
+    assert.ok(fields >= 5, `${name}: the walk reaches its fields`);
+    bad.push(...optionals.filter((o) => !o.null).map((o) => `${name}.${o.path}`));
+    if (name === "ShowcaseBrief") assert.ok(optionals.some((o) => o.path === "secondary_button") && optionals.some((o) => o.path === "main_button.link"));
+    if (name === "LocalBusinessBrief") assert.ok(optionals.some((o) => o.path === "menu.categories[].items[].price"), "nested optional fields are found");
+  }
+  assert.deepEqual(bad, [], `optional but refuses null: ${bad.join(", ")}`);
+});
+test("a restaurant brief with null optional fields still validates, and keeps the nulls", () => {
+  const b = JSON.parse(LOCAL_EXAMPLE_BRIEF) as Record<string, any>;
+  b.consent ??= { owner_confirmed: true, by: "test" }; b.images.owner_confirmed = true;
+  b.look.accent = null; b.links = null; b.menu.show_prices = null; b.private_test = null;
+  if (b.menu.categories?.[0]?.items?.[0]) b.menu.categories[0].items[0].price = null;
+  const v = validateSiteBrief(b, "local") as { ok: boolean; error?: string; brief: Record<string, any> };
+  assert.equal(v.ok, true, v.error);
+  assert.equal(v.brief.links, null);
+  assert.equal(v.brief.look.accent, null);
 });
 if (failed) process.exit(1);

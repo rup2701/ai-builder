@@ -132,6 +132,17 @@ const FALLBACK = "Sorry, something went wrong on my side. Please send that again
 /** Sent back when the model answers in plain text instead of calling reply. The person never sees it. */
 export const MISSED_REPLY = "That message was not sent to the person: answer by calling the reply tool (understood, question and, when needed, parts), not in plain text.";
 
+/** What a model answer held, for the log: block types and tool names only, never the words. */
+export function attemptShape(r: { content: unknown[]; toolUses: { name: string }[] }): string {
+  const blocks = (r.content as { type?: string; name?: string }[]).map((b) => (b.type === "tool_use" ? `tool_use:${b.name}` : String(b.type)));
+  return blocks.join(", ") || "empty";
+}
+
+/** The validation problems as field paths and messages, one line, capped. Zod messages can echo a value, so they are cut short. */
+export function briefErrors(error: string): string {
+  return error.split("\n").slice(1).map((l) => l.slice(0, 120)).join(" | ").slice(0, 600) || error.slice(0, 200);
+}
+
 export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
   return {
     model,
@@ -150,6 +161,8 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
       // The call cannot force a tool (tool_choice any is refused for this model, see APP-45), so the prompt asks for reply and code
       // checks it: plain text with no reply call is a missed call, retried once with a reminder, then shown as the question.
       let nudged = false;
+      // Why each attempt did not finish the turn, for the log line when all three fail (no brief content, no secrets).
+      const fails: string[] = [];
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           const r = await chat({ system, messages: convo, tools: [REPLY, SAVE_BRIEF] });
@@ -161,12 +174,14 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
           const said = rep ? replyMessage(rep.input) : null;
           if (!tu) {
             if (rep && !said) {
+              fails.push(`attempt ${attempt + 1}: reply with no question (${attemptShape(r)})`);
               // A reply with no question: send it back once more rather than show an empty message.
               convo.push({ role: "assistant", content: r.content }, { role: "user", content: [{ type: "tool_result", tool_use_id: rep.id, is_error: true, content: "question is required: the message to show the person." }] });
               continue;
             }
             if (!said && !r.text) throw new Error("The model sent an empty reply.");
             if (!said && !nudged && attempt < 2) {
+              fails.push(`attempt ${attempt + 1}: plain text with no reply call (${attemptShape(r)})`);
               nudged = true;
               convo.push({ role: "assistant", content: r.content }, { role: "user", content: MISSED_REPLY });
               continue;
@@ -185,6 +200,7 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
             });
             return { state: s, usage: usage() };
           }
+          fails.push(`attempt ${attempt + 1}: brief not valid (${attemptShape(r)}): ${briefErrors(v.error)}`);
           // Every tool call in the reply needs its result, or the next call is refused.
           const others = r.toolUses.filter((t) => t.id !== tu.id).map((t) => ({ type: "tool_result", tool_use_id: t.id, content: "Not shown yet. Fix the brief and call save_brief again." }));
           convo.push(
@@ -192,7 +208,7 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
             { role: "user", content: [{ type: "tool_result", tool_use_id: tu.id, is_error: true, content: v.error }, ...others] },
           );
         }
-        throw new Error("The model's brief failed validation three times.");
+        throw new Error(`No usable answer in three attempts. ${fails.join("; ")}`);
       } catch (err) {
         console.error("site interviewer failed:", err instanceof Error ? err.message : err);
         return { state: pushMsg(s, { kind: "bot", text: FALLBACK }), usage: { model: "site-fallback", inputTokens: tokensIn, outputTokens: tokensOut, costUsd: cost } };

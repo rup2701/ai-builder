@@ -66,7 +66,7 @@ export const ShowcaseBrief = z
     audience: z.object({ icp: z.string().trim().min(5) }).passthrough(),
     brand: z.object({ tone: z.enum(["calm", "bold", "playful", "serious"]), color: z.enum(["light", "dark", "blue-accent"]) }).passthrough(),
     main_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough(),
-    secondary_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().optional(),
+    secondary_button: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().nullable().optional(),
     sign_in: z.object({ label: z.string().trim().min(1).max(30), link: z.string().nullable().optional() }).passthrough().nullable().optional(),
     blocks: z.array(Block).min(5),
     look: z.object({}).passthrough(),
@@ -119,20 +119,20 @@ const Https = z.string().refine((u) => /^https:\/\/\S+$/i.test(u) && u.length < 
 export const LocalBusinessBrief = z
   .object({
     site: z.object({ name: z.string().trim().min(1).max(80), kind: z.literal("local-business"), business_type: z.string().trim().min(1).max(40) }).passthrough(),
-    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex colour like #c2410c").optional() }).passthrough(),
+    look: z.object({ design: z.literal("restaurant_001"), accent: z.string().regex(/^#[0-9a-f]{6}$/i, "must be a hex colour like #c2410c").nullable().optional() }).passthrough(),
     contact: z.object({ hours: z.array(z.string()).default([]) }).passthrough(),
-    links: z.object({}).passthrough().optional(),
+    links: z.object({}).passthrough().nullable().optional(),
     menu: z
       .object({
-        show_prices: z.boolean().optional(),
-        categories: z.array(z.object({ name: z.string().trim().min(1), items: z.array(z.object({ name: z.string().trim().min(1), price: z.string().optional() }).passthrough()) }).passthrough()),
+        show_prices: z.boolean().nullable().optional(),
+        categories: z.array(z.object({ name: z.string().trim().min(1), items: z.array(z.object({ name: z.string().trim().min(1), price: z.string().nullable().optional() }).passthrough()) }).passthrough()),
       })
       .passthrough(),
     images: z.object({ use_photos: z.boolean(), owner_confirmed: z.boolean() }).passthrough(),
     testimonials: z.array(z.object({ quote: z.string().trim().min(1) }).passthrough()).default([]),
     socials: z.array(z.object({ label: z.string().min(1), url: Https }).passthrough()).default([]),
     story: z.object({ body: z.string().trim().min(1) }).passthrough().nullable().optional(),
-    private_test: z.boolean().optional(),
+    private_test: z.boolean().nullable().optional(),
     consent: z.object({ by: z.string().trim().min(1) }).passthrough(),
   })
   .passthrough()
@@ -166,11 +166,27 @@ export const isLocal = (p?: string | null) => normalizePack(p) === "local";
 /** A link asked for the product showcase pack (pack=showcase, product-showcase or the old saas). */
 export const isShowcase = (p?: string | null) => normalizePack(p) === "showcase";
 
+/**
+ * Showcase buttons the owner may not want. Every optional field in these schemas accepts null, which the brief uses for "none"
+ * or "not given yet", and keeps it. The one exception: a null secondary button is taken out, because the runner's examples only
+ * ever leave that key out (sign_in: null is in the pack's own example, so it stays).
+ */
+const OPTIONAL_BUTTONS = ["secondary_button", "sign_in"] as const;
+const DROP_WHEN_NULL = ["secondary_button"] as const;
+
 export function validateSiteBrief(input: unknown, pack: SitePack | "saas" = "waitlist"): { ok: true; brief: SiteBriefT } | { ok: false; error: string } {
   const n = normalizePack(pack);
+  if (n === "showcase" && input && typeof input === "object" && !Array.isArray(input)) {
+    const copy = { ...(input as Record<string, unknown>) };
+    for (const k of DROP_WHEN_NULL) if (copy[k] === null) delete copy[k];
+    input = copy;
+  }
   const r = (n === "showcase" ? ShowcaseBrief : n === "local" ? LocalBusinessBrief : SiteBrief).safeParse(input) as ReturnType<typeof SiteBrief.safeParse>;
   if (r.success) return { ok: true, brief: r.data };
   const lines = r.error.issues.slice(0, 6).map((i) => `${i.path.join(".") || "brief"}: ${i.message}`);
+  // The model tends to fill an optional button it should drop (the 18 November review step failure): say how to have none.
+  const optional = n === "showcase" ? OPTIONAL_BUTTONS.filter((k) => r.error.issues.some((i) => i.path[0] === k)) : [];
+  for (const k of optional) lines.push(`${k} is optional: if the person did not ask for it, leave ${k} out of the brief entirely (no empty label).`);
   return { ok: false, error: `The brief is not valid. Fix these and call save_brief again:\n${lines.join("\n")}` };
 }
 
