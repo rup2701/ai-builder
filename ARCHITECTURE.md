@@ -73,6 +73,40 @@ The Builder copies each pack's interview and example brief into `src/lib/builder
 | Ideas not being built | `appnomics-runner/PARKING_LOT.md` |
 | Status, decisions, timeline (notes) | the Appnomics vault |
 
+## Where the code calls Claude
+
+Every model call, as of 19 Nov 2026. All of them use `ANTHROPIC_API_KEY`. The Builder calls the Messages API with `fetch` (`src/lib/agents/anthropic.ts`, `src/lib/agents/design-brief-writer.ts`). The runner uses the Anthropic SDK (`appnomics-runner/src/agent.ts`). Costs go to the `usage` table (one row per call or job: `project_id`, `job_id`, `step`, `model`, tokens, `cost_usd`), unless the last column says otherwise.
+
+| Stage | Where it runs (code) | Setting that chooses the model | Default | Where the cost is recorded |
+|---|---|---|---|---|
+| Scout, website interview (waitlist and product showcase packs), every turn | Web app: `turn` route and the first message on `/new`, via `getSiteInterviewer` in `src/lib/agents/interviewer.ts` and `makeSiteInterviewer` in `src/lib/agents/site-interviewer.ts` | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | `usage`, step `intake` |
+| Scout, restaurant interview, every turn | Web app: same routes, `src/lib/agents/local-interviewer.ts` | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | `usage`, step `intake` |
+| Reading a restaurant's own website, during the restaurant interview | Web app: `readRestaurantSite` in `src/lib/builder/read-website.ts`, called by the restaurant interviewer | `ANTHROPIC_IMPORT_MODEL` | `claude-haiku-5-5` | Added into the same `intake` row as the interview turn, under the interview's model name |
+| Scout, store interview (store pack) | Web app: `getInterviewer` in `src/lib/agents/interviewer.ts`, with `src/lib/agents/model-interviewer.ts` | `ANTHROPIC_MODEL`. With no key, or `INTERVIEWER=rules`, it uses rules and no model. | `claude-sonnet-5-5` | `usage`, step `intake` (model `rules` when no model ran) |
+| Scout, understanding a change to a live site: rewrites the request as a plan and answers questions | Web app: `change` route, `planChange` | `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | `usage`, step `change_plan` |
+| Importing a website or a brief from another site | Web app: `import` and `import-brief` routes, `mapSnapshot` | `ANTHROPIC_IMPORT_MODEL` | `claude-haiku-5-5` | `usage`, step `site_import_map`. Each attempt also writes a zero-cost `site_import` row, used as the hourly limit. |
+| Design brief at review (product showcase), with one retry | Web app, after the response: `design-brief` route, `src/lib/design-brief-store.ts`, `src/lib/agents/design-brief-writer.ts` | `ANTHROPIC_DESIGN_BRIEF_MODEL` | `claude-opus-5-5` | `usage`, step `design_brief_review`, no job. The result and its cost are also saved in `projects.design_brief`. |
+| Design brief at build start, when none passed at review (product showcase) | Worker, `site_build` job: `worker/design-brief.ts` | `ANTHROPIC_DESIGN_BRIEF_MODEL`. `WORKER_DESIGN_BRIEF=off` skips it. | `claude-opus-5-5` | `usage`, step `design_brief` (only when it ran at build start). Also saved in the build record (`details.designBrief`). |
+| Full build: the agent writes the site | Worker, `site_build` job, which runs the runner's `create` command (`appnomics-runner/src/cli.ts`, `src/agent.ts`) | `RUNNER_MODEL` | `claude-opus-5-5` | `usage`, step `site_build`. One row covers the build and the look pass, from the runner's summary. Cost limit: `WORKER_BUILD_MAX_USD` (default 8). |
+| Look pass: a second agent session that checks the page against `look.md` | Runner `create`, right after the build, for packs with a `look.md`. `--no-look-pass` skips it. | `RUNNER_MODEL` (the same session settings as the build) | `claude-opus-5-5` | In the same `site_build` row as the build. The build record shows when it started and what it changed (`lookPass`). |
+| Changes after launch: the agent makes the change | Worker, `site_change` job: `worker/site-change.ts` runs the runner's `change` command | `RUNNER_CHANGE_MODEL` | `claude-sonnet-5-5` | `usage`, step `site_change`, only when the change touched the page. Cost limit: `WORKER_CHANGE_MAX_USD` (default 3). Turns: `WORKER_CHANGE_MAX_TURNS` (default 90). |
+| Repair when an approved change fails its checks at publish | Worker, `site_change` job (publish): runs the runner's `change --repair` once | `RUNNER_CHANGE_MODEL` | `claude-sonnet-5-5` | Not recorded in `usage`. Cost limit: `WORKER_CHANGE_MAX_USD` (default 3). Turns: `WORKER_REPAIR_MAX_TURNS` (default 40). |
+| Brief from a plain prompt (when `create` gets no `--brief`) | Runner CLI only: `appnomics-runner/src/brief.ts`. The worker always passes `--brief`. | `RUNNER_MODEL` | `claude-opus-5-5` | The run's own `summary.json` (no database) |
+| Runner interview | Runner CLI only: `npm run interview`, `appnomics-runner/src/interview.ts` | `RUNNER_MODEL` | `claude-opus-5-5` | Not recorded (local tool) |
+| Developer scripts | `scripts/turn-replay.mts` (one interview turn), `scripts/design-brief-try.mts` (the design brief) | `ANTHROPIC_MODEL`, `ANTHROPIC_DESIGN_BRIEF_MODEL` | `claude-sonnet-5-5`, `claude-opus-5-5` | Printed to the terminal and written to the out folder. Not in `usage`. |
+
+No model runs in the store build (`build`, logged as model `rules`), the restaurant owner area (`site_admin`), deploys, the hero snapshot or emails.
+
+How cost is worked out:
+- **Interview, change plan and imports:** tokens times `ANTHROPIC_PRICE_IN_PER_MTOK` and `ANTHROPIC_PRICE_OUT_PER_MTOK`. These are optional settings that default to 0. Where they are not set, these rows keep their tokens but show a cost of $0. Cache tokens are not priced.
+- **Design brief:** a price table in `src/lib/agents/design-brief-writer.ts`.
+- **Build, look pass and changes:** the runner's price table in `appnomics-runner/src/config.ts`. Both tables cover Opus and Sonnet, including cache reads and writes. A model that is not in a table is priced as Opus.
+
+Known gaps in what is recorded:
+- **Publish repair:** no `usage` row.
+- **Changes that change nothing:** a change that ends without touching the page writes no `site_change` row.
+- **Website reader:** the restaurant website reader's Haiku tokens are counted under the interview's model name.
+
 ## Accounts and where each secret lives
 
 | Service | Used for | Secret lives in |
