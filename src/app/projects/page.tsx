@@ -105,7 +105,7 @@ export default async function Projects({ searchParams }: { searchParams: Promise
                   <Card className="transition-colors hover:border-foreground/30">
                     <CardContent className="flex items-center justify-between gap-4">
                       <Link href={`/projects/${p.id}`} className="min-w-0 flex-1 rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                        <p className="truncate text-base">{p.title}</p>
+                        <p className="truncate text-base font-semibold">{p.title}</p>
                         {/* Two projects can share a name: the address and the date tell them apart. */}
                         <p className="mt-0.5 truncate text-xs text-foreground/65">
                           {p.kind === "site" ? "Website" : "Store"}

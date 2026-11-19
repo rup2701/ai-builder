@@ -53,11 +53,25 @@ export default function AppShell({ active, email, children }: { active: NavId; e
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </nav>
-        <div className="hidden md:mt-auto md:block">
-          {email && <p className="truncate px-2 text-xs text-foreground/65" title={email}>{email}</p>}
+        {/* The account: who is signed in, and signing out, in one small card at the foot of the sidebar. */}
+        <div className="hidden md:mt-auto md:flex md:items-center md:gap-2.5 md:rounded-2xl md:bg-background md:p-2">
+          <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-foreground text-sm font-medium uppercase text-background">
+            {email?.trim()[0] ?? "?"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-foreground/60">Signed in as</p>
+            <p className="truncate text-sm text-foreground" title={email ?? undefined}>{email ?? "Your account"}</p>
+          </div>
           <form action={signOutAction}>
-            <button type="submit" className="mt-1 rounded-lg px-2 py-1.5 text-sm text-foreground/75 hover:text-foreground">
-              Sign out
+            <button
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/72 transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+            >
+              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l4-4-4-4M14 12H4" />
+              </svg>
             </button>
           </form>
         </div>
