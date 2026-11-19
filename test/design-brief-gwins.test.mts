@@ -22,6 +22,7 @@ import {
   TESTIMONIALS_OWNER_ASKED,
   TESTIMONIALS_RULE,
   TESTIMONIALS_WINS,
+  american,
   type DesignBrief,
   type InterviewMessage,
 } from "../src/lib/builder/design-brief";
@@ -284,6 +285,17 @@ await test("American spelling: color, never colour", () => {
   assert.doesNotMatch(md, /colour/i);
   // The pack's own lists (runner direction.json) still say colour; they change in the runner.
   assert.doesNotMatch(designBriefSystem().split("The lists (use these names exactly)")[0], /colour/i);
+});
+
+await test("the model's own colour becomes color; the owner's quotes keep their spelling; care flags start with a capital", () => {
+  const a = fixed();
+  a.owner_facts.push({ topic: "Look", meaning: "light green/cyan main colour", about: "look", quote: "sporty/playful, dark, lightgreen/cyan", msg: 13 });
+  a.care.push({ flag: "betting", rule: "No win records" });
+  a.voice.quotes.push({ quote: "lightgreen/cyan for primary color", msg: 13 });
+  const md = renderDesignBrief(check(a).db);
+  assert.match(md, /- Look: light green\/cyan main color\./);
+  assert.match(md, /- Betting: No win records\./);
+  assert.match(american('Main colour. Owner said: "my colour" (message 3).'), /^Main color\. Owner said: "my colour" \(message 3\)\.$/);
 });
 
 await test("no testimonials rule for a product that is not betting, health or money", () => {

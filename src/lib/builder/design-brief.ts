@@ -246,7 +246,7 @@ Rules:
 16. One line per fact. A claim about both or all plans quotes text that covers them all (often the approved review), never one plan's line; when two lines say the same thing, merge them into the one with the better quote.
 17. Messages to lead with: text is the quote itself, word for word, with paraphrase false. When you reword it, set paraphrase true; it is labelled paraphrase on the page.
 18. Betting, health and money products: we advise leaving Testimonials out, and code adds that care rule and its question for the owner. The care rule wins over a Testimonials section the owner approved, until the owner says otherwise. Never write sample testimonials or a rule that keeps them as samples.
-19. Plain, short words. The readers are a build agent and the owner, who is not technical.
+19. Plain, short words, in American spelling (for example color and center). The readers are a build agent and the owner, who is not technical.
 
 The lists (use these names exactly):
 ${JSON.stringify(lists, null, 2)}`;
@@ -685,6 +685,7 @@ export function retryNote(r: CheckResult): string {
 /** A sentence ends with exactly one full stop, whether or not the model wrote one. */
 const end = (t: string) => `${t.trim().replace(/[.\s]+$/, "")}.`;
 const bare = (t: string) => t.trim().replace(/[.\s]+$/, "");
+const cap = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 
 const said = (x: { quote: string | null; msg: number | null; from?: "owner" | "review" }) =>
   x.quote ? ` ${x.from === "review" ? "Owner approved at review" : "Owner said"}: "${x.quote.replace(/\s+/g, " ").trim().replace(/"/g, "'")}" (message ${x.msg}).` : "";
@@ -746,7 +747,7 @@ export function renderDesignBrief(db: DesignBrief): string {
   if (db.care.length || db.placeholders.length) {
     p("## Handle with care");
     p();
-    for (const c of db.care) p(`- ${bare(c.flag)}: ${end(c.rule)}`);
+    for (const c of db.care) p(`- ${cap(bare(c.flag))}: ${end(c.rule)}`);
     for (const x of db.placeholders) p(`- Show this placeholder, never drafted text: ${x.text} (${x.slot}).`);
     p();
   }
@@ -758,5 +759,17 @@ export function renderDesignBrief(db: DesignBrief): string {
     for (const g of db.gaps) p(`- ${g.question}`);
     p();
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
+  return american(out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
 }
+
+/** The owner's quote, as the page shows it after "Owner said" or "Owner approved at review". Never changed. */
+const QUOTED = /(Owner (?:said|approved at review): ".*?" \(message \d+\))/;
+/**
+ * American spelling (color, not colour) until there are locale settings. Only our words and the model's change: the owner's
+ * quotes keep their spelling.
+ */
+export const american = (md: string) =>
+  md
+    .split(QUOTED)
+    .map((part, i) => (i % 2 ? part : part.replace(/\b([Cc])olour/g, "$1olor")))
+    .join("");
