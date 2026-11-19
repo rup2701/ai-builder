@@ -207,5 +207,27 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   assert.equal((r.state.msgs.at(-1) as typeof last).question, "What is it called, then?");
   ok("a missing question and a missed call are each retried, within three calls");
 
+  // 20. When all three attempts fail, the log line says why each one failed: block types and field errors, never the words.
+  {
+    const logged: string[] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => void logged.push(a.map(String).join(" "));
+    try {
+      ({ chat } = script({ reply: { understood: "You said yes, secret words here." } }, { text: "Plain words here" }, { save: { site: {} }, reply: { understood: "Saving" } }));
+      r = await makeSiteInterviewer(chat, "fake").turn(start(), "yes");
+    } finally {
+      console.error = orig;
+    }
+    assert.equal(bots(r.state).at(-1), "Sorry, something went wrong on my side. Please send that again.");
+    assert.equal(logged.length, 1);
+    const line = logged[0];
+    assert.match(line, /^site interviewer failed: No usable answer in three attempts\. /);
+    assert.match(line, /attempt 1: reply with no question \(text, tool_use:reply\)/);
+    assert.match(line, /attempt 2: plain text with no reply call \(text\)/);
+    assert.match(line, /attempt 3: brief not valid \(text, tool_use:reply, tool_use:save_brief\): site\.name: /);
+    assert.doesNotMatch(line, /secret words|Plain words|Saving|failed validation three times/, "no model words in the log");
+    ok("the failure log line gives the reason for each attempt, without the model's words");
+  }
+
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
