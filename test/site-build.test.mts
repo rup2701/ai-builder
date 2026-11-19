@@ -373,7 +373,7 @@ const designAnswer = (audienceQuote: string) => ({
   audience: [{ value: "casual and serious fans", quote: audienceQuote, msg: 2 }],
   voice: { summary: "Plain and confident.", quotes: [{ quote: "Bold is fine", msg: 2 }] },
   owner_facts: [],
-  messages: [{ text: "Daily picks.", quote: "daily picks for casual and serious fans", msg: 2 }],
+  messages: [{ text: "Daily picks.", paraphrase: true, quote: "daily picks for casual and serious fans", msg: 2 }],
   plans: [],
   look_quotes: { mode: null, accent: null, tone: { quote: "Bold is fine", msg: 2 } },
   direction: { pairing: { value: "Heavy geometric", why: "Bold." }, motif: { value: "Stack", why: "A feed of picks." }, hero_kind: { value: "fragment", why: "Pick cards." }, signatures: [{ value: "status-chips", why: "Chips on every card." }] },

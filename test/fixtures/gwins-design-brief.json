@@ -1,0 +1,876 @@
+{
+ "about": "GWins (RP test project), read from production on 19 Nov 2026: the saved chat (masked as for a build record), the approved brief, and the design brief written at review. The failing case for the design brief quality checks.",
+ "messages": [
+  {
+   "id": 1,
+   "kind": "user",
+   "text": "A product website for GWins, with features, pricing and how it works."
+  },
+  {
+   "id": 2,
+   "kind": "bot",
+   "text": "What does GWins do, in one or two sentences? For example: what problem it solves and for whom.",
+   "question": "What does GWins do, in one or two sentences? For example: what problem it solves and for whom."
+  },
+  {
+   "id": 3,
+   "kind": "user",
+   "text": "a website for my sports picks membership app"
+  },
+  {
+   "id": 4,
+   "kind": "bot",
+   "text": "GWins is a membership app where members get sports picks. I'll use that as the product description and fill in the details as we go.\n\nI've added these sections:\n- Hero with the main button and a concept preview of the product (until you add a screenshot)\n- Benefits\n- How it works\n- Pricing\n- Testimonials\n- FAQ\n- Closing call to action\n- Footer\n\nMore sections to add:\n- Examples gallery\n- Comparison table\n- Use-case cards\n\nDo you want any of the extra sections, or want to drop any of the ones I've added? You can also ask for a section of your own.",
+   "question": "I've added these sections:\n- Hero with the main button and a concept preview of the product (until you add a screenshot)\n- Benefits\n- How it works\n- Pricing\n- Testimonials\n- FAQ\n- Closing call to action\n- Footer\n\nMore sections to add:\n- Examples gallery\n- Comparison table\n- Use-case cards\n\nDo you want any of the extra sections, or want to drop any of the ones I've added? You can also ask for a section of your own.",
+   "understood": "GWins is a membership app where members get sports picks. I'll use that as the product description and fill in the details as we go."
+  },
+  {
+   "id": 5,
+   "kind": "user",
+   "text": "Looks good. No changes to the plan."
+  },
+  {
+   "id": 6,
+   "kind": "bot",
+   "text": "The plan stays as shown: benefits, pricing and testimonials are in, and no extra sections.\n\nWho is GWins for, and what do they use today instead? For example: casual bettors who follow free tipsters on social media, or serious bettors who pay for other pick services.",
+   "question": "Who is GWins for, and what do they use today instead? For example: casual bettors who follow free tipsters on social media, or serious bettors who pay for other pick services.",
+   "understood": "The plan stays as shown: benefits, pricing and testimonials are in, and no extra sections."
+  },
+  {
+   "id": 7,
+   "kind": "user",
+   "text": "yes, that's about right. it is for both casual and serious fans"
+  },
+  {
+   "id": 8,
+   "kind": "bot",
+   "text": "GWins is for casual and serious sports fans who want picks. What they use today: free tipsters on social media, or other paid pick services.\n\nDo you have anything you want on the page in your own words, like the main features, the steps a member goes through, or questions people always ask? Paste whatever you have, or say \"you write it\" and I'll draft it for you to check later.",
+   "question": "Do you have anything you want on the page in your own words, like the main features, the steps a member goes through, or questions people always ask? Paste whatever you have, or say \"you write it\" and I'll draft it for you to check later.",
+   "understood": "GWins is for casual and serious sports fans who want picks. What they use today: free tipsters on social media, or other paid pick services."
+  },
+  {
+   "id": 9,
+   "kind": "user",
+   "text": "nope"
+  },
+  {
+   "id": 10,
+   "kind": "bot",
+   "text": "I'll write the benefits, the steps and the FAQ from what you've told me so far. You'll check them all at the end.\n\nNow pricing: how many membership plans do you have (up to three), and what is each one called and how much is it per month? Also, monthly only, or monthly and yearly with a discount (for example 20% off yearly)?",
+   "question": "Now pricing: how many membership plans do you have (up to three), and what is each one called and how much is it per month? Also, monthly only, or monthly and yearly with a discount (for example 20% off yearly)?",
+   "understood": "I'll write the benefits, the steps and the FAQ from what you've told me so far. You'll check them all at the end."
+  },
+  {
+   "id": 11,
+   "kind": "user",
+   "text": "two plans\nWeekly / Monhtly\nvalidity: 7 Days (non-recurring)\n$199 / $599\nPer week. All sports\nWith this membership you would get all of my bets for all of the sports for a duration of 7/30 days."
+  },
+  {
+   "id": 12,
+   "kind": "bot",
+   "text": "Two plans, both one-time passes with no auto-renewal: Weekly at $199 for 7 days and Monthly at $599 for 30 days. Both include all your picks for all sports. There's no yearly option. Tell me if Monthly does renew.\n\nNext is the look. If you have no preference, I'd suggest bold and dark with a vivid green, since fans check picks around game time, often in the evening.\n\n- Tone: calm, bold, playful or serious?\n- Light or dark background?\n- Main colour: blue, green, violet, orange, rose, slate, or your own colour name or hex code\n- Any words of your own about the brand? (optional)",
+   "parts": [
+    "Tone: calm, bold, playful or serious?",
+    "Light or dark background?",
+    "Main colour: blue, green, violet, orange, rose, slate, or your own colour name or hex code",
+    "Any words of your own about the brand? (optional)"
+   ],
+   "question": "Next is the look. If you have no preference, I'd suggest bold and dark with a vivid green, since fans check picks around game time, often in the evening.",
+   "understood": "Two plans, both one-time passes with no auto-renewal: Weekly at $199 for 7 days and Monthly at $599 for 30 days. Both include all your picks for all sports. There's no yearly option. Tell me if Monthly does renew."
+  },
+  {
+   "id": 13,
+   "kind": "user",
+   "text": "sporty/playful, dark, lightgreen/cyan for primary color"
+  },
+  {
+   "id": 14,
+   "kind": "bot",
+   "text": "Playful tone with a sporty feel, a dark background, and a bright mint-cyan (#2EE6C4) as the main colour.\n\nLast question: which buttons do you want on the page? For each one, tell me the wording and where it goes: a link, an email address, a section of the page, or \"later\".\n\n- Main button, for example \"Join now\" or \"Get my picks\"\n- A second button, if you want one, for example \"See plans\" or \"How it works\"\n- Both buttons also appear at the bottom of the page. Tell me if you'd like a different pair there.\n- A \"Sign in\" link in the header and footer, if members log in to the app",
+   "parts": [
+    "Main button, for example \"Join now\" or \"Get my picks\"",
+    "A second button, if you want one, for example \"See plans\" or \"How it works\"",
+    "Both buttons also appear at the bottom of the page. Tell me if you'd like a different pair there.",
+    "A \"Sign in\" link in the header and footer, if members log in to the app"
+   ],
+   "question": "Last question: which buttons do you want on the page? For each one, tell me the wording and where it goes: a link, an email address, a section of the page, or \"later\".",
+   "understood": "Playful tone with a sporty feel, a dark background, and a bright mint-cyan (#2EE6C4) as the main colour."
+  },
+  {
+   "id": 15,
+   "kind": "user",
+   "text": "Get my picks and Sign In"
+  },
+  {
+   "id": 16,
+   "kind": "bot",
+   "text": "The main button says \"Get my picks\". It has no link yet, so for now it scrolls to the pricing section. \"Sign in\" appears in the header and footer and also needs a link. There's no second button.\n\nHere's the review. I drafted the wording and added sample content. None of it is final, so please check it.\n\n**Headline:** Game day? Your picks are ready.\n\n**Subheadline:** Get every GWins pick across all sports with a 7-day or 30-day pass. Nothing renews automatically.\n\n**Sections:** Hero, Benefits, How it works, Pricing, Testimonials, FAQ, Closing call to action, Footer\n\n**Benefits:**\n- Every pick, every sport (large card): one pass covers all the sports you bet on\n- No auto-renew: your pass ends on its own, and you renew only if you want to\n- Choose your length: 7 days or 30 days\n- All in one place: your picks are in the app, so you don't have to hunt through social feeds\n\n**How it works:**\n- Choose your pass: Weekly or Monthly\n- Get your picks: every pick for every sport goes to the app\n- Renew if you like: you're never billed automatically\n\n**Pricing:** Weekly $199 for 7 days, Monthly $599 for 30 days. Both are one-time passes with all picks for all sports. There's no yearly option.\n\n**FAQ:** Who is GWins for? Which sports are included? What does it cost? Does it renew automatically?\n\n**Closing:** Ready for game day? Grab a pass and get every pick for the next 7 or 30 days.\n\n**Look:** Playful and sporty, dark background, mint-cyan accent (#2EE6C4)\n\n**Main button:** \"Get my picks\". It has no link yet and scrolls to Pricing.\n\n**Drafted by us:** the headline, subheadline, benefits, steps, FAQ answers and closing line\n\n**Placeholders to fix:**\n- The link for the main button\n- The link for Sign in\n- The hero image: until you send a screenshot, it shows a concept preview\n- 3 sample testimonials, labelled \"Example Name\"\n- The footer links: About, Contact, Docs, Changelog, Privacy, Terms and Security\n\nDo you want to change anything, or does this look good?",
+   "question": "Here's the review. I drafted the wording and added sample content. None of it is final, so please check it.\n\n**Headline:** Game day? Your picks are ready.\n\n**Subheadline:** Get every GWins pick across all sports with a 7-day or 30-day pass. Nothing renews automatically.\n\n**Sections:** Hero, Benefits, How it works, Pricing, Testimonials, FAQ, Closing call to action, Footer\n\n**Benefits:**\n- Every pick, every sport (large card): one pass covers all the sports you bet on\n- No auto-renew: your pass ends on its own, and you renew only if you want to\n- Choose your length: 7 days or 30 days\n- All in one place: your picks are in the app, so you don't have to hunt through social feeds\n\n**How it works:**\n- Choose your pass: Weekly or Monthly\n- Get your picks: every pick for every sport goes to the app\n- Renew if you like: you're never billed automatically\n\n**Pricing:** Weekly $199 for 7 days, Monthly $599 for 30 days. Both are one-time passes with all picks for all sports. There's no yearly option.\n\n**FAQ:** Who is GWins for? Which sports are included? What does it cost? Does it renew automatically?\n\n**Closing:** Ready for game day? Grab a pass and get every pick for the next 7 or 30 days.\n\n**Look:** Playful and sporty, dark background, mint-cyan accent (#2EE6C4)\n\n**Main button:** \"Get my picks\". It has no link yet and scrolls to Pricing.\n\n**Drafted by us:** the headline, subheadline, benefits, steps, FAQ answers and closing line\n\n**Placeholders to fix:**\n- The link for the main button\n- The link for Sign in\n- The hero image: until you send a screenshot, it shows a concept preview\n- 3 sample testimonials, labelled \"Example Name\"\n- The footer links: About, Contact, Docs, Changelog, Privacy, Terms and Security\n\nDo you want to change anything, or does this look good?",
+   "understood": "The main button says \"Get my picks\". It has no link yet, so for now it scrolls to the pricing section. \"Sign in\" appears in the header and footer and also needs a link. There's no second button."
+  },
+  {
+   "id": 17,
+   "kind": "user",
+   "text": "looks good"
+  },
+  {
+   "id": 18,
+   "kind": "bot",
+   "text": "Your brief is saved. You can read it next to this chat and download it. If anything looks off, tell me and I'll change it. When it looks right, press Build my site."
+  }
+ ],
+ "brief": {
+  "nav": [
+   {
+    "label": "How it works",
+    "target": "how_it_works"
+   },
+   {
+    "label": "Pricing",
+    "target": "pricing"
+   },
+   {
+    "label": "FAQ",
+    "target": "faq"
+   },
+   {
+    "label": "Sign in",
+    "style": "link",
+    "target": "sign_in"
+   },
+   {
+    "label": "Get my picks",
+    "style": "button",
+    "target": "main_button"
+   }
+  ],
+  "look": {
+   "mode": "dark",
+   "tone": "playful",
+   "accent": "#2EE6C4",
+   "layout": {
+    "width": "contained",
+    "max_width_px": 1200
+   },
+   "preset": "showcase-dark",
+   "accent_note": "Owner asked for light green/cyan; interpreted as a bright mint-cyan for a sporty, playful feel on a dark background."
+  },
+  "site": {
+   "kind": "product-showcase",
+   "name": "GWins",
+   "industry": "sports picks membership",
+   "core_idea": {
+    "pain": "Fans hunt for picks across free tipsters on social media or pay for other pick services.",
+    "product": "A sports picks membership app: members get all of the owner's bets for all sports for the length of their pass.",
+    "solution": "One pass gives every pick for every sport in one app, for 7 or 30 days, with no auto-renewal."
+   },
+   "one_liner": "A membership app where sports fans get every pick for all sports with a 7-day or 30-day pass.",
+   "demo_notice": true
+  },
+  "brand": {
+   "tone": "playful",
+   "color": "dark",
+   "own_words": "sporty/playful",
+   "preset_map": {
+    "dark": "showcase-dark",
+    "light": "showcase-light",
+    "blue-accent": "showcase-light with a blue accent"
+   },
+   "tone_options": [
+    "calm",
+    "bold",
+    "playful",
+    "serious"
+   ],
+   "color_options": [
+    "light",
+    "dark",
+    "blue-accent"
+   ]
+  },
+  "stack": "See the Builder's knowledge/stack.json. Those decisions are fixed. This pack deploys as a static-style site: no database, no sign-ups, no owner area.",
+  "blocks": [
+   {
+    "cta": {
+     "label": "Get my picks",
+     "target": "main_button"
+    },
+    "type": "hero",
+    "status": "drafted",
+    "visual": {
+     "kind": "image_placeholder",
+     "note": "With no image, the hero shows a concept preview of the product built in HTML (a phone or app frame showing a picks list), labelled Concept preview. The owner supplies a screenshot later, and it takes the same frame.",
+     "image": null,
+     "label": "Your product image goes here",
+     "aspect": "16:10"
+    },
+    "headline": "Game day? Your picks are ready.",
+    "subheadline": "Get every GWins pick across all sports with a 7-day or 30-day pass. Nothing renews automatically.",
+    "secondary_cta": null
+   },
+   {
+    "note": "The first item is the large card. Cards follow the bento layout table in look.md for the number of items.",
+    "type": "benefits_bento",
+    "items": [
+     {
+      "icon": "trophy",
+      "size": "large",
+      "text": "One pass covers all the sports you bet on.",
+      "title": "Every pick, every sport"
+     },
+     {
+      "icon": "refresh-off",
+      "size": "small",
+      "text": "Your pass ends on its own. Renew only if you want to.",
+      "title": "No auto-renew"
+     },
+     {
+      "icon": "calendar",
+      "size": "small",
+      "text": "Go for 7 days or 30 days.",
+      "title": "Choose your length"
+     },
+     {
+      "icon": "smartphone",
+      "size": "small",
+      "text": "Your picks live in the app, so there's no hunting through social feeds.",
+      "title": "All in one place"
+     }
+    ],
+    "status": "drafted",
+    "heading": "Why fans pick GWins"
+   },
+   {
+    "type": "how_it_works",
+    "items": [
+     {
+      "text": "Weekly or Monthly.",
+      "title": "Choose your pass"
+     },
+     {
+      "text": "Every pick for every sport goes to the app.",
+      "title": "Get your picks"
+     },
+     {
+      "text": "You're never billed automatically.",
+      "title": "Renew if you like"
+     }
+    ],
+    "status": "drafted",
+    "heading": "How it works"
+   },
+   {
+    "type": "pricing",
+    "plans": [
+     {
+      "name": "Weekly",
+      "button": "Get my picks",
+      "features": [
+       "All picks for all sports",
+       "Valid for 7 days",
+       "One-time payment, no auto-renew"
+      ],
+      "highlight": false,
+      "recurring": false,
+      "price_label": "$199",
+      "period_label": "7 days",
+      "price_source": "owner",
+      "yearly_price": null,
+      "monthly_price": 199,
+      "validity_days": 7,
+      "yearly_per_month": null
+     },
+     {
+      "name": "Monthly",
+      "button": "Get my picks",
+      "features": [
+       "All picks for all sports",
+       "Valid for 30 days",
+       "One-time payment, no auto-renew"
+      ],
+      "highlight": true,
+      "recurring": false,
+      "price_label": "$599",
+      "period_label": "30 days",
+      "price_source": "owner",
+      "yearly_price": null,
+      "monthly_price": 599,
+      "validity_days": 30,
+      "yearly_per_month": null
+     }
+    ],
+    "rules": [
+     "At most 3 plans.",
+     "Prices the owner typed stay exactly as typed.",
+     "These are one-time passes, not subscriptions: monthly_price holds the one-time pass price and is shown with the plan's period_label ('$199 for 7 days', '$599 for 30 days'), never as '/month'. No monthly/yearly toggle and no yearly prices.",
+     "Each price is defined once in the plan data and derived everywhere else (cards, FAQ)."
+    ],
+    "status": "drafted",
+    "billing": "monthly",
+    "heading": "Pick your pass",
+    "pass_type": "one_time",
+    "yearly_discount_percent": null
+   },
+   {
+    "type": "testimonials",
+    "items": [
+     {
+      "name": "Example Name",
+      "role": "Member",
+      "label": "Sample",
+      "quote": "Placeholder quote. Replace with a real one before you share the page.",
+      "company": "Sample"
+     },
+     {
+      "name": "Example Name",
+      "role": "Member",
+      "label": "Sample",
+      "quote": "Placeholder quote. A second example, so several quotes sit side by side.",
+      "company": "Sample"
+     },
+     {
+      "name": "Example Name",
+      "role": "Member",
+      "label": "Sample",
+      "quote": "Placeholder quote. A third example. Add real ones and these go away.",
+      "company": "Sample"
+     }
+    ],
+    "status": "placeholder",
+    "heading": "What members say"
+   },
+   {
+    "type": "faq",
+    "items": [
+     {
+      "a": "Casual and serious sports fans who want picks for all sports in one place.",
+      "q": "Who is GWins for?"
+     },
+     {
+      "a": "Every pass includes all the picks for all sports.",
+      "q": "Which sports are included?"
+     },
+     {
+      "a": "The Weekly pass is $199 for 7 days and the Monthly pass is $599 for 30 days. See the pricing section.",
+      "q": "What does it cost?"
+     },
+     {
+      "a": "No. Both passes are one-time and end on their own. Renew only if you want to.",
+      "q": "Does it renew automatically?"
+     }
+    ],
+    "status": "drafted",
+    "heading": "Questions"
+   },
+   {
+    "cta": {
+     "label": "Get my picks",
+     "target": "main_button"
+    },
+    "type": "closing_cta",
+    "status": "drafted",
+    "headline": "Ready for game day?",
+    "subheadline": "Grab a pass and get every pick for the next 7 or 30 days.",
+    "secondary_cta": null
+   },
+   {
+    "type": "footer",
+    "legal": "© 2026 GWins. All rights reserved.",
+    "status": "drafted",
+    "columns": [
+     {
+      "links": [
+       {
+        "label": "How it works",
+        "target": "how_it_works"
+       },
+       {
+        "label": "Pricing",
+        "target": "pricing"
+       },
+       {
+        "label": "FAQ",
+        "target": "faq"
+       }
+      ],
+      "title": "Product"
+     },
+     {
+      "links": [
+       {
+        "link": null,
+        "label": "About"
+       },
+       {
+        "link": null,
+        "label": "Contact"
+       }
+      ],
+      "title": "Company"
+     },
+     {
+      "links": [
+       {
+        "link": null,
+        "label": "Docs"
+       },
+       {
+        "link": null,
+        "label": "Changelog"
+       }
+      ],
+      "title": "Resources"
+     }
+    ],
+    "company": "GWins",
+    "sign_in": {
+     "label": "Sign in",
+     "target": "sign_in"
+    },
+    "tagline": "Every pick, every sport.",
+    "link_rule": "A link with no page behind it is shown as 'Set your link' in the review list, and points to the top of the page until set. No legal text is written.",
+    "legal_links": [
+     {
+      "link": null,
+      "label": "Privacy"
+     },
+     {
+      "link": null,
+      "label": "Terms"
+     },
+     {
+      "link": null,
+      "label": "Security"
+     }
+    ]
+   }
+  ],
+  "imagery": {
+   "rules": [
+    "No stock or generated photos or screenshots are fetched or invented.",
+    "The hero starts with a concept preview built in HTML, labelled Concept preview, until the owner adds a screenshot.",
+    "Logos and screenshots are added later by the owner."
+   ],
+   "source": "owner_uploads"
+  },
+  "purpose": "Brief for the GWins product showcase: one page, no sign-ups, no database, no owner area.",
+  "sign_in": {
+   "link": null,
+   "note": "Shown in the header and footer. https link set later; flagged 'Set your link'.",
+   "label": "Sign in",
+   "link_status": "placeholder"
+  },
+  "audience": {
+   "icp": "Casual and serious sports fans who want picks.",
+   "alternatives": "Free tipsters on social media, or other paid pick services.",
+   "frustrations": [
+    "Picks scattered across social feeds (drafted)",
+    "Paying for services that renew without asking (drafted)",
+    "Having to follow different sources for different sports (drafted)"
+   ]
+  },
+  "page_plan": {
+   "order": [
+    "hero",
+    "benefits_bento",
+    "how_it_works",
+    "pricing",
+    "testimonials",
+    "faq",
+    "closing_cta",
+    "footer"
+   ],
+   "optional": {
+    "pricing": true,
+    "testimonials": true,
+    "benefits_bento": true,
+    "use_case_cards": false,
+    "comparison_table": false,
+    "examples_gallery": false
+   },
+   "always_on": [
+    "hero",
+    "how_it_works",
+    "faq",
+    "closing_cta",
+    "footer"
+   ],
+   "added_by_owner": []
+  },
+  "assumptions": [
+   "Product description drafted from 'a sports picks membership app'.",
+   "Alternatives accepted by the owner: free tipsters on social media, or other paid pick services.",
+   "Frustrations are drafted from the owner's answers, not stated by the owner.",
+   "Both plans read as one-time passes with no auto-renewal: Weekly $199 for 7 days, Monthly $599 for 30 days, all picks for all sports. No yearly option. The pass price is stored in monthly_price for the schema only.",
+   "Accent #2EE6C4 chosen to match 'lightgreen/cyan'.",
+   "No secondary button.",
+   "Headline, subheadline, benefits, steps, FAQ answers and closing line were drafted by us and approved on the review.",
+   "No claims about win rates, profits or results are made anywhere on the page.",
+   "Testimonials are samples; the owner replaces or removes them."
+  ],
+  "main_button": {
+   "link": null,
+   "note": "A link the owner sets later. With no link the button scrolls to the pricing section and is flagged 'Set your link'.",
+   "label": "Get my picks",
+   "link_status": "placeholder"
+  },
+  "owner_vision": "A sporty, playful, dark page that gets fans to their picks fast, with simple one-time passes and no auto-renewal.",
+  "placeholders": [
+   {
+    "fix": "Tell Scout the link",
+    "what": "Where the Get my picks button goes",
+    "where": "main_button.link"
+   },
+   {
+    "fix": "Tell Scout the link",
+    "what": "Where the Sign in link goes",
+    "where": "sign_in.link"
+   },
+   {
+    "fix": "Send Scout a screenshot or image",
+    "what": "The product image is a concept preview",
+    "where": "hero.visual"
+   },
+   {
+    "fix": "Replace with real quotes or remove the section",
+    "what": "The three quotes are samples named Example Name",
+    "where": "testimonials"
+   },
+   {
+    "fix": "Tell Scout each link",
+    "what": "About, Contact, Docs, Changelog, Privacy, Terms and Security have no pages yet",
+    "where": "footer"
+   }
+  ],
+  "schema_version": "2.0",
+  "not_in_this_version": [
+   "Collecting emails or sign-ups",
+   "Sending email of any kind",
+   "Payments or checkout",
+   "Visit analytics",
+   "A custom domain",
+   "Customer logos or user counts unless the owner supplies them",
+   "Legal text (privacy, terms, security pages)"
+  ]
+ },
+ "savedDesignBrief": {
+  "care": [
+   {
+    "flag": "Betting",
+    "rule": "Make no claims about win rates, profits, records, returns or guaranteed wins. Do not suggest that picks make money. Don't use the 'G' or 'Wins' in the name to imply results."
+   },
+   {
+    "flag": "Betting",
+    "rule": "Don't call betting a way to earn income, and don't push people to bet more or chase losses."
+   },
+   {
+    "flag": "Money",
+    "rule": "Show prices exactly as the owner gave them ($199 for 7 days, $599 for 30 days). Never show them as '/month', and don't invent discounts or savings."
+   },
+   {
+    "flag": "Money",
+    "rule": "Do not promise refunds, trials or money-back guarantees. The owner did not offer any."
+   },
+   {
+    "flag": "Proof",
+    "rule": "Testimonials stay marked Sample with Example Name. No invented member counts, logos or results."
+   },
+   {
+    "flag": "Equal plans",
+    "rule": "The owner did not ask for either plan to stand out, so give Weekly and Monthly the same treatment, with no 'Most popular' badge."
+   }
+  ],
+  "gaps": [
+   {
+    "id": "g1",
+    "affects": [
+     "main_button",
+     "hero",
+     "pricing",
+     "closing_cta"
+    ],
+    "question": "Where should the \"Get my picks\" button take people?"
+   },
+   {
+    "id": "g2",
+    "affects": [
+     "sign_in",
+     "nav",
+     "footer"
+    ],
+    "question": "What is the link for Sign in?"
+   },
+   {
+    "id": "g3",
+    "affects": [
+     "pricing",
+     "faq",
+     "benefits_bento",
+     "how_it_works"
+    ],
+    "question": "Does the Monthly pass also end on its own after 30 days, like the Weekly one?"
+   },
+   {
+    "id": "g4",
+    "affects": [
+     "pricing",
+     "faq"
+    ],
+    "question": "You wrote \"Per week\" next to the prices. Is $599 for 30 days, or is something charged weekly?"
+   },
+   {
+    "id": "g5",
+    "affects": [
+     "benefits_bento",
+     "faq"
+    ],
+    "question": "Which sports do you cover, so we can name them?"
+   },
+   {
+    "id": "g6",
+    "affects": [
+     "footer"
+    ],
+    "question": "What age rule and responsible-gambling notice should the page show?"
+   }
+  ],
+  "look": {
+   "mode": {
+    "msg": 13,
+    "quote": "dark",
+    "value": "dark"
+   },
+   "tone": {
+    "msg": 13,
+    "quote": "sporty/playful",
+    "value": "playful"
+   },
+   "accent": {
+    "msg": 13,
+    "quote": "lightgreen/cyan",
+    "value": "#2EE6C4"
+   }
+  },
+  "name": {
+   "msg": 1,
+   "quote": "GWins",
+   "value": "GWins"
+  },
+  "plans": [
+   {
+    "msg": 11,
+    "name": "Weekly",
+    "price": "$199",
+    "quote": "validity: 7 Days (non-recurring)",
+    "length": "7 Days",
+    "highlight": false,
+    "highlight_quote": null
+   },
+   {
+    "msg": 11,
+    "name": "Monthly",
+    "price": "$599",
+    "quote": "for a duration of 7/30 days",
+    "length": "30 days",
+    "highlight": false,
+    "highlight_quote": null
+   }
+  ],
+  "voice": {
+   "quotes": [
+    {
+     "msg": 13,
+     "quote": "sporty/playful"
+    }
+   ],
+   "summary": "Sporty and playful: short, upbeat lines that sound like game day. Keep it fun, but never promise wins or profits."
+  },
+  "version": 1,
+  "audience": [
+   {
+    "msg": 7,
+    "quote": "it is for both casual and serious fans",
+    "value": "Casual and serious sports fans",
+    "meaning": "The page speaks to both casual fans and serious fans, not just one group."
+   },
+   {
+    "msg": 7,
+    "quote": "yes, that's about right",
+    "value": "Fans who use free tipsters on social media or other paid pick services today",
+    "meaning": "The owner agreed with Scout's example: today these fans follow free tipsters on social media or pay for other pick services."
+   }
+  ],
+  "messages": [
+   {
+    "msg": 11,
+    "text": "Every pick, every sport: one pass gets you all the picks for all sports.",
+    "quote": "all of my bets for all of the sports"
+   },
+   {
+    "msg": 11,
+    "text": "Short passes, no auto-renew: 7 days or 30 days, and you renew only if you want to.",
+    "quote": "validity: 7 Days (non-recurring)"
+   },
+   {
+    "msg": 7,
+    "text": "Built for every fan, casual or serious.",
+    "quote": "both casual and serious fans"
+   }
+  ],
+  "direction": {
+   "fonts": {
+    "body": "Inter",
+    "accent": null,
+    "heading": "Outfit",
+    "capsLabels": true,
+    "headingWeight": 800
+   },
+   "motif": {
+    "value": "Stack",
+    "proposal": "p2"
+   },
+   "pairing": {
+    "value": "Heavy geometric",
+    "proposal": "p1"
+   },
+   "hero_kind": {
+    "value": "fragment",
+    "proposal": "p3"
+   },
+   "signatures": [
+    {
+     "value": "status-chips",
+     "proposal": "p4"
+    },
+    {
+     "value": "oversized-numerals",
+     "proposal": "p5"
+    }
+   ]
+  },
+  "proposals": [
+   {
+    "id": "p1",
+    "why": "Outfit headings give the sporty, playful voice the owner asked for, and Inter keeps the text easy to read.",
+    "field": "direction.pairing",
+    "value": "Heavy geometric"
+   },
+   {
+    "id": "p2",
+    "why": "The product is a list of picks, so a few slightly offset pick cards show what members get.",
+    "field": "direction.motif",
+    "value": "Stack"
+   },
+   {
+    "id": "p3",
+    "why": "The owner has no screenshot yet, so a small stack of sample pick cards in HTML shows the idea without faking a real app screen.",
+    "field": "direction.hero_kind",
+    "value": "fragment"
+   },
+   {
+    "id": "p4",
+    "why": "Chips such as League or Sample on pick cards, and used the same way on the pricing cards, feel like a live picks feed.",
+    "field": "direction.signature",
+    "value": "status-chips"
+   },
+   {
+    "id": "p5",
+    "why": "Big numbers on the steps and on 7 / 30 days give a bold, scoreboard-like sporty feel.",
+    "field": "direction.signature",
+    "value": "oversized-numerals"
+   },
+   {
+    "id": "p6",
+    "why": "Matches the owner's 'lightgreen/cyan' and stands out well on a dark background. Scout offered it on the review.",
+    "field": "accent",
+    "value": "#2EE6C4 (bright mint-cyan)"
+   },
+   {
+    "id": "p7",
+    "why": "The plans are one-time passes, so a per-month label would mislead.",
+    "field": "pricing display",
+    "value": "Show each plan as '$199 for 7 days' and '$599 for 30 days', with a 'No auto-renew' line on both"
+   }
+  ],
+  "references": [],
+  "owner_facts": [
+   {
+    "msg": 3,
+    "quote": "my sports picks membership app",
+    "topic": "Product",
+    "meaning": "GWins is a membership app where members get the owner's sports picks."
+   },
+   {
+    "msg": 1,
+    "quote": "with features, pricing and how it works",
+    "topic": "Page contents",
+    "meaning": "The owner wants a product website showing features, pricing and how it works."
+   },
+   {
+    "msg": 5,
+    "quote": "No changes to the plan.",
+    "topic": "Sections",
+    "meaning": "The owner kept Scout's section plan: hero, benefits, how it works, pricing, testimonials, FAQ, closing call to action, footer. No extra sections."
+   },
+   {
+    "msg": 11,
+    "quote": "all of my bets for all of the sports for a duration of 7/30 days",
+    "topic": "What members get",
+    "meaning": "A membership gives all of the owner's bets for every sport for the length of the pass (7 or 30 days)."
+   },
+   {
+    "msg": 11,
+    "quote": "Weekly / Monhtly",
+    "topic": "Plans",
+    "meaning": "There are two plans: Weekly and Monthly."
+   },
+   {
+    "msg": 11,
+    "quote": "validity: 7 Days (non-recurring)",
+    "topic": "No auto-renewal",
+    "meaning": "The Weekly pass lasts 7 days and does not renew on its own."
+   },
+   {
+    "msg": 11,
+    "quote": "Per week. All sports",
+    "topic": "Sports covered",
+    "meaning": "Every plan covers all sports."
+   },
+   {
+    "msg": 15,
+    "quote": "Get my picks and Sign In",
+    "topic": "Buttons",
+    "meaning": "The main button says \"Get my picks\", and there is a Sign in link. No second button."
+   }
+  ],
+  "sample_card": {
+   "item": "One pick",
+   "fields": [
+    {
+     "label": "Match",
+     "filler": "AWAY @ HOME"
+    },
+    {
+     "label": "League",
+     "filler": "League"
+    },
+    {
+     "label": "Pick",
+     "filler": "Name"
+    },
+    {
+     "label": "Odds",
+     "filler": "0.0"
+    }
+   ],
+   "marked": "Sample"
+  },
+  "placeholders": [
+   {
+    "slot": "footer_notice",
+    "text": "[Age and responsible-gambling notice: owner to supply]",
+    "label": "Age and responsible-gambling notice"
+   }
+  ]
+ }
+}

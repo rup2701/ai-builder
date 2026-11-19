@@ -1,5 +1,5 @@
 import { SHOWCASE_EXAMPLE_BRIEF, SHOWCASE_INTERVIEW_MD, SITE_EXAMPLE_BRIEF, SITE_INTERVIEW_MD } from "@/lib/builder/site-pack.generated";
-import { normalizePack, validateSiteBrief, type SitePack } from "@/lib/builder/site-brief";
+import { BRIEF_SAVED_TEXT, normalizePack, validateSiteBrief, type SitePack } from "@/lib/builder/site-brief";
 import { pushMsg } from "@/lib/workspace/state";
 import type { WorkspaceState } from "@/lib/workspace/types";
 import type { Interviewer } from "./interviewer";
@@ -122,6 +122,7 @@ How to talk:
   - understood: only when their last message gave a fact, a choice or a number that you interpreted (for example "weekly 199" read as a one-time pass of $199 for 7 days), or when you decided something on their behalf (a default they did not pick). One or two short lines, so they can correct it. Leave it out for your first reply, and leave it out whenever it would only repeat their words back. Never start it with "Got it".
   - question: the one thing you ask next, in at most two short sentences.
   - parts: only when a question has several parts (for example tone, light or dark, and colour). One short line per part, and question is then a short lead-in.
+- Ask about money terms directly, as a question: for example "Does Monthly renew on its own?" or "Is $599 charged once or every week?". Never state a guess and add an escape such as "Tell me if it does". Until the person answers, the term is not settled.
 - One question per message.${showcase ? " The page plan is shown in question as a short list of sections with the optional ones marked on or off." : ""}
 - Keep the person's own words in the brief where you can. You write the headline, benefit titles and ${showcase ? "FAQ answers" : "thank-you message"}, and the person approves them on the review.
 - Never invent proof (customer counts, logos, certifications). ${showcase ? "Sample testimonials and sample pricing are allowed only as placeholders, as the interview guide says; never ask for or write security or compliance claims." : 'Claims go in "claims" with "confirmed": false unless the person says they are true.'}
@@ -216,7 +217,7 @@ export function makeSiteInterviewer(chat: Chat, model: string): Interviewer {
             else if (r.text) s = pushMsg(s, { kind: "bot", text: r.text });
             s = pushMsg({ ...s, phase: "summary", site: { brief: v.brief as Record<string, unknown> } }, {
               kind: "bot",
-              text: "Your brief is saved. You can read it next to this chat and download it. If anything looks off, tell me and I'll change it. When it looks right, press Build my site.",
+              text: BRIEF_SAVED_TEXT,
             });
             return { state: s, usage: usage() };
           }

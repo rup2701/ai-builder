@@ -55,6 +55,9 @@ export function yearlyPrice(monthly: number, discountPercent: number): number {
   return (total - (total % 10000)) / 10000;
 }
 /** The per-month equivalent of a yearly price, whole dollars rounded down. */
+/** What Scout says when the brief is saved. The design brief finds the approved review by it: the Scout message the owner answered just before it. */
+export const BRIEF_SAVED_TEXT = "Your brief is saved. You can read it next to this chat and download it. If anything looks off, tell me and I'll change it. When it looks right, press Build my site.";
+
 export const perMonthOf = (yearly: number) => Math.floor(yearly / 12);
 
 const Plan = z.object({ name: z.string().trim().min(1).max(40), monthly_price: z.number().nonnegative() }).passthrough();

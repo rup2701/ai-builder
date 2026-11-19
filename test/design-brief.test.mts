@@ -59,10 +59,10 @@ function goodAnswer(): any {
     name: { quote: "it is called PickPal", msg: 2 },
     audience: [{ value: "casual and serious fans", quote: "for casual and  serious fans", msg: 4 }],
     voice: { summary: "Plain and confident, like a friend who follows every game.", quotes: [{ quote: "Bold is fine", msg: 8 }] },
-    owner_facts: [{ topic: "Leagues", meaning: "NFL, NBA, MLB and NHL, each while in season", quote: "all 4 major leagues in America", msg: 2 }],
+    owner_facts: [{ topic: "Leagues", meaning: "NFL, NBA, MLB and NHL, each while in season", about: "coverage", quote: "all 4 major leagues in America", msg: 2 }],
     messages: [
-      { text: "Daily picks for every major league.", quote: "daily picks for all 4 major leagues", msg: 2 },
-      { text: "Pay once. No auto-renew.", quote: "no auto renew", msg: 6 },
+      { text: "Daily picks for every major league.", paraphrase: true, about: "coverage", quote: "daily picks for all 4 major leagues", msg: 2 },
+      { text: "Pay once. No auto-renew.", paraphrase: true, about: "renewal", quote: "no auto renew", msg: 6 },
     ],
     plans: [
       { name: "Weekly", price: "$49", length: "7 days", highlight: false, highlight_quote: null, quote: "Weekly $49 for 7 days", msg: 6 },
@@ -79,7 +79,7 @@ function goodAnswer(): any {
     care: [{ flag: "Betting", rule: "No win record, no guaranteed or profit claims." }],
     placeholders: [{ slot: "notice", what: "Eligibility and responsible-gaming notice" }],
     other_proposals: [],
-    gaps: [{ question: "Who is behind the picks? A name or a short bio?", affects: ["voice"] }],
+    gaps: [{ question: "Who is behind the picks? A name or a short bio?", affects: ["voice"], about: "people" }],
   };
 }
 
@@ -103,7 +103,7 @@ await test("the model is told the rules and given only the pack's own lists", ()
   const s = designBriefSystem();
   for (const p of DIRECTION.pairings) assert.ok(s.includes(p.name), p.name);
   for (const m of DIRECTION.motifs) assert.ok(s.includes(m.name), m.name);
-  assert.match(s, /Never quote a Scout line/);
+  assert.match(s, /Never quote any other Scout line/);
   assert.match(s, /all 4 major leagues in America/);
   assert.match(s, /highlight is true only if the owner asked/);
   const props = DESIGN_BRIEF_TOOL.input_schema.properties.direction.properties;
@@ -131,9 +131,9 @@ await test("a quote the owner never wrote fails, and so does a Scout line or an 
   const { r } = check(a);
   assert.equal(r.ok, false);
   assert.deepEqual(r.quoteCheck.failed.map((f) => [f.path, f.why]), [
-    ["audience[0]", "not in an owner message"],
+    ["audience[0]", "not in an owner message or the approved review"],
     ["voice.quotes[1]", "empty"],
-    ["owner_facts[1]", "not in an owner message"],
+    ["owner_facts[1]", "not in an owner message or the approved review"],
   ]);
 });
 
@@ -171,7 +171,7 @@ await test("a number the owner never typed is a problem; one in the approved bri
   const { r } = check(a);
   assert.ok(r.problems.some((p) => /numbers the owner never typed: 5000, 62/.test(p)), r.problems.join("; "));
   const b = goodAnswer();
-  b.owner_facts.push({ topic: "Plans", meaning: "4 leagues, 7 and 30 days", quote: "Weekly $49 for 7 days", msg: 6 });
+  b.owner_facts.push({ topic: "Plans", meaning: "7 and 30 days", quote: "Weekly $49 for 7 days, Monthly $149 for 30 days", msg: 6 });
   assert.ok(check(b).r.ok);
 });
 
@@ -291,7 +291,7 @@ await test("a reference fails when its quote lacks the name, the owner never wro
   ]);
   const r = checkDesignBrief(assembleDesignBrief(a, BRIEF), REF_MSGS, BRIEF);
   assert.ok(r.problems.some((p) => /references\[0\] "Sleeper": the quote does not hold the name/.test(p)), r.problems.join("; "));
-  assert.ok(r.quoteCheck.failed.some((f) => f.path === "references[1]" && f.why === "not in an owner message"));
+  assert.ok(r.quoteCheck.failed.some((f) => f.path === "references[1]" && f.why === "not in an owner message or the approved review"));
   assert.ok(r.problems.some((p) => /references\[2\] "Underdog Fantasy": "logo" is not one of pace, density, contrast, hero, proof, motion/.test(p)));
 });
 
@@ -333,7 +333,7 @@ await test("each line ends with one full stop, whether or not the model wrote on
   const md = renderDesignBrief(assembleDesignBrief(a, BRIEF));
   assert.doesNotMatch(md, /\.\./);
   assert.match(md, /- casual and serious fans: fans who bet for fun and fans who take it seriously\. Owner said:/);
-  assert.match(md, /1\. Simple, fun picks\. Owner said:/);
+  assert.match(md, /1\. Simple, fun picks\. \(paraphrase\) Owner said:/);
   assert.match(md, /- Betting: No win record\./);
 });
 

@@ -265,5 +265,10 @@ const good = JSON.parse(SITE_EXAMPLE_BRIEF);
   assert.match(tool.input_schema.properties.understood.description, /interpreted.*decided something on their behalf.*first reply.*repeat their words/s);
   ok("the prompt and the reply tool say when understood is shown");
 
+  // 24. Money terms are asked directly, never assumed with an escape clause.
+  assert.match(calls[0].system, /Ask about money terms directly, as a question: for example "Does Monthly renew on its own\?"/);
+  assert.match(calls[0].system, /Never state a guess and add an escape such as "Tell me if it does"/);
+  ok("Scout asks money terms directly and never assumes them");
+
   console.log(`\n${n} passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
