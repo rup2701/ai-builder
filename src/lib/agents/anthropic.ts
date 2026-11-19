@@ -1,13 +1,12 @@
 import type { Complete } from "./model-interviewer";
+import { usageOf } from "./prices";
 
 /**
  * Minimal Anthropic Messages API call with one tool, so the reply is structured input
  * that the caller validates (a reply without the tool call is an error and gets retried). The system prompt is marked cacheable: it is the same on every turn.
- * Prices are optional (per million tokens) so cost can be logged without hard-coding rates.
+ * The cost comes from the price table for the model (src/lib/agents/prices.ts).
  */
 export function anthropicComplete(opts: { apiKey: string; model: string; timeoutMs?: number; maxTokens?: number }): Complete {
-  const priceIn = Number(process.env.ANTHROPIC_PRICE_IN_PER_MTOK ?? 0);
-  const priceOut = Number(process.env.ANTHROPIC_PRICE_OUT_PER_MTOK ?? 0);
   return async ({ system, user, tool }) => {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -39,13 +38,7 @@ export function anthropicComplete(opts: { apiKey: string; model: string; timeout
     if (data.stop_reason === "max_tokens") throw new Error(`The model's reply was cut off at ${opts.maxTokens ?? 1200} tokens.`);
     const block = data.content?.find((b) => b.type === "tool_use" && b.name === tool.name);
     if (!block) throw new Error("The model did not return the expected tool call.");
-    const u = data.usage ?? {};
-    const inputTokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    const outputTokens = u.output_tokens ?? 0;
-    return {
-      input: block.input,
-      usage: { inputTokens, outputTokens, costUsd: (inputTokens * priceIn + outputTokens * priceOut) / 1e6 },
-    };
+    return { input: block.input, usage: usageOf(opts.model, data.usage) };
   };
 }
 
@@ -56,8 +49,6 @@ export function anthropicComplete(opts: { apiKey: string; model: string; timeout
 import type { Chat } from "./site-interviewer";
 
 export function anthropicChat(opts: { apiKey: string; model: string; timeoutMs?: number }): Chat {
-  const priceIn = Number(process.env.ANTHROPIC_PRICE_IN_PER_MTOK ?? 0);
-  const priceOut = Number(process.env.ANTHROPIC_PRICE_OUT_PER_MTOK ?? 0);
   return async ({ system, messages, tools }) => {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -83,14 +74,11 @@ export function anthropicChat(opts: { apiKey: string; model: string; timeoutMs?:
       usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
     };
     const content = data.content ?? [];
-    const u = data.usage ?? {};
-    const inputTokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    const outputTokens = u.output_tokens ?? 0;
     return {
       text: content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim(),
       toolUses: content.filter((b) => b.type === "tool_use").map((b) => ({ id: b.id ?? "", name: b.name ?? "", input: b.input })),
       content,
-      usage: { inputTokens, outputTokens, costUsd: (inputTokens * priceIn + outputTokens * priceOut) / 1e6 },
+      usage: usageOf(opts.model, data.usage),
     };
   };
 }

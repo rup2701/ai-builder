@@ -16,18 +16,10 @@ import {
   type InterviewMessage,
   type QuoteCheck,
 } from "@/lib/builder/design-brief";
+import { costOf, type TokenUsage } from "./prices";
 
-export type TokenUsage = { input: number; output: number; cacheRead: number; cacheWrite: number };
-
-/** Dollars per million tokens, the same estimates as the runner's src/config.ts. A model not listed is priced as Opus, the dearer one. */
-const PRICES: Record<string, TokenUsage> = {
-  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
-};
-export const costOf = (model: string, u: TokenUsage) => {
-  const p = PRICES[model] ?? PRICES["claude-opus-5-5"];
-  return (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6;
-};
+// One price table for every Builder call (src/lib/agents/prices.ts). Exported again here for the callers that import it from this file.
+export { costOf, type TokenUsage };
 
 /** The model's setting for this step only. Opus unless ANTHROPIC_DESIGN_BRIEF_MODEL says otherwise. */
 export const designBriefModel = (env: NodeJS.ProcessEnv = process.env) => env.ANTHROPIC_DESIGN_BRIEF_MODEL || "claude-opus-5-5";
