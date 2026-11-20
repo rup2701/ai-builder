@@ -9,10 +9,13 @@
  *
  * Nothing here is shown to the owner. A failure at review only means the worker writes the brief at build start, as before.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { runDesignBriefStep, designBriefInput, type StepOutcome } from "@/lib/agents/design-brief-step";
 import type { ToolCall } from "@/lib/agents/design-brief-writer";
-import { designBriefFingerprint, type InterviewMessage } from "@/lib/builder/design-brief";
+import { designBriefFingerprint, type DesignBrief, type InterviewMessage } from "@/lib/builder/design-brief";
+import { designTokens, type DesignTokens } from "@/lib/builder/design-tokens";
+import { briefFooterLabels, renderTile, tileSources, TILE_TEMPLATE_VERSION } from "@/lib/builder/style-tile";
+import { checkTile, type TileChecks } from "@/lib/builder/tile-checks";
 
 /** The part of pg's Pool used here, so tests can pass a stand-in. */
 export type Db = { query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }> };
@@ -37,7 +40,84 @@ export type SavedDesignBrief = {
   reason: string | null;
   /** The step's whole result (JSON, markdown, quote check, cost), once it finished. */
   result: StepOutcome | null;
+  /**
+   * The style tile drawn from this brief (APP-42 step 3), admin only. Kept while a newer brief is written, so the view can
+   * show it marked stale. Missing on rows saved before the tile existed.
+   */
+  tile?: SavedTile | null;
 };
+
+/** A style tile: the page, the tokens it was drawn with, the seven checks, and what it was made from. */
+export type SavedTile = {
+  v: 1;
+  /** tileFingerprint of the design brief and the approved brief it was drawn from, with the template version. */
+  fingerprint: string;
+  renderedAt: string;
+  html: string | null;
+  tokens: DesignTokens | null;
+  checks: TileChecks | null;
+  /** Why the tile could not be drawn, in a few words. A failed tile never fails the design brief. */
+  error: string | null;
+};
+
+/** What a tile is made from: the design brief, the approved brief and the template. Either changing makes a tile stale. */
+export function tileFingerprint(json: DesignBrief, brief: Record<string, unknown>): string {
+  return createHash("sha256").update(JSON.stringify({ t: TILE_TEMPLATE_VERSION, json, brief })).digest("hex").slice(0, 32);
+}
+
+/** The design brief a tile can be drawn from: one that finished and passed. */
+export const tileSource = (saved: SavedDesignBrief | null): DesignBrief | null =>
+  saved && saved.status === "done" && saved.result && saved.result.skipped === null && saved.result.passed && saved.result.json ? saved.result.json : null;
+
+/** Draws the tile. Pure: never throws; a failure is kept as the tile's error. */
+export function drawTile(json: DesignBrief, brief: Record<string, unknown>, at: Date): SavedTile {
+  const base = { v: 1 as const, fingerprint: tileFingerprint(json, brief), renderedAt: at.toISOString() };
+  try {
+    const tokens = designTokens(json, brief);
+    const html = renderTile(json, brief, tokens);
+    return { ...base, html, tokens, checks: checkTile(html, tileSources(json, brief), tokens, briefFooterLabels(brief)), error: null };
+  } catch (e) {
+    return { ...base, html: null, tokens: null, checks: null, error: (e instanceof Error ? e.message : String(e)).slice(0, 200) };
+  }
+}
+
+/** The saved row with a tile drawn from its brief, when it has one that passed. Otherwise the row as it was. */
+export function withTile(saved: SavedDesignBrief, brief: Record<string, unknown>, at: Date): SavedDesignBrief {
+  const json = tileSource(saved);
+  return json ? { ...saved, tile: drawTile(json, brief, at) } : saved;
+}
+
+export type TileState =
+  | { kind: "none"; why: string }
+  | { kind: "tile"; tile: SavedTile; stale: boolean; why: string | null };
+
+/**
+ * What the Tiles view shows for a project: its tile, and whether it is stale. Stale when the design brief or the approved
+ * brief changed since it was drawn, when a newer design brief is being written or failed, or when the template changed.
+ */
+export function tileState(saved: SavedDesignBrief | null, brief: Record<string, unknown> | null | undefined): TileState {
+  const json = tileSource(saved);
+  const tile = saved?.tile ?? null;
+  if (!tile) {
+    if (!saved) return { kind: "none", why: "No design brief yet. It is written when the owner approves the brief in Scout." };
+    if (saved.status === "writing") return { kind: "none", why: "The design brief is being written." };
+    if (!json) return { kind: "none", why: `The design brief did not pass (${saved.reason ?? "no reason saved"}), so there is nothing to draw.` };
+    return { kind: "none", why: "No tile for this design brief yet (it was saved before tiles existed, or at build start). Render it to see the tile." };
+  }
+  if (!json) return { kind: "tile", tile, stale: true, why: saved?.status === "writing" ? "A newer design brief is being written." : "The newest design brief did not pass." };
+  if (!brief || tileFingerprint(json, brief) !== tile.fingerprint) return { kind: "tile", tile, stale: true, why: "The brief or the design brief changed since this tile was drawn." };
+  return { kind: "tile", tile, stale: false, why: null };
+}
+
+/** Draws the tile again for a saved brief that passed, and saves it (compare-and-set). False when nothing could be drawn or another write landed first. */
+export async function renderTileFor(db: Db, projectId: string, brief: Record<string, unknown>, now = new Date()): Promise<{ ok: boolean; why: string | null }> {
+  const saved = await readDesignBrief(db, projectId);
+  const json = tileSource(saved);
+  if (!saved || !json) return { ok: false, why: "There is no design brief that passed to draw from." };
+  const next: SavedDesignBrief = { ...saved, token: newToken(), tile: drawTile(json, brief, now) };
+  const landed = await writeDesignBriefIf(db, projectId, saved.token, next);
+  return landed ? { ok: true, why: null } : { ok: false, why: "The design brief changed while drawing. Try again." };
+}
 
 export const newToken = () => randomBytes(8).toString("hex");
 
@@ -152,7 +232,8 @@ export async function designBriefAtReview(opts: {
     if (cur.fingerprint !== first.fingerprint) return { ran: false, why: "the brief changed again; the newer request writes it" };
     const saved = await readDesignBrief(db, projectId);
     if (!shouldStartAtReview(saved, cur, now().getTime())) return { ran: false, why: `already ${saved?.status} for this chat and brief` };
-    const next: SavedDesignBrief = { v: 1, fingerprint: cur.fingerprint, upToMsg: cur.upToMsg, status: "writing", token: newToken(), by: "review", startedAt: now().toISOString(), finishedAt: null, reason: null, result: null };
+    // The last tile stays on the row while the new brief is written, so the Tiles view can show it marked stale.
+    const next: SavedDesignBrief = { v: 1, fingerprint: cur.fingerprint, upToMsg: cur.upToMsg, status: "writing", token: newToken(), by: "review", startedAt: now().toISOString(), finishedAt: null, reason: null, result: null, tile: saved?.tile ?? null };
     if (!(await writeDesignBriefIf(db, projectId, saved?.token ?? null, next))) return { ran: false, why: "another request is writing it" };
     claim = next;
 
@@ -160,7 +241,8 @@ export async function designBriefAtReview(opts: {
       msgs: cur.msgs, brief: cur.brief, env, call: opts.call,
       limitMs: opts.limitMs ?? REVIEW_LIMIT_MS, timeoutNote: "so it will be written at build start instead",
     });
-    const done = finished(claim, result, now());
+    // A brief that passed gets its style tile drawn at once (code only, no model call). A failed draw is kept on the tile.
+    const done = withTile(finished(claim, result, now()), cur.brief, now());
     await writeDesignBriefIf(db, projectId, claim.token, done);
     const cost = result.skipped === null ? result.costUsd : 0;
     if (result.skipped === null && cost > 0) {
