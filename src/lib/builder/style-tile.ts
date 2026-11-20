@@ -17,7 +17,7 @@ import { contrast, type DesignTokens } from "./design-tokens";
 import { tileIcon } from "./tile-icons";
 
 /** Raised when the template changes in a way that should mark saved tiles stale. */
-export const TILE_TEMPLATE_VERSION = 4;
+export const TILE_TEMPLATE_VERSION = 5;
 /** The large feature card is used only when its title and line together have at least this many characters. */
 export const BIG_CARD_MIN = 100;
 
@@ -148,7 +148,7 @@ export function rootCss(t: DesignTokens): string {
     "sp-section": px(t.space.section[0]), "sp-section-phone": px(t.space.section[1]),
     gutter: px(t.space.gutter[0]), "gutter-phone": px(t.space.gutter[1]),
     pad: px(t.space.cardPad[0]), "pad-phone": px(t.space.cardPad[1]), gap: px(t.space.gap), "gap-small": px(8), "gap-tiny": px(4),
-    "content-max": px(t.space.contentMax), "text-max": px(640), "heading-gap": px(t.space.headingGap), "hero-gap": px(t.space.heroGap),
+    "content-max": px(t.space.contentMax), "grid-2-max": px(740), "text-max": px(640), "heading-gap": px(t.space.headingGap), "hero-gap": px(t.space.heroGap),
     "btn-h": px(t.space.buttonHeight), "btn-pad": px(22), line: px(1), "line-strong": px(2), "card-min": px(240), "sample-w": px(300),
     "stack-h": px(320), "stack-h-phone": px(280), "stack-shift": px(28), "band-pad": px(10), "icon": px(40), "dot-mark": px(8), "icon-tile": iconTile, "icon-stroke": iconStroke, "icon-glyph": px(22), "icon-big": px(56), "icon-glyph-big": px(30), "mini-w": px(150), "mini-h": px(96), "mini-bar": px(8), "mini-chip-w": px(40), "mini-chip-h": px(14),
     "r-card": px(t.radius.card), "r-closing": px(t.radius.closing), "r-small": px(t.radius.small), "r-round": px(t.radius.round),
@@ -212,7 +212,7 @@ section.s{padding:var(--sp-now) 0 0}
 .grid{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--card-min)),1fr))}
 .card{padding:var(--pad-now);border-radius:var(--r-card);background:var(--surface);border:var(--line) solid var(--border);box-shadow:inset 0 var(--line) 0 var(--edge)}
 .grid.bento{grid-template-columns:repeat(4,1fr)}
-.grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));max-width:var(--grid-2-max);margin:0 auto}
 .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .card.big{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(135deg,var(--tint-900),var(--surface));border-color:var(--tint-700)}
 .card.big h3{font-size:var(--fs-section-now);font-family:var(--font-heading);font-weight:var(--w-strong);letter-spacing:var(--tr-section);line-height:var(--lh-section)}
@@ -268,7 +268,8 @@ nav a:not(.btn){display:none}
 
 /**
  * Columns for a grid of equal cards: never four in one row (RP, 20 November). Four make a 2x2; two and three sit side by
- * side; five or more run three to a row. A phone always shows one column.
+ * side; five or more run three to a row. A phone always shows one column. A two-column grid is narrower (at most 740 px,
+ * centred), so a 2x2 of short cards does not stretch across the page.
  */
 export const cardColumns = (n: number) => (n <= 1 ? 1 : n === 2 || n === 4 ? 2 : 3);
 

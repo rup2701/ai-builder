@@ -175,6 +175,8 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   assert.match(html, /<div class="numeral" data-ordinal[^>]*>1<\/div><h3>Choose your pass/, "How it works keeps its numerals");
   assert.doesNotMatch(html, /class="card big"/, "GWins' first card has one short line, so every card is the same size");
   assert.match(html, /<div class="grid cols-2"><div class="card">/, "four equal cards make a 2x2, never one row");
+  assert.match(cssOf(parseHtml(html)), /\.grid\.cols-2\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);max-width:var\(--grid-2-max\);margin:0 auto\}/);
+  assert.match(html, /--grid-2-max:740px/, "the 2x2 is at most 740 px wide, centred");
   const { cardColumns } = await import("../src/lib/builder/style-tile");
   assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map(cardColumns), [1, 2, 3, 2, 3, 3, 3]);
   const long = clone(BRIEF);
