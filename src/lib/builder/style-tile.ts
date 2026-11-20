@@ -13,10 +13,11 @@
  * Pure: no model, no database, no network. The checks on the result are in tile-checks.ts.
  */
 import { sensitiveVertical, type DesignBrief } from "./design-brief";
-import type { DesignTokens } from "./design-tokens";
+import { contrast, type DesignTokens } from "./design-tokens";
+import { tileIcon } from "./tile-icons";
 
 /** Raised when the template changes in a way that should mark saved tiles stale. */
-export const TILE_TEMPLATE_VERSION = 2;
+export const TILE_TEMPLATE_VERSION = 3;
 /** The large feature card is used only when its title and line together have at least this many characters. */
 export const BIG_CARD_MIN = 100;
 
@@ -125,6 +126,10 @@ export function rootCss(t: DesignTokens): string {
   const c = t.color;
   const font = (f: string | null) => (f ? `"${f}", ui-sans-serif, system-ui, sans-serif` : "inherit");
   const px = (n: number) => `${n}px`;
+  // Feature icons sit on a small tile (a tint in light mode, the 900 step in dark mode), stroked in the accent where it
+  // reaches 3:1 on that tile, otherwise the 700 step (look.md, Icons).
+  const iconTile = t.mode === "dark" ? c.tint900 : c.tint100;
+  const iconStroke = contrast(c.accent, iconTile) >= 3 ? c.accent : c.tint700;
   const vars: Record<string, string> = {
     bg: c.background, surface: c.surface, border: c.border, text: c.text, muted: c.muted,
     inverse: c.inverse, "on-inverse": c.onInverse, accent: c.accent, "on-accent": c.onAccent, "accent-text": c.accentText,
@@ -145,7 +150,7 @@ export function rootCss(t: DesignTokens): string {
     pad: px(t.space.cardPad[0]), "pad-phone": px(t.space.cardPad[1]), gap: px(t.space.gap), "gap-small": px(8), "gap-tiny": px(4),
     "content-max": px(t.space.contentMax), "text-max": px(640), "heading-gap": px(t.space.headingGap), "hero-gap": px(t.space.heroGap),
     "btn-h": px(t.space.buttonHeight), "btn-pad": px(22), line: px(1), "line-strong": px(2), "card-min": px(240), "sample-w": px(300),
-    "stack-h": px(320), "stack-h-phone": px(280), "stack-shift": px(28), "band-pad": px(10), "icon": px(40), "dot-mark": px(8), "fs-card-numeral": px(32), "mini-w": px(150), "mini-h": px(96), "mini-bar": px(8), "mini-chip-w": px(40), "mini-chip-h": px(14),
+    "stack-h": px(320), "stack-h-phone": px(280), "stack-shift": px(28), "band-pad": px(10), "icon": px(40), "dot-mark": px(8), "icon-tile": iconTile, "icon-stroke": iconStroke, "icon-glyph": px(22), "icon-big": px(56), "icon-glyph-big": px(30), "mini-w": px(150), "mini-h": px(96), "mini-bar": px(8), "mini-chip-w": px(40), "mini-chip-h": px(14),
     "r-card": px(t.radius.card), "r-closing": px(t.radius.closing), "r-small": px(t.radius.small), "r-round": px(t.radius.round),
     "dot-grid": px(t.depth.dotGrid), "dot-size": px(t.depth.dotSize),
     "glow-x": `${t.depth.glowAt[0]}%`, "glow-y": `${t.depth.glowAt[1]}%`, "glow-w": `${t.depth.glowSize[0]}%`, "glow-h": `${t.depth.glowSize[1]}%`,
@@ -210,12 +215,13 @@ section.s{padding:var(--sp-now) 0 0}
 .card.big{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(135deg,var(--tint-900),var(--surface));border-color:var(--tint-700)}
 .card.big h3{font-size:var(--fs-section-now);font-family:var(--font-heading);font-weight:var(--w-strong);letter-spacing:var(--tr-section);line-height:var(--lh-section)}
 .card.big p{font-size:var(--fs-body)}
-.card.big .card-numeral{font-size:var(--fs-numeral-now)}
+.card.big .card-icon{width:var(--icon-big);height:var(--icon-big)}
+.card.big .card-icon svg{width:var(--icon-glyph-big);height:var(--icon-glyph-big)}
 .grid.bento .card.wide{grid-column:span 2}
 .card h3,.plan h3{margin:0 0 var(--gap-small);font-size:var(--fs-card-title);font-weight:var(--w-title)}
 .card p,.plan li{margin:0;color:var(--muted);font-size:var(--fs-small)}
-.card-numeral{display:block;margin-bottom:var(--gap);font-family:var(--font-heading);font-size:var(--fs-card-numeral);line-height:1;color:var(--accent-text);font-weight:var(--w-strong)}
-.card-numeral[data-signature="oversized-numerals"]{font-weight:var(--w-numeral)}
+.card-icon{display:inline-flex;align-items:center;justify-content:center;width:var(--icon);height:var(--icon);margin-bottom:var(--gap);border-radius:var(--r-small);background:var(--icon-tile);color:var(--icon-stroke)}
+.card-icon svg{width:var(--icon-glyph);height:var(--icon-glyph)}
 .steps{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--card-min)),1fr))}
 .step{border-top:var(--line-strong) solid var(--accent);padding-top:var(--gap)}
 .step h3{margin:var(--gap-small) 0;font-size:var(--fs-card-title);font-weight:var(--w-strong)}
@@ -301,12 +307,12 @@ function section(type: string, b: Rec, db: DesignBrief, t: DesignTokens, brief: 
       const items = arr(b.items);
       // The bento: the first card is the large one (two columns, two rows on a grid of four) only when it has enough to say
       // to fill it (BIG_CARD_MIN characters); otherwise every card is the same size. Small cards widen so the rows beside the
-      // large one close (three items: two wide; four: the last wide; five: four small). Each card opens with its numeral,
-      // as look.md asks of benefit cards; there is no icon set on the tile.
+      // large one close (three items: two wide; four: the last wide; five: four small). Each card opens with the icon the brief
+      // names (tile-icons.ts); numerals are for How it works only (RP, 20 November).
       const first = items[0] ? `${str(items[0].title)} ${str(items[0].text)}` : "";
       const bento = type === "benefits_bento" && items.length >= 3 && items.length <= 5 && first.length >= BIG_CARD_MIN;
       const cls = (i: number) => (bento && i === 0 ? " big" : bento && ((items.length === 3 && i > 0) || (items.length === 4 && i === 3)) ? " wide" : "");
-      const cards = items.map((it, i) => `<div class="card${cls(i)}"><span class="card-numeral" data-ordinal${sig}>${String(i + 1).padStart(2, "0")}</span><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
+      const cards = items.map((it, i) => `<div class="card${cls(i)}"><span class="card-icon">${tileIcon(it.icon)}</span><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
       return `<section class="s" id="${type}"><div class="wrap">${sectionHead(type, heading)}<div class="grid${bento ? " bento" : ""}">${cards}</div></div></section>`;
     }
     case "how_it_works": {

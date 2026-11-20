@@ -135,6 +135,22 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   ok("the phone layout is a container query on the tile");
 }
 
+// 10. Icons: the brief's names, a keyword match for others, a spark for the rest; outline only, colored by the page.
+{
+  const { TILE_ICONS, tileIcon } = await import("../src/lib/builder/tile-icons");
+  assert.equal(tileIcon("trophy"), TILE_ICONS.trophy);
+  assert.equal(tileIcon("refresh-off"), TILE_ICONS["refresh-off"]);
+  assert.equal(tileIcon("calendar-days"), TILE_ICONS.calendar);
+  assert.equal(tileIcon("credit-card"), TILE_ICONS.receipt);
+  assert.equal(tileIcon("something-new"), TILE_ICONS.spark);
+  assert.equal(tileIcon(undefined), TILE_ICONS.spark);
+  for (const [k, v] of Object.entries(TILE_ICONS)) {
+    assert.match(v, /stroke="currentColor"/, k);
+    assert.doesNotMatch(v, /#[0-9a-f]{3,8}|fill="(?!none)/i, `${k} has no color of its own and no fill`);
+  }
+  ok("icons come from the brief's names, outline only, colored by the page");
+}
+
 // 8. The footer shows the brief's links only, without About, Docs, Changelog and Security.
 {
   const { html } = draw();
@@ -149,11 +165,14 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   ok("the footer shows the brief's links only, without the pack's About, Docs, Changelog and Security");
 }
 
-// 9. Feature cards open with a numeral, not an empty icon; the large card is used only when it has enough to say.
+// 9. Feature cards open with the brief's icon, and numerals stay in How it works; the large card is used only when it has enough to say.
 {
   const { html } = draw();
   assert.doesNotMatch(html, /class="icon"/);
-  assert.match(html, /<span class="card-numeral" data-ordinal data-signature="oversized-numerals">01<\/span><h3>Every pick, every sport/);
+  assert.match(html, /<span class="card-icon"><svg [^>]*>.*?<\/svg><\/span><h3>Every pick, every sport/, "features open with an icon");
+  assert.doesNotMatch(html, /card-numeral|>0[1-4]</, "numerals only in How it works");
+  assert.equal(html.match(/class="card-icon"/g)?.length, 4);
+  assert.match(html, /<div class="numeral" data-ordinal[^>]*>1<\/div><h3>Choose your pass/, "How it works keeps its numerals");
   assert.doesNotMatch(html, /class="card big"/, "GWins' first card has one short line, so every card is the same size");
   const long = clone(BRIEF);
   const bento = long.blocks.find((b: any) => b.type === "benefits_bento");
@@ -164,7 +183,7 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   assert.deepEqual(failing(big.result), []);
   // The closing block repeats the Stack as three small cards with a chip and two bars each, and no words.
   assert.equal(html.match(/<div class="mini"><b><\/b><i><\/i><i><\/i><\/div>/g)?.length, 3);
-  ok("feature cards carry numerals, the large card needs enough to say, and the closing motif is three small cards");
+  ok("feature cards carry icons, numerals stay in How it works, the large card needs enough to say, the closing motif is three small cards");
 }
 
 console.log(`\n${n} passed`);
