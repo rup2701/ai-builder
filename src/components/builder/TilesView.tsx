@@ -5,6 +5,27 @@ import type { TileChecks } from "@/lib/builder/tile-checks";
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 const WIDTH = { desktop: 1280, phone: 390 } as const;
+const DEVICE_LABEL = { desktop: "Desktop", phone: "Phone" } as const;
+const deviceIcon = (body: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {body}
+  </svg>
+);
+/** The width toggle shows icons only; the name and width are in the button's label and tooltip. */
+const DEVICE_ICON = {
+  desktop: deviceIcon(
+    <>
+      <rect x="2" y="4" width="20" height="13" rx="2" />
+      <path d="M8 21h8M12 17v4" />
+    </>,
+  ),
+  phone: deviceIcon(
+    <>
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <path d="M11 18h2" />
+    </>,
+  ),
+};
 /** The pages of the design. One for now; more pages are added here as the tile learns to draw them. */
 const PAGES = [{ id: "home", label: "Home page" }] as const;
 
@@ -100,9 +121,12 @@ export default function TilesView({ projectId }: { projectId: string }) {
                 type="button"
                 aria-pressed={device === d}
                 onClick={() => setDevice(d)}
-                className={`rounded-full px-3 py-1 text-xs capitalize ${focusRing} ${device === d ? "bg-white shadow-sm" : "text-foreground/72"}`}
+                aria-label={`${DEVICE_LABEL[d]}, ${WIDTH[d]} pixels wide`}
+                title={`${DEVICE_LABEL[d]} (${WIDTH[d]} px)`}
+                className={`inline-flex items-center justify-center rounded-full px-3 py-1.5 ${focusRing} ${device === d ? "bg-white text-foreground shadow-sm" : "text-foreground/72 hover:text-foreground"}`}
+                data-testid={`device-${d}`}
               >
-                {d}
+                {DEVICE_ICON[d]}
               </button>
             ))}
           </div>
