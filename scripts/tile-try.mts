@@ -1,4 +1,4 @@
-// Draws the style tile (APP-42 step 3) for a project's saved design brief, runs the six checks, measures the page at
+// Draws the style tile (APP-42 step 3) for a project's saved design brief, runs the seven checks, measures the page at
 // 390 px in a real browser and takes screenshots at 1280 and 390 px. Nothing is saved to the database: the session is
 // read-only, and the files go to the out folder.
 //

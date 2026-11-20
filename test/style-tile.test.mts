@@ -79,7 +79,7 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   assert.doesNotMatch(html, /class="plan highlight"/, "but the owner never asked, so plans are equal");
   const asked = clone(DB);
   asked.plans[1] = { ...asked.plans[1], highlight: true, highlight_quote: { quote: "monthly is the one to push", msg: 11 } };
-  assert.match(draw(asked).html, /class="plan highlight"><h3>Monthly/);
+  assert.match(draw(asked).html, /class="plan highlight" data-plan><h3>Monthly/);
   assert.ok(testimonialsOff(DB, BRIEF), "a betting site leaves testimonials out");
   assert.doesNotMatch(html, /Example Name|Placeholder quote|What members say/);
   assert.ok(html.includes("[Age and responsible-gambling notice: owner to supply]"));
@@ -149,6 +149,28 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
     assert.doesNotMatch(v, /#[0-9a-f]{3,8}|fill="(?!none)/i, `${k} has no color of its own and no fill`);
   }
   ok("icons come from the brief's names, outline only, colored by the page");
+}
+
+// 11. Plans in the pack's standard shape (no price label, no validity days, as GunnerWins): the owner's quoted price and
+// length from the design brief, or a marked placeholder; check 7 fails on a blank.
+{
+  const standard = clone(BRIEF);
+  for (const p of standard.blocks.find((b: any) => b.type === "pricing").plans) {
+    delete p.price_label;
+    delete p.period_label;
+    delete p.validity_days;
+  }
+  const a = draw(DB, standard);
+  assert.deepEqual(failing(a.result), []);
+  assert.match(a.html, /<h3>Weekly<\/h3><div><span class="numeral"[^>]*>7<\/span> <span class="unit caps">Days<\/span><\/div><div class="price" data-price>\$199<\/div>/, "the owner's quoted price and length");
+  const noQuote = clone(DB);
+  noQuote.plans = [];
+  const b = draw(noQuote, standard);
+  assert.deepEqual(failing(b.result), []);
+  assert.equal(b.html.match(/data-price>\[Price: owner to supply\]</g)?.length, 2, "never a guessed currency, never a blank");
+  const { t, html } = draw();
+  assert.deepEqual(failing(checkTile(html.replace(/data-price>\$199</, "data-price><"), tileSources(DB, BRIEF), t, briefFooterLabels(BRIEF))), [7]);
+  ok("plans without price labels show the owner's quoted price, or a placeholder, and check 7 fails on a blank");
 }
 
 // 8. The footer shows the brief's links only, without About, Docs, Changelog and Security.

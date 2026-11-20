@@ -17,7 +17,7 @@ import { contrast, type DesignTokens } from "./design-tokens";
 import { tileIcon } from "./tile-icons";
 
 /** Raised when the template changes in a way that should mark saved tiles stale. */
-export const TILE_TEMPLATE_VERSION = 5;
+export const TILE_TEMPLATE_VERSION = 6;
 /** The large feature card is used only when its title and line together have at least this many characters. */
 export const BIG_CARD_MIN = 100;
 
@@ -51,6 +51,9 @@ export function briefFooterLabels(brief: Rec): string[] {
 
 /** The footer links the tile shows: the brief's, in its order, without the hidden ones and without repeats. */
 export const footerLinks = (brief: Rec) => [...new Set(briefFooterLabels(brief).filter((l) => !hiddenFooter(l)))];
+
+/** A plan with no price the tile can show as text. */
+export const PRICE_PLACEHOLDER = "[Price: owner to supply]";
 
 /** A placeholder: one short label in brackets, for something only the owner can supply. */
 export const PLACEHOLDER = /^\[[^\]]+: owner to supply[^\]]*\]$/;
@@ -329,16 +332,25 @@ function section(type: string, b: Rec, db: DesignBrief, t: DesignTokens, brief: 
       return `<section class="s" id="how_it_works"><div class="wrap">${sectionHead(type, heading)}<div class="steps">${steps}</div></div></section>`;
     }
     case "pricing": {
+      // Price and length: the brief's labels when Scout wrote them (one-time passes), otherwise the owner's quoted price
+      // and length from the design brief's plan of the same name. The standard plan shape (monthly_price as a number)
+      // has no text to show, and a currency is never guessed; with neither, the card shows a marked placeholder.
       const plans = arr(b.plans).map((p) => {
         const name = str(p.name);
-        const days = typeof p.validity_days === "number" ? String(p.validity_days) : "";
+        const quoted = db.plans.find((x) => x.name.trim().toLowerCase() === name.toLowerCase());
+        let days = typeof p.validity_days === "number" ? String(p.validity_days) : "";
         const period = str(p.period_label);
-        const unit = days && period.startsWith(days) ? period.slice(days.length).trim() : "";
+        let unit = days && period.startsWith(days) ? period.slice(days.length).trim() : "";
+        if (!days || !unit) {
+          const m = /^(\d{1,3})\s+([a-z]+)$/i.exec(str(quoted?.length));
+          if (m) [days, unit] = [m[1], m[2]];
+        }
         const big = days && unit ? `<div><span class="numeral"${sig}>${esc(days)}</span> <span class="unit caps">${esc(unit)}</span></div>` : "";
+        const price = str(p.price_label) || str(quoted?.price) || PRICE_PLACEHOLDER;
         const features = (Array.isArray(p.features) ? p.features : []).map((f) => `<li>${esc(String(f))}</li>`).join("");
         const label = str(p.button) || str((blockOf(brief, "hero")?.cta as Rec | undefined)?.label);
         const hi = planHighlighted(db, name);
-        return `<div class="plan${hi ? " highlight" : ""}"><h3>${esc(name)}</h3>${big}<div class="price">${esc(str(p.price_label))}</div><ul>${features}</ul>${label ? `<a class="btn caps${hi ? "" : " ghost"}" href="#">${esc(label)}</a>` : ""}</div>`;
+        return `<div class="plan${hi ? " highlight" : ""}" data-plan><h3>${esc(name)}</h3>${big}<div class="price" data-price>${esc(price)}</div><ul>${features}</ul>${label ? `<a class="btn caps${hi ? "" : " ghost"}" href="#">${esc(label)}</a>` : ""}</div>`;
       }).join("");
       return `<section class="s" id="pricing"><div class="wrap">${sectionHead(type, heading)}<div class="grid">${plans}</div></div></section>`;
     }

@@ -11,6 +11,7 @@
  *      wrap, a phone layout exists); the measurement in a real browser at 390 px is in scripts/tile-try.mts.
  *   6. Every footer link is one of the brief's footer links, and none is a link the tile leaves out (About, Docs,
  *      Changelog, Security, from the pack's default footer).
+ *   7. Every plan card shows its name and a price (the price as text, or a marked placeholder), never a blank.
  *
  * Pure: no browser, no network.
  */
@@ -18,7 +19,7 @@ import { DIRECTION } from "./design-brief";
 import { hexToOklch, hueDistance, neutralColors, TONE_DISPLAY, type DesignTokens } from "./design-tokens";
 import { CAPTION, HIDDEN_FOOTER_LINKS, PLACEHOLDER, SAMPLE, TEMPLATE_WORDS } from "./style-tile";
 
-export type TileCheck = { id: 1 | 2 | 3 | 4 | 5 | 6; name: string; ok: boolean; detail: string };
+export type TileCheck = { id: 1 | 2 | 3 | 4 | 5 | 6 | 7; name: string; ok: boolean; detail: string };
 export type TileChecks = { ok: boolean; checks: TileCheck[] };
 
 // ---- a small HTML reader, enough for the page the renderer writes ----
@@ -224,10 +225,24 @@ export function checkFooter(root: El, briefLabels: string[]): TileCheck {
   };
 }
 
+export function checkPlans(root: El): TileCheck {
+  const plans = els(root).filter((e) => "data-plan" in e.attrs);
+  const bad = plans
+    .map((p) => {
+      const name = els(p).find((e) => e.tag === "h3");
+      const price = els(p).find((e) => "data-price" in e.attrs);
+      const n = name ? textOf(name).trim() : "";
+      const missing = [n ? "" : "a name", price && textOf(price).trim() ? "" : "a price"].filter(Boolean);
+      return missing.length ? `${n || "a plan"} has no ${missing.join(" and no ")}` : "";
+    })
+    .filter(Boolean);
+  return { id: 7, name: "Plans show a name and a price", ok: bad.length === 0, detail: bad.length ? bad.join("; ") : plans.length ? `${plans.length} plans, each with a name and a price.` : "No pricing section." };
+}
+
 /** briefLabels: every footer link label the brief holds (briefFooterLabels in style-tile.ts). */
 export function checkTile(html: string, sources: string[], t: DesignTokens, briefLabels: string[]): TileChecks {
   const root = parseHtml(html);
   const css = cssOf(root);
-  const checks = [checkWords(root, sources), checkSamples(root, t.direction.heroKind), checkOneAccent(css, html, t), checkWeights(css, t), checkPhoneWidth(css), checkFooter(root, briefLabels)];
+  const checks = [checkWords(root, sources), checkSamples(root, t.direction.heroKind), checkOneAccent(css, html, t), checkWeights(css, t), checkPhoneWidth(css), checkFooter(root, briefLabels), checkPlans(root)];
   return { ok: checks.every((c) => c.ok), checks };
 }

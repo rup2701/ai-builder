@@ -47,7 +47,7 @@ export type SavedDesignBrief = {
   tile?: SavedTile | null;
 };
 
-/** A style tile: the page, the tokens it was drawn with, the six checks, and what it was made from. */
+/** A style tile: the page, the tokens it was drawn with, the seven checks, and what it was made from. */
 export type SavedTile = {
   v: 1;
   /** tileFingerprint of the design brief and the approved brief it was drawn from, with the template version. */
