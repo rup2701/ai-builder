@@ -14,7 +14,7 @@ import { runDesignBriefStep, designBriefInput, type StepOutcome } from "@/lib/ag
 import type { ToolCall } from "@/lib/agents/design-brief-writer";
 import { designBriefFingerprint, type DesignBrief, type InterviewMessage } from "@/lib/builder/design-brief";
 import { designTokens, type DesignTokens } from "@/lib/builder/design-tokens";
-import { renderTile, tileSources, TILE_TEMPLATE_VERSION } from "@/lib/builder/style-tile";
+import { briefFooterLabels, renderTile, tileSources, TILE_TEMPLATE_VERSION } from "@/lib/builder/style-tile";
 import { checkTile, type TileChecks } from "@/lib/builder/tile-checks";
 
 /** The part of pg's Pool used here, so tests can pass a stand-in. */
@@ -47,7 +47,7 @@ export type SavedDesignBrief = {
   tile?: SavedTile | null;
 };
 
-/** A style tile: the page, the tokens it was drawn with, the five checks, and what it was made from. */
+/** A style tile: the page, the tokens it was drawn with, the six checks, and what it was made from. */
 export type SavedTile = {
   v: 1;
   /** tileFingerprint of the design brief and the approved brief it was drawn from, with the template version. */
@@ -75,7 +75,7 @@ export function drawTile(json: DesignBrief, brief: Record<string, unknown>, at: 
   try {
     const tokens = designTokens(json, brief);
     const html = renderTile(json, brief, tokens);
-    return { ...base, html, tokens, checks: checkTile(html, tileSources(json, brief), tokens), error: null };
+    return { ...base, html, tokens, checks: checkTile(html, tileSources(json, brief), tokens, briefFooterLabels(brief)), error: null };
   } catch (e) {
     return { ...base, html: null, tokens: null, checks: null, error: (e instanceof Error ? e.message : String(e)).slice(0, 200) };
   }

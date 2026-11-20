@@ -5,11 +5,13 @@ import type { TileChecks } from "@/lib/builder/tile-checks";
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground";
 const WIDTH = { desktop: 1280, phone: 390 } as const;
+/** The pages of the design. One for now; more pages are added here as the tile learns to draw them. */
+const PAGES = [{ id: "home", label: "Home page" }] as const;
 
 type Got = { tile: { html: string | null; checks: TileChecks | null; renderedAt: string; error: string | null } | null; stale?: boolean; why: string | null };
 
 /**
- * The style tile for a project (APP-43, admin only): drawn in a frame that really is 1280 or 390 pixels wide, so the
+ * The visual design for a project (the style tile, APP-43, admin only), one page at a time: drawn in a frame that really is 1280 or 390 pixels wide, so the
  * page's own container queries apply. Desktop is scaled down to fit the pane. The frame runs no scripts.
  */
 export default function TilesView({ projectId }: { projectId: string }) {
@@ -17,6 +19,7 @@ export default function TilesView({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<keyof typeof WIDTH>("desktop");
   const [rendering, setRendering] = useState(false);
+  const [page, setPage] = useState<(typeof PAGES)[number]["id"]>("home");
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -113,12 +116,28 @@ export default function TilesView({ projectId }: { projectId: string }) {
         </details>
       )}
 
-      <div ref={box} className="relative min-h-0 flex-1 overflow-hidden bg-foreground/[0.04]">
+      <div role="tablist" aria-label="Pages" className="flex gap-1 border-b border-foreground/10 px-4 pt-2">
+        {PAGES.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={page === p.id}
+            onClick={() => setPage(p.id)}
+            className={`-mb-px border-b-2 px-2 pb-2 text-sm ${focusRing} ${page === p.id ? "border-foreground text-foreground" : "border-transparent text-foreground/65 hover:text-foreground"}`}
+            data-testid={`page-${p.id}`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div ref={box} role="tabpanel" aria-label={PAGES.find((p) => p.id === page)?.label} className="relative min-h-0 flex-1 overflow-hidden bg-foreground/[0.04]">
         {tile?.html ? (
           <div className={device === "phone" ? "flex h-full justify-center pt-3" : "h-full"}>
             <div style={{ width: width * scale, height: frameH * scale }} className={device === "phone" ? "overflow-hidden rounded-t-3xl border border-b-0 border-foreground/15 shadow-sm" : ""}>
               <iframe
-                title={`Style tile, ${device}`}
+                title={`Visual design, ${PAGES.find((p) => p.id === page)?.label}, ${device}`}
                 srcDoc={tile.html}
                 sandbox=""
                 data-testid="tile-frame"

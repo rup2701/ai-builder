@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { DesignBrief } from "../src/lib/builder/design-brief";
 import { contrast, designTokens, hexToOklch, hueDistance, neutralHueFor, NEAR_BLACK, parseHex, WHITE } from "../src/lib/builder/design-tokens";
-import { CAPTION, INDICATIVE, renderTile, testimonialsOff, tileSources } from "../src/lib/builder/style-tile";
+import { BIG_CARD_MIN, briefFooterLabels, CAPTION, footerLinks, HIDDEN_FOOTER_LINKS, INDICATIVE, renderTile, testimonialsOff, tileSources } from "../src/lib/builder/style-tile";
 import { checkTile, cssOf, parseCss, parseHtml } from "../src/lib/builder/tile-checks";
 
 const G = JSON.parse(readFileSync(new URL("./fixtures/gwins-design-brief.json", import.meta.url), "utf8")) as { brief: Record<string, any>; savedDesignBrief: DesignBrief };
@@ -22,7 +22,7 @@ const close = (a: string, b: string) => {
 const draw = (db: DesignBrief = DB, brief: Record<string, unknown> = BRIEF) => {
   const t = designTokens(db, brief);
   const html = renderTile(db, brief, t);
-  return { t, html, result: checkTile(html, tileSources(db, brief), t) };
+  return { t, html, result: checkTile(html, tileSources(db, brief), t, briefFooterLabels(brief)) };
 };
 const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) => !c.ok).map((c) => c.id);
 
@@ -55,16 +55,16 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   ok("fonts and weights from the pairing name, radius from the tone");
 }
 
-// 3. The GWins tile passes all five checks, and every value in the rules is a token.
+// 3. The GWins tile passes all six checks, and every value in the rules is a token.
 {
   const { html, result } = draw();
   assert.deepEqual(failing(result), [], JSON.stringify(result.checks.filter((c) => !c.ok)));
   const css = cssOf(parseHtml(html));
-  const rules = css.replace(/:root\{[^}]*\}/, "").replace(/@container[^{]*\{/, "");
-  assert.doesNotMatch(rules, /#[0-9a-f]{3,8}\b/i, "no colour outside :root");
+  const rules = css.replace(/:root\{[^}]*\}/, "").replace(/@container[^{]*\{/g, "");
+  assert.doesNotMatch(rules, /#[0-9a-f]{3,8}\b/i, "no color outside :root");
   assert.doesNotMatch(rules, /\d+px/, "no length outside :root");
   assert.doesNotMatch(html.replace(/<style>[\s\S]*?<\/style>/, ""), /style="/, "no inline styles in the markup");
-  ok("GWins: all five checks pass, and the rules use tokens only");
+  ok("GWins: all six checks pass, and the rules use tokens only");
 }
 
 // 4. What the page says: the indicative band, three marked samples with the design brief's fields, equal plans.
@@ -90,7 +90,7 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
 {
   const { t, html } = draw();
   const src = tileSources(DB, BRIEF);
-  const ids = (h: string) => failing(checkTile(h, src, t));
+  const ids = (h: string) => failing(checkTile(h, src, t, briefFooterLabels(BRIEF)));
   assert.deepEqual(ids(html.replace("</h1>", " Guaranteed winners.</h1>")), [1], "an invented line");
   assert.deepEqual(ids(html.replace(/<span class="chip caps" data-sample>Sample<\/span>/, "")), [2], "a sample card without its mark");
   assert.deepEqual(ids(html.replace(CAPTION, "")), [2], "no caption");
@@ -98,7 +98,9 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   assert.deepEqual(ids(html.replace(".logo{font-family:var(--font-heading);font-weight:var(--w-strong)", ".logo{font-family:var(--font-heading);font-weight:var(--w-headline)")), [4], "the logo at 800");
   assert.deepEqual(ids(html.replace("--sample-w:300px", "--sample-w:520px").replace("max-width:100%;padding:var(--gap)", "padding:var(--gap)")), [5], "a card wider than a phone");
   assert.deepEqual(ids(html.replace(".hero.split .wrap{grid-template-columns:1fr}", "")), [5], "a split hero that never stacks");
-  ok("each of the five checks fails on its own fault");
+  assert.deepEqual(ids(html.replace('<span class="links">', '<span class="links"><a class="caps" href="#" data-footer-link>Blog</a>')), [1, 6], "a footer link the brief does not have");
+  assert.deepEqual(ids(html.replace('<span class="links">', '<span class="links"><a class="caps" href="#" data-footer-link>Docs</a>')), [6], "a footer link the brief has but the tile leaves out");
+  ok("each of the six checks fails on its own fault");
 }
 
 // 6. Other directions still pass: light mode, serious, a window frame, the owner's own image.
@@ -129,8 +131,40 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
 // 7. The CSS reader sees the phone layout as a container query.
 {
   const { containers } = parseCss(cssOf(parseHtml(draw().html)));
-  assert.deepEqual(containers, ["tile (max-width: 640px)"]);
+  assert.deepEqual(containers, ["tile (max-width: 640px)", "tile (max-width: 1100px)"]);
   ok("the phone layout is a container query on the tile");
+}
+
+// 8. The footer shows the brief's links only, without About, Docs, Changelog and Security.
+{
+  const { html } = draw();
+  assert.deepEqual(footerLinks(BRIEF), ["How it works", "Pricing", "FAQ", "Contact", "Privacy", "Terms", "Sign in"]);
+  for (const h of HIDDEN_FOOTER_LINKS) {
+    assert.ok(briefFooterLabels(BRIEF).includes(h), `the GWins brief lists ${h}`);
+    assert.doesNotMatch(html, new RegExp(`data-footer-link>${h}<`), `${h} is left out`);
+  }
+  const none = clone(BRIEF);
+  none.blocks = none.blocks.filter((b: any) => b.type !== "footer");
+  assert.doesNotMatch(draw(DB, none).html, /<footer>/, "no footer in the brief, no footer on the tile");
+  ok("the footer shows the brief's links only, without the pack's About, Docs, Changelog and Security");
+}
+
+// 9. Feature cards open with a numeral, not an empty icon; the large card is used only when it has enough to say.
+{
+  const { html } = draw();
+  assert.doesNotMatch(html, /class="icon"/);
+  assert.match(html, /<span class="card-numeral" data-ordinal data-signature="oversized-numerals">01<\/span><h3>Every pick, every sport/);
+  assert.doesNotMatch(html, /class="card big"/, "GWins' first card has one short line, so every card is the same size");
+  const long = clone(BRIEF);
+  const bento = long.blocks.find((b: any) => b.type === "benefits_bento");
+  bento.items[0].text = "One pass covers every sport you follow, from the first game of the season to the last, with every pick in one place.";
+  assert.ok(`${bento.items[0].title} ${bento.items[0].text}`.length >= BIG_CARD_MIN);
+  const big = draw(DB, long);
+  assert.match(big.html, /class="card big"/);
+  assert.deepEqual(failing(big.result), []);
+  // The closing block repeats the Stack as three small cards with a chip and two bars each, and no words.
+  assert.equal(html.match(/<div class="mini"><b><\/b><i><\/i><i><\/i><\/div>/g)?.length, 3);
+  ok("feature cards carry numerals, the large card needs enough to say, and the closing motif is three small cards");
 }
 
 console.log(`\n${n} passed`);

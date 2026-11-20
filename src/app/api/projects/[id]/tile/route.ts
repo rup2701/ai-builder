@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * The style tile for a project (APP-42 step 3, APP-43), admin only: anyone else gets 404, as if it did not exist.
- *   GET   the tile's page, its five checks and whether it is stale.
+ *   GET   the tile's page, its six checks and whether it is stale.
  *   POST  draws the tile again from the saved design brief and the current brief (code only, no model call).
  */
 async function load(ctx: { params: Promise<{ id: string }> }) {

@@ -166,7 +166,7 @@ await test("review draws the style tile from a brief that passed, and keeps the 
   await designBriefAtReview({ db, projectId: "p1", env, call: m.call, sleep: noWait });
   const tile = row.design_brief?.tile;
   assert.ok(tile?.html?.includes("PickPal"));
-  assert.equal(tile?.checks?.checks.length, 5);
+  assert.equal(tile?.checks?.checks.length, 6);
   assert.equal(tile?.error, null);
   // The owner changes the brief: while the new brief is written the old tile stays, and the new one replaces it after.
   row.state.site.brief = { ...BRIEF, look: { ...BRIEF.look, tone: "calm" } };

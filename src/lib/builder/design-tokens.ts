@@ -1,5 +1,5 @@
 /**
- * The design tokens (APP-42 step 3): every colour, font, weight, size, spacing and radius a showcase site starts from,
+ * The design tokens (APP-42 step 3): every color, font, weight, size, spacing and radius a showcase site starts from,
  * worked out by code from the saved design brief. The style tile is drawn from them, and (later) the build starts its
  * theme from them. The model picks none of these: the owner gave the mode, accent and tone, the design brief names the
  * pairing, motif, hero kind and signatures from the pack's closed lists, and everything else follows the pack's look rules
@@ -10,7 +10,7 @@
  */
 import { DIRECTION, type DesignBrief } from "./design-brief";
 
-// ---- colour maths (OKLCH, sRGB, WCAG contrast) ----
+// ---- color maths (OKLCH, sRGB, WCAG contrast) ----
 
 export type Oklch = { l: number; c: number; h: number };
 
@@ -28,12 +28,12 @@ export function parseHex(hex: string): { r: number; g: number; b: number; a: num
 
 const hex2 = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0").toUpperCase();
 export const rgbHex = (r: number, g: number, b: number) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
-/** A colour at an opacity, as an 8 digit hex, so every colour in the tile stays a plain hex the checks can read. */
+/** A color at an opacity, as an 8 digit hex, so every color in the tile stays a plain hex the checks can read. */
 export const withAlpha = (hex: string, alpha: number) => `${hex.slice(0, 7).toUpperCase()}${hex2(alpha)}`;
 
 export function hexToOklch(hex: string): Oklch {
   const p = parseHex(hex);
-  if (!p) throw new Error(`not a hex colour: ${hex}`);
+  if (!p) throw new Error(`not a hex color: ${hex}`);
   const [r, g, b] = [toLinear(p.r), toLinear(p.g), toLinear(p.b)];
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
@@ -61,7 +61,7 @@ function oklchToLinear({ l: L, c, h }: Oklch): [number, number, number] {
 
 const inGamut = (rgb: number[]) => rgb.every((v) => v >= -1e-4 && v <= 1 + 1e-4);
 
-/** An OKLCH colour as hex. Out of sRGB, the chroma is lowered (hue and lightness kept) until it fits. */
+/** An OKLCH color as hex. Out of sRGB, the chroma is lowered (hue and lightness kept) until it fits. */
 export function oklchToHex(o: Oklch): string {
   let c = o.c;
   let rgb = oklchToLinear({ ...o, c });
@@ -206,7 +206,7 @@ export function designTokens(db: DesignBrief, brief: Record<string, unknown> = {
   } else {
     neutrals = { ...LIGHT, ...(ownBg ? { background: ownBg } : {}) };
   }
-  // Text that misses 4.5:1 on the owner's own background moves until it passes; the owner's colour never changes.
+  // Text that misses 4.5:1 on the owner's own background moves until it passes; the owner's color never changes.
   for (const k of ["text", "muted"] as const) {
     const o = hexToOklch(neutrals[k]);
     const dir = luminance(neutrals.background) < 0.18 ? 1 : -1;
@@ -217,7 +217,7 @@ export function designTokens(db: DesignBrief, brief: Record<string, unknown> = {
     tint50: tint(a, 0.975), tint100: tint(a, 0.95), tint200: tint(a, 0.91), tint300: tint(a, 0.86),
     tint700: tint(a, Math.min(a.l, 0.5)), tint900: tint(a, mode === "dark" ? 0.27 : 0.32, Math.min(a.c, 0.09)),
   };
-  // Accent as text: the accent where it reaches 4.5:1; otherwise the 700 step in light mode, the text colour in dark mode.
+  // Accent as text: the accent where it reaches 4.5:1; otherwise the 700 step in light mode, the text color in dark mode.
   const accentText = contrast(pair.accent, neutrals.background) >= 4.5 ? pair.accent : mode === "light" && contrast(tints.tint700, neutrals.background) >= 4.5 ? tints.tint700 : neutrals.text;
 
   const pairing = DIRECTION.pairings.find((p) => p.name === db.direction.pairing.value) ?? DIRECTION.pairings[0];
@@ -283,7 +283,7 @@ export function designTokens(db: DesignBrief, brief: Record<string, unknown> = {
   };
 }
 
-/** The neutral colours of a token set: the colours check 3 accepts whatever their hue. */
+/** The neutral colors of a token set: the colors check 3 accepts whatever their hue. */
 export function neutralColors(t: DesignTokens): string[] {
   const c = t.color;
   return [c.background, c.surface, c.border, c.text, c.muted, c.inverse, c.onInverse, NEAR_BLACK, WHITE, "#000000"].map((h) => h.toUpperCase());

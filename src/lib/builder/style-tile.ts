@@ -2,7 +2,7 @@
  * The style tile (APP-42 step 3): one static HTML page that shows the look a showcase site will start from, drawn by code
  * from the saved design brief, the approved brief and the design tokens. No model call: same input, same page.
  *
- *   - Every colour, font, weight, size, spacing and radius is a named token on :root (from design-tokens.ts). The rules
+ *   - Every color, font, weight, size, spacing and radius is a named token on :root (from design-tokens.ts). The rules
  *     below :root only use var(--...), so a later design system input is a drop-in (APP-42 decision 5).
  *   - Every word is the owner's or Scout's approved wording (from the brief), a field name from the design brief's sample
  *     card, a fixed template word, or a marked placeholder. Nothing is invented: no names, numbers or results.
@@ -16,7 +16,9 @@ import { sensitiveVertical, type DesignBrief } from "./design-brief";
 import type { DesignTokens } from "./design-tokens";
 
 /** Raised when the template changes in a way that should mark saved tiles stale. */
-export const TILE_TEMPLATE_VERSION = 1;
+export const TILE_TEMPLATE_VERSION = 2;
+/** The large feature card is used only when its title and line together have at least this many characters. */
+export const BIG_CARD_MIN = 100;
 
 export const INDICATIVE = "Indicative: the hero and the sections show the look, not the final layout or copy.";
 export const CAPTION = "Concept preview · sample cards, not real data";
@@ -32,6 +34,23 @@ export const EYEBROWS: Record<string, string> = {
 };
 /** Every fixed word the template itself puts on the page. Check 1 accepts these and nothing else that is not sourced. */
 export const TEMPLATE_WORDS = [INDICATIVE, CAPTION, SAMPLE, "+", "→", ...Object.values(EYEBROWS)];
+/**
+ * Footer links the showcase pack's default footer adds that the tile leaves out, even when the brief lists them (RP, 20
+ * November): no page stands behind them unless the owner makes one. Check 6 fails if one appears.
+ */
+export const HIDDEN_FOOTER_LINKS = ["About", "Docs", "Changelog", "Security"];
+const hiddenFooter = (label: string) => HIDDEN_FOOTER_LINKS.some((h) => h.toLowerCase() === label.trim().toLowerCase());
+
+/** Every footer link label the brief holds: its footer columns, its legal links and its Sign in link. */
+export function briefFooterLabels(brief: Rec): string[] {
+  const f = blockOf(brief, "footer");
+  if (!f) return [];
+  return [...arr(f.columns).flatMap((c) => arr(c.links)), ...arr(f.legal_links), ...(f.sign_in ? [f.sign_in as Rec] : [])].map((l) => str(l.label)).filter(Boolean);
+}
+
+/** The footer links the tile shows: the brief's, in its order, without the hidden ones and without repeats. */
+export const footerLinks = (brief: Rec) => [...new Set(briefFooterLabels(brief).filter((l) => !hiddenFooter(l)))];
+
 /** A placeholder: one short label in brackets, for something only the owner can supply. */
 export const PLACEHOLDER = /^\[[^\]]+: owner to supply[^\]]*\]$/;
 
@@ -101,7 +120,7 @@ export function tileSources(db: DesignBrief, brief: Rec): string[] {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** :root, from the tokens. The only place in the page that holds a colour or a length. */
+/** :root, from the tokens. The only place in the page that holds a color or a length. */
 export function rootCss(t: DesignTokens): string {
   const c = t.color;
   const font = (f: string | null) => (f ? `"${f}", ui-sans-serif, system-ui, sans-serif` : "inherit");
@@ -126,7 +145,7 @@ export function rootCss(t: DesignTokens): string {
     pad: px(t.space.cardPad[0]), "pad-phone": px(t.space.cardPad[1]), gap: px(t.space.gap), "gap-small": px(8), "gap-tiny": px(4),
     "content-max": px(t.space.contentMax), "text-max": px(640), "heading-gap": px(t.space.headingGap), "hero-gap": px(t.space.heroGap),
     "btn-h": px(t.space.buttonHeight), "btn-pad": px(22), line: px(1), "line-strong": px(2), "card-min": px(240), "sample-w": px(300),
-    "stack-h": px(320), "stack-h-phone": px(280), "stack-shift": px(28), "band-pad": px(10), "icon": px(40), "dot-mark": px(8),
+    "stack-h": px(320), "stack-h-phone": px(280), "stack-shift": px(28), "band-pad": px(10), "icon": px(40), "dot-mark": px(8), "fs-card-numeral": px(32), "mini-w": px(150), "mini-h": px(96), "mini-bar": px(8), "mini-chip-w": px(40), "mini-chip-h": px(14),
     "r-card": px(t.radius.card), "r-closing": px(t.radius.closing), "r-small": px(t.radius.small), "r-round": px(t.radius.round),
     "dot-grid": px(t.depth.dotGrid), "dot-size": px(t.depth.dotSize),
     "glow-x": `${t.depth.glowAt[0]}%`, "glow-y": `${t.depth.glowAt[1]}%`, "glow-w": `${t.depth.glowSize[0]}%`, "glow-h": `${t.depth.glowSize[1]}%`,
@@ -135,7 +154,7 @@ export function rootCss(t: DesignTokens): string {
   return `:root{${Object.entries(vars).map(([k, v]) => `--${k}:${v}`).join(";")}}`;
 }
 
-/** The page's rules. They use var(--...) only: no colour or length is written here. */
+/** The page's rules. They use var(--...) only: no color or length is written here. */
 const RULES = `
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;background:var(--bg)}
@@ -188,11 +207,15 @@ section.s{padding:var(--sp-now) 0 0}
 .grid{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--card-min)),1fr))}
 .card{padding:var(--pad-now);border-radius:var(--r-card);background:var(--surface);border:var(--line) solid var(--border);box-shadow:inset 0 var(--line) 0 var(--edge)}
 .grid.bento{grid-template-columns:repeat(4,1fr)}
-.card.big{grid-column:span 2;grid-row:span 2;background:linear-gradient(135deg,var(--tint-900),var(--surface));border-color:var(--tint-700)}
+.card.big{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(135deg,var(--tint-900),var(--surface));border-color:var(--tint-700)}
+.card.big h3{font-size:var(--fs-section-now);font-family:var(--font-heading);font-weight:var(--w-strong);letter-spacing:var(--tr-section);line-height:var(--lh-section)}
+.card.big p{font-size:var(--fs-body)}
+.card.big .card-numeral{font-size:var(--fs-numeral-now)}
 .grid.bento .card.wide{grid-column:span 2}
 .card h3,.plan h3{margin:0 0 var(--gap-small);font-size:var(--fs-card-title);font-weight:var(--w-title)}
 .card p,.plan li{margin:0;color:var(--muted);font-size:var(--fs-small)}
-.icon{width:var(--icon);height:var(--icon);border-radius:var(--r-small);border:var(--line-strong) solid var(--accent);margin-bottom:var(--gap)}
+.card-numeral{display:block;margin-bottom:var(--gap);font-family:var(--font-heading);font-size:var(--fs-card-numeral);line-height:1;color:var(--accent-text);font-weight:var(--w-strong)}
+.card-numeral[data-signature="oversized-numerals"]{font-weight:var(--w-numeral)}
 .steps{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--card-min)),1fr))}
 .step{border-top:var(--line-strong) solid var(--accent);padding-top:var(--gap)}
 .step h3{margin:var(--gap-small) 0;font-size:var(--fs-card-title);font-weight:var(--w-strong)}
@@ -211,10 +234,14 @@ section.s{padding:var(--sp-now) 0 0}
 .closing{padding:var(--sp-now) var(--pad-now);border-radius:var(--r-closing);background:linear-gradient(135deg,var(--tint-900),var(--surface));border:var(--line) solid var(--tint-700);text-align:center;position:relative;overflow:hidden}
 .closing .lead{margin-left:auto;margin-right:auto}
 .closing .actions{justify-content:center}
-.motif{position:absolute;inset:auto var(--gutter-now) var(--gutter-now) auto;display:grid}
-.motif i{grid-area:1/1;width:var(--icon);height:var(--icon);border-radius:var(--r-small);border:var(--line) solid var(--accent);background:var(--surface)}
-.motif i:nth-child(1){transform:rotate(var(--tilt-1)) translate(calc(var(--stack-shift) * -1),0)}
-.motif i:nth-child(3){transform:rotate(var(--tilt-3)) translate(var(--stack-shift),0)}
+.motif{position:absolute;right:var(--pad-now);top:50%;width:var(--mini-w);height:var(--mini-h);transform:translateY(-50%)}
+.mini{position:absolute;inset:0;padding:var(--gap-small);border-radius:var(--r-small);border:var(--line) solid var(--border);background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:var(--gap-small)}
+.mini:nth-child(1){transform:translate(calc(var(--stack-shift) * -0.5),calc(var(--stack-shift) * -0.5)) rotate(var(--tilt-1))}
+.mini:nth-child(2){transform:rotate(var(--tilt-2))}
+.mini:nth-child(3){transform:translate(calc(var(--stack-shift) * 0.5),calc(var(--stack-shift) * 0.5)) rotate(var(--tilt-3));border-color:var(--accent)}
+.mini b{display:block;width:var(--mini-chip-w);height:var(--mini-chip-h);align-self:flex-end;border-radius:var(--r-round);border:var(--line) solid var(--accent)}
+.mini i{display:block;height:var(--mini-bar);border-radius:var(--r-round);background:var(--border)}
+.mini i:last-child{width:60%}
 .notice{margin:var(--sp-now) auto 0;max-width:var(--text-max);padding:var(--gap);border:var(--line) dashed var(--border);border-radius:var(--r-small);color:var(--muted);font-size:var(--fs-label);text-align:center}
 footer{margin-top:var(--sp-now);border-top:var(--line) solid var(--border)}
 footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--gap);padding-top:var(--pad-now);padding-bottom:var(--pad-now);color:var(--muted);font-size:var(--fs-label)}
@@ -226,6 +253,8 @@ nav a:not(.btn){display:none}
 .stack{min-height:var(--stack-h-phone)}
 .grid.bento{grid-template-columns:1fr}
 .card.big,.grid.bento .card.wide{grid-column:auto;grid-row:auto}
+}
+@container tile (max-width: 1100px){
 .motif{display:none}
 }`;
 
@@ -270,11 +299,14 @@ function section(type: string, b: Rec, db: DesignBrief, t: DesignTokens, brief: 
     case "use_case_cards":
     case "examples_gallery": {
       const items = arr(b.items);
-      // The bento: with three to five items the first is the large card (two columns, two rows) on a grid of four, and
-      // small cards widen so the two rows beside it close (three items: two wide; four: the last wide; five: four small).
-      const bento = type === "benefits_bento" && items.length >= 3 && items.length <= 5;
+      // The bento: the first card is the large one (two columns, two rows on a grid of four) only when it has enough to say
+      // to fill it (BIG_CARD_MIN characters); otherwise every card is the same size. Small cards widen so the rows beside the
+      // large one close (three items: two wide; four: the last wide; five: four small). Each card opens with its numeral,
+      // as look.md asks of benefit cards; there is no icon set on the tile.
+      const first = items[0] ? `${str(items[0].title)} ${str(items[0].text)}` : "";
+      const bento = type === "benefits_bento" && items.length >= 3 && items.length <= 5 && first.length >= BIG_CARD_MIN;
       const cls = (i: number) => (bento && i === 0 ? " big" : bento && ((items.length === 3 && i > 0) || (items.length === 4 && i === 3)) ? " wide" : "");
-      const cards = items.map((it, i) => `<div class="card${cls(i)}"><div class="icon"></div><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
+      const cards = items.map((it, i) => `<div class="card${cls(i)}"><span class="card-numeral" data-ordinal${sig}>${String(i + 1).padStart(2, "0")}</span><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
       return `<section class="s" id="${type}"><div class="wrap">${sectionHead(type, heading)}<div class="grid${bento ? " bento" : ""}">${cards}</div></div></section>`;
     }
     case "how_it_works": {
@@ -305,7 +337,10 @@ function section(type: string, b: Rec, db: DesignBrief, t: DesignTokens, brief: 
     case "closing_cta": {
       const cta = str((b.cta as Rec | undefined)?.label);
       const second = str((b.secondary_cta as Rec | undefined)?.label);
-      const motif = t.direction.motif === "Stack" ? `<div class="motif" aria-hidden="true"><i></i><i></i><i></i></div>` : "";
+      // The Stack motif again, as the pack asks (a motif seen only in the hero is a hero picture): three small cards, each
+      // with a chip and two text bars, with no words. Hidden where the closing text needs the room.
+      const mini = `<div class="mini"><b></b><i></i><i></i></div>`;
+      const motif = t.direction.motif === "Stack" ? `<div class="motif" aria-hidden="true">${mini}${mini}${mini}</div>` : "";
       return `<section class="s" id="closing_cta"><div class="wrap"><div class="closing">${motif}<h2>${esc(str(b.headline))}</h2>${str(b.subheadline) ? `<p class="lead">${esc(str(b.subheadline))}</p>` : ""}<div class="actions">${cta ? `<a class="btn caps" href="#">${esc(cta)}</a>` : ""}${second ? `<a class="btn ghost caps" href="#">${esc(second)}</a>` : ""}</div></div></div></section>`;
     }
     default:
@@ -347,9 +382,7 @@ export function renderTile(db: DesignBrief, brief: Rec, t: DesignTokens): string
   const notices = db.placeholders.map((p) => `<div class="notice">${esc(p.text)}</div>`).join("");
 
   const footer = blockOf(brief, "footer");
-  const footLinks = footer
-    ? [...arr(footer.columns).flatMap((c) => arr(c.links)), ...arr(footer.legal_links), ...(footer.sign_in ? [footer.sign_in as Rec] : [])].map((l) => `<a class="caps" href="#">${esc(str(l.label))}</a>`)
-    : [];
+  const footLinks = footerLinks(brief).map((l) => `<a class="caps" href="#" data-footer-link>${esc(l)}</a>`);
   const footerHtml = footer ? `<footer><div class="wrap"><span>${esc(str(footer.tagline) || name)}</span><span class="links">${footLinks.join("")}</span></div></footer>` : "";
 
   return [

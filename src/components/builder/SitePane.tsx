@@ -50,16 +50,16 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
       <div className="flex items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
         {admin ? (
           <div role="group" aria-label="Pane" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
-            {(["build", "tiles"] as const).map((v) => (
+            {([["build", "Build"], ["tiles", "Visual design"]] as const).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
                 aria-pressed={view === v}
                 onClick={() => setView(v)}
-                className={`rounded-full px-3 py-1 text-xs capitalize focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${view === v ? "bg-white shadow-sm" : "text-foreground/72"}`}
+                className={`rounded-full px-3 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${view === v ? "bg-white shadow-sm" : "text-foreground/72"}`}
                 data-testid={`pane-${v}`}
               >
-                {v}
+                {label}
               </button>
             ))}
           </div>

@@ -1,22 +1,24 @@
 /**
- * The five automatic checks on a style tile (APP-42, the template analysis of 18 November). They read the finished HTML,
- * not the renderer's inputs, so a renderer bug that leaks a word, drops a Sample mark or adds a colour is caught.
+ * The automatic checks on a style tile: the five from the template analysis (APP-42, 18 November) and a sixth for the footer. They read the finished HTML,
+ * not the renderer's inputs, so a renderer bug that leaks a word, drops a Sample mark or adds a color is caught.
  *
  *   1. Every visible word is sourced: the brief's wording, a field from the design brief's sample card or placeholders, a
  *      fixed template word, a marked placeholder, or a step's ordinal. Nothing else.
  *   2. Every sample card carries a visible Sample mark, and the Concept preview caption is there.
- *   3. One accent: every colour is a neutral of the token set or within 15 degrees of the accent's hue (OKLCH).
+ *   3. One accent: every color is a neutral of the token set or within 15 degrees of the accent's hue (OKLCH).
  *   4. The headlines use the weight the pairing gives; nothing else goes above 700, except the oversized numerals.
  *   5. No sideways scroll at 390 px. Here a static check (nothing wider than 358 px that is not allowed to shrink, long words
  *      wrap, a phone layout exists); the measurement in a real browser at 390 px is in scripts/tile-try.mts.
+ *   6. Every footer link is one of the brief's footer links, and none is a link the tile leaves out (About, Docs,
+ *      Changelog, Security, from the pack's default footer).
  *
  * Pure: no browser, no network.
  */
 import { DIRECTION } from "./design-brief";
 import { hexToOklch, hueDistance, neutralColors, TONE_DISPLAY, type DesignTokens } from "./design-tokens";
-import { CAPTION, PLACEHOLDER, SAMPLE, TEMPLATE_WORDS } from "./style-tile";
+import { CAPTION, HIDDEN_FOOTER_LINKS, PLACEHOLDER, SAMPLE, TEMPLATE_WORDS } from "./style-tile";
 
-export type TileCheck = { id: 1 | 2 | 3 | 4 | 5; name: string; ok: boolean; detail: string };
+export type TileCheck = { id: 1 | 2 | 3 | 4 | 5 | 6; name: string; ok: boolean; detail: string };
 export type TileChecks = { ok: boolean; checks: TileCheck[] };
 
 // ---- a small HTML reader, enough for the page the renderer writes ----
@@ -155,7 +157,7 @@ export function checkOneAccent(css: string, html: string, t: DesignTokens): Tile
     if (o.c < 0.02) return false;
     return hueDistance(o.h, accentHue) > 15;
   });
-  return { id: 3, name: "One accent", ok: bad.length === 0, detail: bad.length ? `Colours outside the neutrals and the accent's hue: ${bad.join(", ")}` : `${found.length} colours, all neutrals or within 15 degrees of the accent ${t.color.accent}.` };
+  return { id: 3, name: "One accent", ok: bad.length === 0, detail: bad.length ? `Colors outside the neutrals and the accent's hue: ${bad.join(", ")}` : `${found.length} colors, all neutrals or within 15 degrees of the accent ${t.color.accent}.` };
 }
 
 /** The headline weight the pack's pairing table gives, read from the closed list (not from the tokens). */
@@ -209,9 +211,23 @@ export function checkPhoneWidth(css: string): TileCheck {
   return { id: 5, name: "No sideways scroll at 390", ok: problems.length === 0, detail: problems.length ? problems.join("; ") : "Static check passed: nothing wider than 358 px that cannot shrink, long words wrap, a phone layout exists. Measured in a browser by scripts/tile-try.mts." };
 }
 
-export function checkTile(html: string, sources: string[], t: DesignTokens): TileChecks {
+export function checkFooter(root: El, briefLabels: string[]): TileCheck {
+  const inBrief = new Set(briefLabels.map(norm));
+  const hidden = new Set(HIDDEN_FOOTER_LINKS.map(norm));
+  const shown = els(root).filter((e) => e.tag === "footer").flatMap((f) => els(f).filter((e) => e.tag === "a")).map((a) => textOf(a).trim());
+  const bad = shown.filter((l) => !inBrief.has(norm(l)) || hidden.has(norm(l)));
+  return {
+    id: 6,
+    name: "Footer links come from the brief",
+    ok: bad.length === 0,
+    detail: bad.length ? `Footer links not in the brief, or left out on purpose: ${bad.map((b) => `"${b}"`).join(", ")}` : `${shown.length} footer links, all from the brief${shown.length ? ` (${shown.join(", ")})` : ""}.`,
+  };
+}
+
+/** briefLabels: every footer link label the brief holds (briefFooterLabels in style-tile.ts). */
+export function checkTile(html: string, sources: string[], t: DesignTokens, briefLabels: string[]): TileChecks {
   const root = parseHtml(html);
   const css = cssOf(root);
-  const checks = [checkWords(root, sources), checkSamples(root, t.direction.heroKind), checkOneAccent(css, html, t), checkWeights(css, t), checkPhoneWidth(css)];
+  const checks = [checkWords(root, sources), checkSamples(root, t.direction.heroKind), checkOneAccent(css, html, t), checkWeights(css, t), checkPhoneWidth(css), checkFooter(root, briefLabels)];
   return { ok: checks.every((c) => c.ok), checks };
 }

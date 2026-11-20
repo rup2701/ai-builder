@@ -1,4 +1,4 @@
-// Draws the style tile (APP-42 step 3) for a project's saved design brief, runs the five checks, measures the page at
+// Draws the style tile (APP-42 step 3) for a project's saved design brief, runs the six checks, measures the page at
 // 390 px in a real browser and takes screenshots at 1280 and 390 px. Nothing is saved to the database: the session is
 // read-only, and the files go to the out folder.
 //
@@ -16,7 +16,7 @@ import path from "node:path";
 import pg from "pg";
 import type { DesignBrief } from "../src/lib/builder/design-brief";
 import { designTokens } from "../src/lib/builder/design-tokens";
-import { renderTile, tileSources } from "../src/lib/builder/style-tile";
+import { briefFooterLabels, renderTile, tileSources } from "../src/lib/builder/style-tile";
 import { checkTile, PHONE } from "../src/lib/builder/tile-checks";
 
 const arg = (n: string) => {
@@ -113,7 +113,7 @@ async function main() {
 
   const tokens = designTokens(source.designBrief, source.brief);
   const html = renderTile(source.designBrief, source.brief, tokens);
-  const result = checkTile(html, tileSources(source.designBrief, source.brief), tokens);
+  const result = checkTile(html, tileSources(source.designBrief, source.brief), tokens, briefFooterLabels(source.brief));
   await mkdir(out, { recursive: true });
   await writeFile(path.join(out, "tile.html"), html);
   await writeFile(path.join(out, "tokens.json"), JSON.stringify(tokens, null, 2));
