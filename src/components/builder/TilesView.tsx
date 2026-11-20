@@ -52,6 +52,8 @@ export default function TilesView({ projectId }: { projectId: string }) {
   };
 
   const tile = got?.tile ?? null;
+  /** A tile that was drawn, has not gone stale and did not fail: rendering again would draw the same page. */
+  const upToDate = !!tile?.html && !tile.error && got?.stale === false;
   const width = WIDTH[device];
   // Both frames keep their real width; on a pane narrower than that (a phone), the frame is scaled down to fit.
   const pad = device === "phone" ? 24 : 0;
@@ -75,7 +77,20 @@ export default function TilesView({ projectId }: { projectId: string }) {
           {tile && <span className="text-foreground/60">Drawn {new Date(tile.renderedAt).toLocaleString()}</span>}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={render} disabled={rendering} className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 hover:border-foreground/50 disabled:opacity-50 ${focusRing}`}>
+          {/* Drawing is code only, so an up-to-date tile would come out the same: the button waits for something new. */}
+          {upToDate && !rendering && (
+            <span id="render-why" className="text-xs text-foreground/60">
+              Up to date, nothing new to draw
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={render}
+            disabled={rendering || upToDate}
+            aria-describedby={upToDate ? "render-why" : undefined}
+            className={`rounded-full border border-foreground/15 px-3 py-1 text-xs text-foreground/88 hover:border-foreground/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-foreground/15 ${focusRing}`}
+            data-testid="render-tile"
+          >
             {rendering ? "Rendering…" : "Render tile"}
           </button>
           <div role="group" aria-label="Tile width" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
