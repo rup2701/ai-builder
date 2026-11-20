@@ -174,12 +174,15 @@ const failing = (r: ReturnType<typeof draw>["result"]) => r.checks.filter((c) =>
   assert.equal(html.match(/class="card-icon"/g)?.length, 4);
   assert.match(html, /<div class="numeral" data-ordinal[^>]*>1<\/div><h3>Choose your pass/, "How it works keeps its numerals");
   assert.doesNotMatch(html, /class="card big"/, "GWins' first card has one short line, so every card is the same size");
+  assert.match(html, /<div class="grid cols-2"><div class="card">/, "four equal cards make a 2x2, never one row");
+  const { cardColumns } = await import("../src/lib/builder/style-tile");
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map(cardColumns), [1, 2, 3, 2, 3, 3, 3]);
   const long = clone(BRIEF);
   const bento = long.blocks.find((b: any) => b.type === "benefits_bento");
   bento.items[0].text = "One pass covers every sport you follow, from the first game of the season to the last, with every pick in one place.";
   assert.ok(`${bento.items[0].title} ${bento.items[0].text}`.length >= BIG_CARD_MIN);
   const big = draw(DB, long);
-  assert.match(big.html, /class="card big"/);
+  assert.match(big.html, /<div class="grid bento"><div class="card big">/);
   assert.deepEqual(failing(big.result), []);
   // The closing block repeats the Stack as three small cards with a chip and two bars each, and no words.
   assert.equal(html.match(/<div class="mini"><b><\/b><i><\/i><i><\/i><\/div>/g)?.length, 3);

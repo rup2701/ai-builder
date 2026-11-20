@@ -17,7 +17,7 @@ import { contrast, type DesignTokens } from "./design-tokens";
 import { tileIcon } from "./tile-icons";
 
 /** Raised when the template changes in a way that should mark saved tiles stale. */
-export const TILE_TEMPLATE_VERSION = 3;
+export const TILE_TEMPLATE_VERSION = 4;
 /** The large feature card is used only when its title and line together have at least this many characters. */
 export const BIG_CARD_MIN = 100;
 
@@ -212,6 +212,8 @@ section.s{padding:var(--sp-now) 0 0}
 .grid{display:grid;gap:var(--gap);grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--card-min)),1fr))}
 .card{padding:var(--pad-now);border-radius:var(--r-card);background:var(--surface);border:var(--line) solid var(--border);box-shadow:inset 0 var(--line) 0 var(--edge)}
 .grid.bento{grid-template-columns:repeat(4,1fr)}
+.grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .card.big{grid-column:span 2;grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(135deg,var(--tint-900),var(--surface));border-color:var(--tint-700)}
 .card.big h3{font-size:var(--fs-section-now);font-family:var(--font-heading);font-weight:var(--w-strong);letter-spacing:var(--tr-section);line-height:var(--lh-section)}
 .card.big p{font-size:var(--fs-body)}
@@ -257,12 +259,18 @@ footer .links{display:flex;flex-wrap:wrap;gap:var(--gap)}
 nav a:not(.btn){display:none}
 .hero.split .wrap{grid-template-columns:1fr}
 .stack{min-height:var(--stack-h-phone)}
-.grid.bento{grid-template-columns:1fr}
+.grid.bento,.grid.cols-2,.grid.cols-3{grid-template-columns:1fr}
 .card.big,.grid.bento .card.wide{grid-column:auto;grid-row:auto}
 }
 @container tile (max-width: 1100px){
 .motif{display:none}
 }`;
+
+/**
+ * Columns for a grid of equal cards: never four in one row (RP, 20 November). Four make a 2x2; two and three sit side by
+ * side; five or more run three to a row. A phone always shows one column.
+ */
+export const cardColumns = (n: number) => (n <= 1 ? 1 : n === 2 || n === 4 ? 2 : 3);
 
 function sampleCard(db: DesignBrief, n: number, cls: string): string {
   const [first, ...rest] = db.sample_card.fields;
@@ -313,7 +321,7 @@ function section(type: string, b: Rec, db: DesignBrief, t: DesignTokens, brief: 
       const bento = type === "benefits_bento" && items.length >= 3 && items.length <= 5 && first.length >= BIG_CARD_MIN;
       const cls = (i: number) => (bento && i === 0 ? " big" : bento && ((items.length === 3 && i > 0) || (items.length === 4 && i === 3)) ? " wide" : "");
       const cards = items.map((it, i) => `<div class="card${cls(i)}"><span class="card-icon">${tileIcon(it.icon)}</span><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
-      return `<section class="s" id="${type}"><div class="wrap">${sectionHead(type, heading)}<div class="grid${bento ? " bento" : ""}">${cards}</div></div></section>`;
+      return `<section class="s" id="${type}"><div class="wrap">${sectionHead(type, heading)}<div class="grid ${bento ? "bento" : `cols-${cardColumns(items.length)}`}">${cards}</div></div></section>`;
     }
     case "how_it_works": {
       const steps = arr(b.items).map((it, i) => `<div class="step"><div class="numeral" data-ordinal${sig}>${i + 1}</div><h3>${esc(str(it.title))}</h3><p>${esc(str(it.text))}</p></div>`).join("");
