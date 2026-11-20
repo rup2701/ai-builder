@@ -8,6 +8,29 @@ import TilesView from "./TilesView";
 import { DONE_STAGE } from "@/lib/builder/site-stages";
 import type { WorkspaceState } from "@/lib/workspace/types";
 
+const paneIcon = (body: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {body}
+  </svg>
+);
+/** Build: the site, as a browser window. Visual design: a palette. */
+const PANE_ICONS = {
+  build: paneIcon(
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18M7 6.5h.01M10 6.5h.01" />
+    </>,
+  ),
+  tiles: paneIcon(
+    <>
+      <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.1-4-7.4-9-7.4z" />
+      <circle cx="7.5" cy="11.5" r="1" />
+      <circle cx="10" cy="7.5" r="1" />
+      <circle cx="14.5" cy="7.5" r="1" />
+    </>,
+  ),
+};
+
 /** The side panel for a website project: the brief as the interview saved it, until the site is built. */
 export default function SitePane({ st, projectId, busy, visible, onBuild, starting, admin = false }: { st: WorkspaceState; projectId: string; busy: boolean; visible: boolean; onBuild: (mode?: "publish") => void; starting: boolean; admin?: boolean }) {
   /** Admins (APP-43) also see the style tile; owners see only the brief or the build. */
@@ -50,15 +73,16 @@ export default function SitePane({ st, projectId, busy, visible, onBuild, starti
       <div className="flex items-center justify-between gap-2 border-b border-foreground/10 px-4 py-2.5">
         {admin ? (
           <div role="group" aria-label="Pane" className="inline-flex rounded-full bg-foreground/[0.06] p-0.5">
-            {([["build", "Build"], ["tiles", "Visual design"]] as const).map(([v, label]) => (
+            {([["build", "Build", PANE_ICONS.build], ["tiles", "Visual design", PANE_ICONS.tiles]] as const).map(([v, label, icon]) => (
               <button
                 key={v}
                 type="button"
                 aria-pressed={view === v}
                 onClick={() => setView(v)}
-                className={`rounded-full px-3 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${view === v ? "bg-white shadow-sm" : "text-foreground/72"}`}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground ${view === v ? "bg-white text-foreground shadow-sm" : "text-foreground/72 hover:text-foreground"}`}
                 data-testid={`pane-${v}`}
               >
+                {icon}
                 {label}
               </button>
             ))}
