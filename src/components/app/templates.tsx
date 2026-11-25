@@ -60,8 +60,6 @@ export type Template = {
   image?: string;
   /** Live example sites: label and address. */
   demos?: { label: string; url: string }[];
-  /** Opens this pack instead of the waitlist one (sent to /new as pack=...). */
-  pack?: "showcase" | "local";
   /** Not available yet. */
   soon?: boolean;
 };
@@ -95,7 +93,6 @@ export const SITE_TEMPLATES: Template[] = [
     id: "website-saas",
     caption: "Product showcase",
     text: "A product website for ___, with features, pricing and how it works.",
-    pack: "showcase",
     demos: [
       { label: "SureBetz", url: "https://sbetz.appnomics.live" },
       { label: "Ledgerline", url: "https://ledgerline.appnomics.live" },
@@ -113,7 +110,6 @@ export const SITE_TEMPLATES: Template[] = [
     id: "website-restaurant",
     caption: "Restaurant site",
     text: "A website for my restaurant, with the menu, our story, a gallery and ways to book or order.",
-    pack: "local",
     soon: true,
     demos: [{ label: "Curryleaf", url: "https://curryleaf.appnomics.live" }],
     art: (
@@ -151,3 +147,36 @@ export const SITE_TEMPLATES: Template[] = [
     ),
   },
 ];
+
+/** The app itself, for the Mobile app and SaaS pills. Not available yet: shown greyed, not clickable, with no date and no form. */
+export const APP_TEMPLATES: Template[] = [
+  {
+    id: "mobile-app",
+    caption: "Simple mobile app",
+    text: "",
+    soon: true,
+    art: (
+      <div className="flex h-full items-center justify-center bg-violet-50 p-5 sm:p-8">
+        <div className="flex h-full max-h-40 w-20 flex-col gap-2 rounded-2xl border-4 border-violet-900/80 bg-white p-2">
+          <span className="h-2 w-3/4 bg-violet-200" /><span className="h-8 rounded bg-violet-100" /><span className="h-8 rounded bg-violet-100" /><span className="mt-auto h-3 rounded bg-violet-800" />
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "saas-app",
+    caption: "SaaS app with sign-in and checkout",
+    text: "",
+    soon: true,
+    art: (
+      <div className="flex h-full flex-col justify-center gap-3 bg-teal-50 p-5 text-teal-950 sm:p-8">
+        <span className="font-mono text-[10px]">SIGN IN</span>
+        <span className="h-6 w-3/4 rounded bg-white" /><span className="h-6 w-3/4 rounded bg-white" />
+        <span className="h-6 w-1/2 rounded bg-teal-800" />
+      </div>
+    ),
+  },
+];
+
+/** Every card by id, so a pill lists cards by id (home-pills.ts) and one card can sit under more than one pill. */
+export const TEMPLATES_BY_ID: Record<string, Template> = Object.fromEntries([...SITE_TEMPLATES, ...STORE_TEMPLATES, ...APP_TEMPLATES].map((t) => [t.id, t]));
