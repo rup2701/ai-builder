@@ -33,11 +33,11 @@ export const PILL_GROUPS: Record<Pill, PillGroup[]> = {
   store: [{ items: [{ id: "fernhollow" }, { id: "boutique" }, { id: "art" }] }],
   mobile: [
     { heading: "Launch page", items: [{ id: "website-mvp", line: WAITLIST_LINE }, { id: "website-saas", line: SHOWCASE_LINE }] },
-    { heading: "The app itself", items: [{ id: "mobile-app" }] },
+    { heading: "Mobile App", items: [{ id: "mobile-app" }] },
   ],
   saas: [
     { heading: "Launch page", items: [{ id: "website-saas", line: SHOWCASE_LINE }, { id: "website-mvp", line: WAITLIST_LINE }] },
-    { heading: "The app itself", items: [{ id: "saas-app" }] },
+    { heading: "Web App", items: [{ id: "saas-app" }] },
   ],
 };
 

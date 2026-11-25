@@ -19,8 +19,8 @@ assert.deepEqual(handoff("site", "website-restaurant"), { kind: "site", pack: "l
 for (const [pill, groups] of Object.entries(PILL_GROUPS))
   for (const g of groups) for (const it of g.items) assert.ok(TEMPLATES_BY_ID[it.id], `${pill}: no card ${it.id}`);
 const ids = (p: keyof typeof PILL_GROUPS) => PILL_GROUPS[p].map((g) => [g.heading, g.items.map((i) => i.id)]);
-assert.deepEqual(ids("mobile"), [["Launch page", ["website-mvp", "website-saas"]], ["The app itself", ["mobile-app"]]]);
-assert.deepEqual(ids("saas"), [["Launch page", ["website-saas", "website-mvp"]], ["The app itself", ["saas-app"]]]);
+assert.deepEqual(ids("mobile"), [["Launch page", ["website-mvp", "website-saas"]], ["Mobile App", ["mobile-app"]]]);
+assert.deepEqual(ids("saas"), [["Launch page", ["website-saas", "website-mvp"]], ["Web App", ["saas-app"]]]);
 assert.ok(PILL_GROUPS.site[0].items.some((i) => i.id === "website-mvp") && PILL_GROUPS.site[0].items.some((i) => i.id === "website-saas"), "Website keeps both");
 // Default cards are live; the app cards are Coming soon.
 assert.ok(!TEMPLATES_BY_ID[DEFAULT_TEMPLATE.mobile!].soon && !TEMPLATES_BY_ID[DEFAULT_TEMPLATE.saas!].soon);

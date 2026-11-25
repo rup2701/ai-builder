@@ -178,7 +178,7 @@ export default function NewProject({ localOn = false }: { localOn?: boolean }) {
                     {t.line && <span className="mt-1 block pl-2 text-left text-xs text-foreground/72">{t.line}</span>}
                     {t.soon && <span className="block pl-2 text-left text-xs text-foreground/60">Coming soon</span>}
                     {t.demos?.map((d) => (
-                      <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs text-foreground/72 underline-offset-4 hover:underline">
+                      <a key={d.url} href={d.url} target="_blank" rel="noopener noreferrer" className="block pl-2 text-left text-xs text-foreground/72 underline-offset-4 first-of-type:mt-3 hover:underline">
                         {d.label} ↗
                       </a>
                     ))}
