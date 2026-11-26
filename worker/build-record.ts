@@ -16,6 +16,8 @@
  *   designBrief                       showcase builds (APP-42): the design brief JSON, its markdown (specs/design-brief.md), the quote
  *                                     check, other problems, attempts, model, tokens and cost, and whether it went to the runner.
  *                                     A brief that failed its checks is kept here too, with what failed. Null for other packs.
+ *   theme                             whether the build started from the Visual design tile's tokens (PR B): used, why not,
+ *                                     the tile's fingerprint, and whether the runner wrote src/theme.ts
  *   deploy                            the runner's deploy.json without anything that looks like a secret
  *   site, timing, failure             the address, private test or not, the dates, and where a failed build stopped
  *   ownerId, projectCreatedAt         raw facts for working out later whether the site was kept or rebuilt
@@ -57,6 +59,8 @@ export type BuildRecordInput = {
   heroShot?: boolean;
   /** The design brief step's result (worker/design-brief.ts), when the pack has one. */
   designBrief?: unknown;
+  /** Whether the build started from the Visual design tile's tokens (worker/theme-tokens.ts), and why not. */
+  theme?: unknown;
   env: NodeJS.ProcessEnv;
 };
 
@@ -181,6 +185,7 @@ export async function gatherBuildRecord(r: BuildRecordInput): Promise<{ pack: st
       transcript: tf ? { lines: tf.lines, modelCalls: tf.modelCalls, toolCalls: tf.toolCalls } : null,
       interview: interviewForRecord(r.interview),
       designBrief: r.designBrief ?? null,
+      theme: r.theme ?? null,
       deploy,
       site: { name: r.siteName, url: r.url ?? null, address: siteAddress(r.url ?? undefined), privateTest: r.privateTest, heroShot: r.heroShot ?? false },
       timing: { startedAt: r.startedAt, finishedAt: r.finishedAt },

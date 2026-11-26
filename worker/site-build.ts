@@ -18,6 +18,7 @@ import { notifyBuildEnd, notifyBuildStart, projectLink } from "../src/lib/notify
 import { addressClaim, addressTakenText, isAddressTaken, siteAddress, type Claim } from "../src/lib/project-archive";
 import { saveBuildRecord } from "./build-record";
 import { designBriefForBuild, type DesignBriefRecord } from "./design-brief";
+import { themeForBuild, type ThemeRecord } from "./theme-tokens";
 import type { ToolCall } from "../src/lib/agents/design-brief-writer";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 
@@ -46,6 +47,8 @@ export type RunSummary = {
   estimatedCostUsd?: number;
   tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
   checks?: { typecheck?: boolean; build?: boolean };
+  /** True when the runner wrote the tile's tokens into the site as src/theme.ts (--theme). */
+  themeTokens?: boolean;
   model?: string;
 };
 
@@ -250,7 +253,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     }
   };
   // Learning data (APP-15): what this build did, saved quietly at the end whether it went live or not.
-  const record: { startedAt: string; runDir?: string; summary?: unknown; url?: string; heroShot?: boolean; failedStage?: number; error?: string; live?: boolean; designBrief?: DesignBriefRecord } = { startedAt: new Date().toISOString() };
+  const record: { startedAt: string; runDir?: string; summary?: unknown; url?: string; heroShot?: boolean; failedStage?: number; error?: string; live?: boolean; designBrief?: DesignBriefRecord; theme?: ThemeRecord } = { startedAt: new Date().toISOString() };
   const stop = async (at: number, message: string): Promise<never> => {
     record.failedStage ??= at;
     record.error ??= message;
@@ -284,6 +287,12 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
           .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'design_brief', $3, $4, $5, $6)`, [job.project_id, job.id, step.model, t.input + t.cacheRead + t.cacheWrite, t.output, step.costUsd])
           .catch(() => {});
       }
+      // 1c. PR B: the tokens of the Visual design tile, when the tile was drawn from this same design brief and brief. The
+      // runner writes them into the site as src/theme.ts. Without them (or with WORKER_THEME_TOKENS=off) the build is as before.
+      record.theme = await themeForBuild({ db, projectId: job.project_id, designBrief: record.designBrief, brief, file: briefFile.replace(/\.json$/, ".theme.json"), env });
+      if (record.theme.used) designArgs.push("--theme", path.relative(runner, record.theme.file!));
+    } else {
+      record.theme = { used: false, why: "only showcase sites have a Visual design", file: null, fingerprint: null, renderedAt: null };
     }
 
     // 2. Build: create runs the main build, the look pass and the independent checks.
@@ -317,6 +326,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
     if (summary?.runId && !runDir) runDir = path.join(runner, "runs", summary.runId);
     record.runDir = runDir;
     record.summary = summary ?? undefined;
+    if (record.theme?.used) record.theme.usedByRunner = summary?.themeTokens === true;
     if (created.code !== 0 || !summary) await stop(stage, `The build did not finish. ${tail(created.out)}`);
     if (summary!.stopReason !== "finished") await stop(1, `The build stopped early (${summary!.stopReason}). It may have hit its time or cost limit.`);
     if (!summary!.checks?.typecheck || !summary!.checks?.build) await stop(3, "The site was written, but it did not pass the final checks.");
@@ -365,6 +375,7 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
       url: record.url ?? null,
       heroShot: record.heroShot,
       designBrief: record.designBrief,
+      theme: record.theme,
       siteName,
       privateTest: isPrivateTest(brief),
       env,

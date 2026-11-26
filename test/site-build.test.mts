@@ -13,6 +13,9 @@ import { emptyState } from "../src/lib/workspace/state";
 import type { SiteBuild, WorkspaceState } from "../src/lib/workspace/types";
 import type { ToolCall } from "../src/lib/agents/design-brief-writer";
 import { designBriefInput } from "../src/lib/agents/design-brief-step";
+import { tileFingerprint } from "../src/lib/design-brief-store";
+import { designTokens } from "../src/lib/builder/design-tokens";
+import { readFileSync } from "node:fs";
 
 let failed = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -67,7 +70,7 @@ console.log("    ${dir}/runs/r1/app\\n    database run_x");
 console.log("3/4 Agent is building…");
 console.log("3b/4 Look pass");
 console.log("4/4 Independent checks");
-console.log("\\n" + JSON.stringify({ runId: "r1", stopReason: "finished", estimatedCostUsd: 3.1, model: "m", tokens: { input: 10, output: 20, cacheRead: 30, cacheWrite: 5 }, checks: { typecheck: true, build: ${opts.checks ?? true} } }, null, 2));
+console.log("\\n" + JSON.stringify({ runId: "r1", stopReason: "finished", estimatedCostUsd: 3.1, model: "m", tokens: { input: 10, output: 20, cacheRead: 30, cacheWrite: 5 }, checks: { typecheck: true, build: ${opts.checks ?? true} }, themeTokens: process.argv.includes("--theme") }, null, 2));
 `,
   );
   await writeFile(
@@ -621,6 +624,89 @@ await test("a publish retry is not a new build, so it saves no record", async ()
   await runSitePublish(db, { id: "job-aaaa1111", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
   await recordsSettled();
   assert.equal(rec.records.length, 0);
+});
+
+// ---- PR B: the build starts from the Visual design tile's tokens ----
+const GW = JSON.parse(readFileSync(new URL("./fixtures/gwins-design-brief.json", import.meta.url), "utf8"));
+const TOKENS = designTokens(GW.savedDesignBrief, GW.brief);
+/** A design brief saved at review that passed, with a tile drawn from it. tileJson: what the tile says it was drawn from. */
+function reviewBriefWithTile(tileFrom: Record<string, unknown> = {}, tokens: unknown = TOKENS) {
+  const { fingerprint, upToMsg } = designBriefInput(showcaseMsgs, showcaseBrief());
+  const at = new Date().toISOString();
+  return {
+    v: 1, fingerprint, upToMsg, status: "done", token: "t1", by: "review", startedAt: at, finishedAt: at, reason: null,
+    result: { skipped: null, fingerprint, model: "claude-opus-5-5", attempts: 1, passed: true, quoteCheck: { checked: 1, passed: 1, failed: [], msgCorrected: 0 }, problems: [], firstAttempt: null, json: {}, markdown: "# Design brief: PickPal\n", costUsd: 0.2, tokens: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 }, durationMs: 1, error: null },
+    tile: { v: 1, fingerprint: tileFingerprint(tileFrom as never, showcaseBrief()), renderedAt: at, html: "<html></html>", tokens, checks: null, error: null },
+  };
+}
+async function showcaseRun(saved: unknown, extraEnv: Record<string, string> = {}) {
+  const dir = await makeRunner({ static: true });
+  await mkdir(path.join(dir, "briefs"), { recursive: true });
+  const { db, rec } = fakeDb("owner@example.com", showcaseBrief());
+  rec.state = { ...rec.state, msgs: showcaseMsgs };
+  rec.designBrief = saved;
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick, ...extraEnv }, { designBriefCall: async () => { throw new Error("no model call expected"); } });
+  await recordsSettled();
+  const args = JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[];
+  return { dir, rec, args, theme: rec.records[0].details.theme };
+}
+
+await test("tokens present: a tile drawn from the same design brief and brief passes its tokens to the runner with --theme", async () => {
+  const { dir, rec, args, theme } = await showcaseRun(reviewBriefWithTile());
+  const i = args.indexOf("--theme");
+  assert.ok(i > -1, args.join(" "));
+  assert.equal(args[i + 1], "briefs/pickpal-job-1234.theme.json");
+  assert.deepEqual(JSON.parse(await readFile(path.join(dir, args[i + 1]), "utf8")), TOKENS);
+  assert.ok(args.includes("--design-brief"), "the design brief still goes too");
+  assert.equal(theme.used, true);
+  assert.equal(theme.why, null);
+  assert.equal(theme.usedByRunner, true, "the runner said it wrote src/theme.ts");
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+});
+
+await test("fingerprint mismatch: a tile drawn from another design brief is not used, and the build goes on as before", async () => {
+  const { args, rec, theme } = await showcaseRun(reviewBriefWithTile({ other: true }));
+  assert.ok(!args.includes("--theme"), args.join(" "));
+  assert.ok(args.includes("--design-brief"));
+  assert.equal(theme.used, false);
+  assert.match(theme.why, /fingerprint mismatch/);
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+});
+
+await test("bad shape: saved tokens with a wrong field are not used", async () => {
+  const bad = { ...TOKENS, color: { ...TOKENS.color, accent: "orange" } };
+  const { args, rec, theme } = await showcaseRun(reviewBriefWithTile({}, bad));
+  assert.ok(!args.includes("--theme"));
+  assert.match(theme.why, /wrong shape \(color\.accent\)/);
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+});
+
+await test("off switch: WORKER_THEME_TOKENS=off skips the tokens even when the tile matches", async () => {
+  const { args, rec, theme } = await showcaseRun(reviewBriefWithTile(), { WORKER_THEME_TOKENS: "off" });
+  assert.ok(!args.includes("--theme"));
+  assert.match(theme.why, /WORKER_THEME_TOKENS=off/);
+  assert.equal(rec.state.site!.build!.stage, DONE_STAGE);
+});
+
+await test("tokens absent: no tile, or a design brief written at build start, means no --theme", async () => {
+  const noTile = reviewBriefWithTile() as Record<string, unknown>;
+  delete noTile.tile;
+  const a = await showcaseRun(noTile);
+  assert.ok(!a.args.includes("--theme"));
+  assert.match(a.theme.why, /no Visual design tile/);
+  assert.equal(a.rec.state.site!.build!.stage, DONE_STAGE);
+  const failedTile = reviewBriefWithTile() as Record<string, any>;
+  failedTile.tile = { ...failedTile.tile, tokens: null, html: null, error: "could not draw" };
+  const b = await showcaseRun(failedTile);
+  assert.ok(!b.args.includes("--theme"));
+  assert.match(b.theme.why, /no tokens \(could not draw\)/);
+  // A waitlist site never gets tokens, and its record says why.
+  const dir = await makeRunner({});
+  const { db, rec } = fakeDb();
+  await runSiteBuild(db, { id: "job-1234abcd", project_id: "p1" }, { ...process.env, RUNNER_DIR: dir, ...quick });
+  await recordsSettled();
+  assert.ok(!(JSON.parse(await readFile(path.join(dir, "create-args.json"), "utf8")) as string[]).includes("--theme"));
+  assert.match(rec.records[0].details.theme.why, /only showcase/);
 });
 
 console.log(failed ? `${failed} failed` : "all passed");
