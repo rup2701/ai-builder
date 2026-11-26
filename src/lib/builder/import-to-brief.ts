@@ -58,6 +58,10 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
       size: w.size ?? null,
       price_minor: minor,
       status: w.status ?? null,
+      // A print is its own work, priced by its options (the base brief's prints note); it names the original it comes from when the site has one.
+      ...(w.kind ? { kind: w.kind } : {}),
+      ...(w.kind === "print" && r.catalog.some((o) => o.kind === "original" && o.title.toLowerCase() === w.title.toLowerCase()) ? { print_of: w.title } : {}),
+      ...(w.priceFrom ? { price_from: true } : {}),
       // Pictures come later: until then the work shows the neutral placeholder. The address is kept so the picture step can use it.
       image: null,
       image_source: w.image ?? null,
@@ -82,8 +86,11 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
     mode: "provided",
     note: "These are the owner's real works, copied from their website. They are not samples and must not be labelled as samples. A work with no status or no price is shown without a buy button until the owner sets them.",
     works,
+    ...(r.catalog.some((w) => w.kind === "print")
+      ? { prints_found: "The site sells prints. A work with kind print is a print, listed on the site's prints page; print_of names the original it comes from. A price with price_from true is the site's starting price (from $50.00): the size and paper options and their prices are the owner's to set, so none are made up." }
+      : {}),
   };
-  brief.categories = ["Original work"];
+  brief.categories = r.catalog.some((w) => w.kind === "print") ? ["Original work", "Prints"] : ["Original work"];
   brief.series = { note: "No series were found on the site. The owner can add series later.", sample_series: [] };
   brief.imagery = {
     source: "imported_from_owner_site",

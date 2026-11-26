@@ -25,7 +25,7 @@ export type SiteSnapshot = {
   structured: unknown[];
   images: SiteImage[];
   /** Links the home page offers, and which of them were read, so a missing page can be explained. */
-  linksSeen: { href: string; text: string; read: boolean }[];
+  linksSeen: { href: string; text: string; read: boolean; why?: string }[];
   /** True when a page has an email box to sign up (a newsletter), seen before forms are stripped for reading. */
   signup: boolean;
 };
@@ -184,10 +184,20 @@ export function splitSections(page: PageText): Omit<Section, "id">[] {
   return out;
 }
 
-/** Which same-site pages are worth reading for a local business: menu, about, contact, hours. */
+/** Which same-site pages are worth reading: menu or works (and prints), then contact and hours, then the story. */
 export function pickSubpages(links: { href: string; text: string }[], rootUrl: string, limit = MAX_PAGES - 1): string[] {
+  return planSubpages(links, rootUrl, limit).chosen;
+}
+
+/** Why a link of the home page was not read, in a few plain words, for the link list of the result. */
+export type SkipReason = string;
+const key = (href: string) => href.split("#")[0].replace(/\/$/, "");
+
+/** The pages to read, in order, and why each other same-site link was left out. */
+export function planSubpages(links: { href: string; text: string }[], rootUrl: string, limit = MAX_PAGES - 1): { chosen: string[]; skipped: Map<string, SkipReason> } {
   const root = new URL(rootUrl);
   const out: string[] = [];
+  const skipped = new Map<string, SkipReason>();
   for (const l of links) {
     let u: URL;
     try {
@@ -197,22 +207,28 @@ export function pickSubpages(links: { href: string; text: string }[], rootUrl: s
     }
     if (u.hostname.replace(/^www\./, "") !== root.hostname.replace(/^www\./, "")) continue;
     u.hash = "";
-    const key = u.toString();
-    if (key === root.toString() || /\.(pdf|jpe?g|png|webp|gif|zip)$/i.test(u.pathname) || out.includes(key)) continue;
-    if (SUBPAGE.test(u.pathname) || SUBPAGE.test(l.text)) out.push(key);
+    const k = u.toString();
+    if (k === root.toString() || out.includes(k)) continue;
+    if (/\.(pdf|jpe?g|png|webp|gif|zip)$/i.test(u.pathname)) { skipped.set(key(k), "a file, not a page"); continue; }
+    // Squarespace names a menu folder "Folder: Prints". The folder opens its first page, and every page in it is linked on its own.
+    if (/^folder:/i.test(l.text.trim())) { skipped.set(key(k), "a menu folder: it opens its first page, and its pages are linked on their own"); continue; }
+    if (SUBPAGE.test(u.pathname) || SUBPAGE.test(l.text)) out.push(k);
+    else skipped.set(key(k), "not a page name the reader looks for");
   }
   // A page of one item (/work/low-tide) is skipped when the list it belongs to (/work) is read: the list already shows every item.
   const parentOf = (k: string) => { const u = new URL(k); const parts = u.pathname.split("/").filter(Boolean); return parts.length > 1 ? `${u.origin}/${parts.slice(0, -1).join("/")}` : null; };
   for (let i = out.length - 1; i >= 0; i--) {
     const parent = parentOf(out[i]);
-    if (parent && out.some((o) => o.replace(/\/$/, "") === parent)) out.splice(i, 1);
+    if (parent && out.some((o) => o.replace(/\/$/, "") === parent)) { skipped.set(key(out[i]), "one item of a list page that is read"); out.splice(i, 1); }
   }
-  // The menu first, then contact and hours, then the story, then the rest, so a small page budget goes to what matters most.
+  // The menu or the works first (prints too: a site that sells prints lists them on their own page), then contact and hours, then the story, then the rest.
   const rank = (k: string) => {
     const t = `${new URL(k).pathname} ${links.find((l) => l.href.split("#")[0] === k)?.text ?? ""}`;
-    return /menu|shop|store|paintings?|originals?|collections?|portfolio|artworks?|work|projects?/i.test(t) ? 0 : /hours|location|contact|visit|find-us|commission/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience|prints?|pricing|packages?|areas?|exhibition|faq|shipping|returns|delivery/i.test(t) ? 3 : 4;
+    return /menu|shop|store|paintings?|originals?|prints?|collections?|portfolio|artworks?|work|projects?/i.test(t) ? 0 : /hours|location|contact|visit|find-us|commission/i.test(t) ? 1 : /about|story/i.test(t) ? 2 : /catering|services|event|experience|pricing|packages?|areas?|exhibition|faq|shipping|returns|delivery/i.test(t) ? 3 : 4;
   };
-  return out.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).slice(0, limit).map((x) => x.k);
+  const ranked = out.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).map((x) => x.k);
+  for (const k of ranked.slice(limit)) skipped.set(key(k), `page limit (${MAX_PAGES} pages a read)`);
+  return { chosen: ranked.slice(0, limit), skipped };
 }
 
 /** Reads the home page and a few useful pages of the same site. A failing sub-page is skipped; a failing home page is an error. */
@@ -221,16 +237,19 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
   const first = extractPage(home.html, home.url);
   const pages = [first];
   // Two spare addresses, so a page that is a copy of one already read (Squarespace often links /about and /about-1) does not use up a page.
-  const chosen = pickSubpages(first.links, home.url, MAX_PAGES + 1);
+  const { chosen, skipped } = planSubpages(first.links, home.url, MAX_PAGES + 1);
+  const readVia = new Set<string>();
   for (const next of chosen) {
-    if (pages.length >= MAX_PAGES) break;
+    if (pages.length >= MAX_PAGES) { skipped.set(key(next), `page limit (${MAX_PAGES} pages a read)`); continue; }
     try {
       const r = await safeFetchHtml(next, deps);
       const page = extractPage(r.html, r.url);
-      if (pages.some((p) => p.page.url === page.page.url || (page.page.text.trim() && p.page.text === page.page.text))) continue;
+      const same = pages.find((p) => p.page.url === page.page.url || (page.page.text.trim() && p.page.text === page.page.text));
+      if (same) { skipped.set(key(next), `the same page as ${new URL(same.page.url).pathname}, which is read`); continue; }
       pages.push(page);
+      readVia.add(key(next));
     } catch {
-      /* skip it */
+      skipped.set(key(next), "could not be opened");
     }
   }
   let room = MAX_TEXT_CHARS;
@@ -256,6 +275,10 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
     structured: pages.flatMap((p) => p.structured).slice(0, 4),
     images: uniq(pages.flatMap((p) => p.images), (x) => x.src).slice(0, MAX_IMAGES),
     signup: pages.some((p) => p.signup),
-    linksSeen: uniq(first.links, (x) => x.href).slice(0, 60).map((l) => ({ ...l, read: pages.some((p) => p.page.url.replace(/\/$/, "") === l.href.split("#")[0].replace(/\/$/, "")) })),
+    linksSeen: uniq(first.links, (x) => x.href).slice(0, 60).map((l) => {
+      const read = readVia.has(key(l.href)) || pages.some((p) => key(p.page.url) === key(l.href));
+      const why = read ? undefined : skipped.get(key(l.href));
+      return why ? { ...l, read, why } : { ...l, read };
+    }),
   };
 }
