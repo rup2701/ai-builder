@@ -7,7 +7,8 @@ import { ImportError, safeFetchHtml, type FetchDeps } from "./safe-fetch";
  * phone and hours there, and menu lines ("Pad Thai 14") are short.
  */
 
-export type PageText = { url: string; title: string; text: string };
+/** images: the pictures on this page, so a page's own pictures (an About page's portrait) can go with its words. */
+export type PageText = { url: string; title: string; text: string; images?: SiteImage[] };
 export type SiteImage = { src: string; alt: string };
 export type SiteAction = { label: string; url: string };
 export type SiteSnapshot = {
@@ -31,6 +32,11 @@ export type SiteSnapshot = {
 
 export const MAX_PAGES = 7;
 export const MAX_TEXT_CHARS = 40_000;
+/** One paragraph is kept whole up to this size: an artist statement or a story is often one long paragraph (about 500 characters on a typical About page). */
+export const MAX_LINE_CHARS = 3000;
+/** Lines up to this size are kept as before; longer ones must have no text blocks inside them. */
+const SHORT_LINE_CHARS = 400;
+const TEXT_BLOCKS = "p,li,div,h1,h2,h3,h4,h5,td,th,address";
 const MAX_IMAGES = 30;
 const SOCIAL: [string, RegExp][] = [
   ["instagram", /(^|\.)instagram\.com$/],
@@ -132,7 +138,9 @@ export function extractPage(html: string, pageUrl: string): Page {
     if ($(el).children("p,li,div,h1,h2,h3,h4,h5,td,th,address").length) return;
     const t = $(el).text().replace(/\s+/g, " ").trim();
     // A repeated line is dropped (menus and footers repeat), except prices and stock words: many works share the same price.
-    if (t.length < 2 || t.length > 400 || (seen.has(t) && !KEEP_REPEATS.test(t))) return;
+    if (t.length < 2 || t.length > MAX_LINE_CHARS || (seen.has(t) && !KEEP_REPEATS.test(t))) return;
+    // A long line is kept only when it is one paragraph: a wrapper that holds text blocks further down (a section in a span or a link) is the whole page again.
+    if (t.length > SHORT_LINE_CHARS && $(el).find(TEXT_BLOCKS).length) return;
     seen.add(t);
     // Headings are marked so each block of text can be matched to what it is (Commissions, FAQ, Exhibitions).
     lines.push(/^h[1-4]$/i.test(el.tagName) ? `## ${t}` : t);
@@ -212,11 +220,15 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
   const home = await safeFetchHtml(raw, deps);
   const first = extractPage(home.html, home.url);
   const pages = [first];
-  const chosen = pickSubpages(first.links, home.url);
+  // Two spare addresses, so a page that is a copy of one already read (Squarespace often links /about and /about-1) does not use up a page.
+  const chosen = pickSubpages(first.links, home.url, MAX_PAGES + 1);
   for (const next of chosen) {
+    if (pages.length >= MAX_PAGES) break;
     try {
       const r = await safeFetchHtml(next, deps);
-      pages.push(extractPage(r.html, r.url));
+      const page = extractPage(r.html, r.url);
+      if (pages.some((p) => p.page.url === page.page.url || (page.page.text.trim() && p.page.text === page.page.text))) continue;
+      pages.push(page);
     } catch {
       /* skip it */
     }
@@ -227,7 +239,7 @@ export async function crawlSite(raw: string, deps: FetchDeps = {}): Promise<Site
     if (room <= 0) break;
     const text = p.page.text.slice(0, room);
     room -= text.length;
-    if (text.trim()) kept.push({ ...p.page, text });
+    if (text.trim()) kept.push({ ...p.page, text, images: p.images });
   }
   if (!kept.length) throw new ImportError("I could not find readable text on that website. It may be built in a way I cannot read yet.");
   const uniq = <T,>(xs: T[], key: (x: T) => string) => xs.filter((x, i) => xs.findIndex((y) => key(y) === key(x)) === i);

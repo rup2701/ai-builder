@@ -95,6 +95,8 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
   brief.content = {
     tagline: r.tagline ?? null,
     about: r.about ?? null,
+    // The About page's own pictures, by address on the owner's site. Like the works, they are added by the picture step, not fetched by the build.
+    about_images: (r.aboutImages ?? []).map((i) => ({ image: null, image_source: i.src, alt: i.alt || null })),
     contact: { phone: r.phone ?? null, email: r.email ?? null, address: r.address ?? null, socials: r.socials },
     newsletter: r.signup,
     sections: r.extras.map((e) => ({ title: e.title, text: e.body })),
@@ -119,6 +121,11 @@ export function importToBrief(base: Brief, r: ImportResult, consent: Consent): {
   for (const k of ["pages", "look"]) brief[k] = swap(brief[k]);
   // Sold works keep their price on screen.
   const pg = (brief.pages ?? {}) as Record<string, unknown>;
+  // The About page is the owner's own words and pictures, not the sample's description of one.
+  pg.about = r.about
+    ? "The About page shows the owner's about text from content.about, word for word and in full: do not shorten, reword or add to it. Its pictures are the ones in content.about_images (from the owner's own About page), shown as the neutral placeholder until the picture step adds them. It shows the email and social links from content.contact. Owner editable."
+    : "A page for the artist's statement, a short bio and a portrait. The owner's site gave none, so each shows a clear placeholder that the owner fills in from the owner area; nothing is written for them. Owner editable.";
+  brief.pages = pg;
   if (typeof pg.work_index === "string") pg.work_index = pg.work_index.replace("or 'Sold'", "or 'Sold' with its list price");
   if (typeof pg.work_page === "string") pg.work_page = pg.work_page.replace("it shows the status instead and no buy button", "it shows the status, and the list price for a Sold work, and no buy button");
   // Real links and real wording, not the sample's placeholders.

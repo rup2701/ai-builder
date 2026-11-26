@@ -153,11 +153,13 @@ export function groundCatalog(works: Work[], snap: SiteSnapshot): { kept: Work[]
   return { kept, dropped };
 }
 
+/** The owner's about text is copied whole, not summed up: an About page is usually one or two paragraphs. */
+export const MAX_ABOUT_CHARS = 2500;
 const Basics = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   kind: z.string().trim().min(2).max(80).optional(),
   tagline: z.string().trim().min(3).max(160).optional(),
-  about: z.string().trim().min(10).max(900).optional(),
+  about: z.string().trim().min(10).max(MAX_ABOUT_CHARS).optional(),
   address: z.string().trim().min(5).max(200).optional(),
   phone: z.string().trim().min(5).max(40).optional(),
   email: z.string().trim().email().max(120).optional(),
@@ -181,6 +183,9 @@ export type ImportResult = ImportedSiteT & {
   signup: boolean;
   /** Links the home page offers and whether each was read. */
   linksSeen: SiteSnapshot["linksSeen"];
+  /** The page the about text is on, and the pictures that page has of its own (a portrait, the studio), chosen by code. */
+  aboutPage?: string;
+  aboutImages?: SiteSnapshot["images"];
   /** What was in the model's answer but could not be found on the pages, so it was left out. */
   dropped: string[];
   /** How much was read, and anything that went wrong on the way, so an empty result can be explained. */
@@ -200,7 +205,7 @@ const BASICS_TOOL: Tool = {
       name: { type: "string", description: "The business name as the site writes it." },
       kind: { type: "string", description: "What kind of business, in two to four words (for example: neighbourhood cafe)." },
       tagline: { type: "string", description: "A one-line description, in the site's own words if it has one." },
-      about: { type: "string", description: "Two or three sentences from the site's about text, shortened but not reworded into claims the site does not make." },
+      about: { type: "string", description: "The site's own about text (from its About, Story or Bio page, or the home page if that is where it is), copied word for word and in full, up to about 2000 characters. Do not shorten, reword, correct or add to it. Leave out contact lines, links and menu words. Leave it out if the site has no about text." },
       address: { type: "string", description: "Street address as written on the site." },
       phone: { type: "string" },
       email: { type: "string" },
@@ -296,6 +301,14 @@ export function groundCheck(draft: ImportedSiteT, snap: SiteSnapshot): { site: I
   const out: ImportedSiteT = { ...draft };
 
   if (out.name && !has(out.name)) { dropped.push("name"); delete out.name; }
+  if (out.about) {
+    // Word for word: each sentence must be on a page. A sentence the model reworded or added is left out; mostly missing means none is kept.
+    const sentences = out.about.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+    const found = sentences.filter((s) => !norm(s) || has(s));
+    const keptChars = found.join(" ").length;
+    if (!found.length || keptChars < out.about.length * 0.7) { dropped.push("about text"); delete out.about; }
+    else if (found.length < sentences.length) { dropped.push("part of the about text"); out.about = found.join(" "); }
+  }
   if (out.phone) {
     const d = digits(out.phone);
     if (d.length < 7 || !corpusDigits.includes(d.slice(-10))) { dropped.push("phone"); delete out.phone; }
@@ -399,6 +412,25 @@ export function groundExtras(extras: ExtraPage[], snap: SiteSnapshot): { kept: E
   return { kept, dropped };
 }
 
+const ABOUT_PATH = /about|bio|artist|statement|story|meet/i;
+export const MAX_ABOUT_IMAGES = 6;
+
+/**
+ * The About page and its own pictures. The page is the one that holds the about text (an about-like address wins when the text is on
+ * several pages); with no about text, the page whose address says about. Its own pictures are the ones the home page does not also show,
+ * so a shared header picture is not taken for a portrait.
+ */
+export function aboutPageImages(snap: SiteSnapshot, about?: string): { page?: string; images: SiteSnapshot["images"] } {
+  const path = (p: { url: string }) => { try { return new URL(p.url).pathname; } catch { return ""; } };
+  const first = about ? norm(about.split(/(?<=[.!?])\s+/)[0] ?? "") : "";
+  const holding = first ? snap.pages.filter((p) => norm(p.text).includes(first)) : [];
+  const page = holding.find((p) => ABOUT_PATH.test(path(p))) ?? holding[0] ?? snap.pages.find((p) => ABOUT_PATH.test(path(p)));
+  if (!page) return { images: [] };
+  const home = snap.pages[0];
+  const shared = new Set(page === home ? [] : (home.images ?? []).map((i) => i.src));
+  return { page: page.url, images: (page.images ?? []).filter((i) => !shared.has(i.src)).slice(0, MAX_ABOUT_IMAGES) };
+}
+
 type Usage = { inputTokens: number; outputTokens: number; costUsd: number };
 
 /** One model call with one retry (the model sometimes answers in words instead of calling the tool). Never throws: a failure becomes a warning. */
@@ -479,5 +511,6 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   if (!site.email && snap.emails[0]) site.email = snap.emails[0];
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
-  return { result: { ...site, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? "", ...quotes.kept.map((q) => q.quote)]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  const aboutAt = aboutPageImages(snap, site.about);
+  return { result: { ...site, ...(aboutAt.page ? { aboutPage: aboutAt.page } : {}), aboutImages: aboutAt.images, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? "", ...quotes.kept.map((q) => q.quote)]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }
