@@ -36,7 +36,11 @@ export function coerceMenu(input: unknown): NonNullable<ImportedSiteT["menu"]> {
 export const MAX_WORKS = 40;
 /** What a visitor is told about a work or product. Status is one of the words the store pack uses, and only when the page says it. */
 export const WORK_STATUSES = ["Available", "Sold", "Private collection", "Not for sale"] as const;
-export type Work = { image?: string; title: string; year?: string; medium?: string; size?: string; price?: string; status?: (typeof WORK_STATUSES)[number] };
+/**
+ * kind is set only when the site has a prints page: a work listed there is a print, a work listed elsewhere is an original.
+ * priceFrom: the page gives a starting price ("from $50.00"), because the print is priced by its size or paper.
+ */
+export type Work = { image?: string; title: string; year?: string; medium?: string; size?: string; price?: string; priceFrom?: boolean; status?: (typeof WORK_STATUSES)[number]; kind?: "original" | "print" };
 
 /** The works from the model's answer, trimmed to fit instead of rejected. */
 export function coerceCatalog(input: unknown): Work[] {
@@ -61,13 +65,44 @@ const MATERIAL = /\b(oil|acrylic|watercolou?r|gouache|ink|charcoal|pastel|graphi
 
 const PRICE = /(?:£|\$|€)\s?\d[\d,]*(?:\.\d{1,2})?/g;
 
+/** A page that lists prints (/fineartprints, /prints). */
+export const isPrintPage = (url: string) => { try { return /print/i.test(new URL(url).pathname); } catch { return false; } };
+
+/**
+ * Prints apart from originals, decided by code from where a title is listed. A title on a prints page and on another page is two works:
+ * the original and its print, which share a name but not a price. A title only on a prints page is a print. Sites with no prints page are left as they are.
+ */
+export function splitPrints(works: Work[], snap: SiteSnapshot): Work[] {
+  const printPages = snap.pages.filter((p) => isPrintPage(p.url));
+  if (!printPages.length) return works;
+  const otherPages = snap.pages.filter((p) => !isPrintPage(p.url));
+  const listed = (pages: SiteSnapshot["pages"], t: string) => pages.some((p) => p.text.split("\n").some((l) => { const k = norm(l); return k === t || k.startsWith(t + " "); }));
+  const out: Work[] = [];
+  const seen = new Set<string>();
+  for (const w of works) {
+    const t = norm(w.title);
+    if (seen.has(t)) continue;
+    seen.add(t);
+    const asPrint = listed(printPages, t);
+    // A print keeps only its title and picture: the original's year, medium and size are not the print's.
+    const print: Work = { title: w.title, kind: "print", ...(w.image ? { image: w.image } : {}) };
+    if (asPrint && listed(otherPages, t)) out.push({ ...w, kind: "original" }, print);
+    else if (asPrint) out.push(print);
+    else out.push({ ...w, kind: "original" });
+  }
+  return out.slice(0, MAX_WORKS);
+}
+
 /**
  * Prices and Sold marks read by code, not by the model, so the same page gives the same answer every run.
  * A work owns the lines from its title up to the next work's title. Exactly one price there is its price; the word Sold there is its status.
  * A model answer that disagrees with the page is replaced; a work with no price in its lines keeps what the model found only if the page has it.
+ * When the site has prints (kind is set), a print is read only from prints pages and an original only from the others, and a price must be in its own lines,
+ * so an original never takes the price of its print.
  */
 export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
-  const lines = snap.pages.flatMap((p) => p.text.split("\n")).map((l) => l.trim());
+  const entries = snap.pages.flatMap((p) => p.text.split("\n").map((l) => ({ line: l.trim(), print: isPrintPage(p.url) })));
+  const lines = entries.map((e) => e.line);
   const keys = lines.map(norm);
   const titles = works.map((w) => norm(w.title));
   // Lines where a work's title begins (the line may carry more after it, such as "Title - style  Price £900").
@@ -75,9 +110,9 @@ export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
   const allStarts = new Set(titles.flatMap(starts));
   return works.map((w, i) => {
     let best: { prices: string[]; window: string[]; before: string } | null = null;
-    for (const start of starts(titles[i])) {
+    for (const start of starts(titles[i]).filter((n) => !w.kind || entries[n].print === (w.kind === "print"))) {
       let end = start + 1;
-      while (end < lines.length && end < start + 8 && !allStarts.has(end)) end++;
+      while (end < lines.length && end < start + 8 && !allStarts.has(end) && entries[end].print === entries[start].print) end++;
       const window = lines.slice(start, end);
       const prices = [...new Set(window.flatMap((l) => l.match(PRICE) ?? []))];
       const before = start > 0 ? lines[start - 1] : "";
@@ -86,9 +121,14 @@ export function fillFromPage(works: Work[], snap: SiteSnapshot): Work[] {
       const bestScore = best ? (best.prices.length === 1 ? 2 : 0) + (best.window.some((l) => /add to cart|out of stock|sold/i.test(l)) ? 1 : 0) : -1;
       if (score > bestScore) best = { prices, window, before };
     }
-    if (!best) return w;
     const out: Work = { ...w };
-    if (best.prices.length === 1) out.price = best.prices[0].replace(/\s/g, "");
+    if (w.kind) { delete out.price; delete out.priceFrom; }
+    if (!best) return out;
+    if (best.prices.length === 1) {
+      out.price = best.prices[0].replace(/\s/g, "");
+      const at = best.window.find((l) => l.includes(best!.prices[0]));
+      if (at && /\bfrom\s*$/i.test(at.slice(0, at.indexOf(best.prices[0])))) out.priceFrom = true;
+    }
     const text = best.window.join(" ");
     const soldLabel = /^sold$/i.test(best.before) || /out of stock/i.test(text) || /(^|\s)sold(\s|$)/i.test(best.window.slice(1).join(" "));
     if (soldLabel) out.status = "Sold"; // a sold work keeps its list price, as galleries show it
@@ -512,5 +552,5 @@ export async function mapSnapshot(complete: Complete, snap: SiteSnapshot, menuCo
   const textChars = snap.pages.reduce((n, p) => n + p.text.length, 0);
   if (textChars < 200) warnings.push("Very little text was found. The site may load its words with JavaScript.");
   const aboutAt = aboutPageImages(snap, site.about);
-  return { result: { ...site, ...(aboutAt.page ? { aboutPage: aboutAt.page } : {}), aboutImages: aboutAt.images, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? "", ...quotes.kept.map((q) => q.quote)]), catalog: attachImages(fillFromPage(grounded2.kept, snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
+  return { result: { ...site, ...(aboutAt.page ? { aboutPage: aboutAt.page } : {}), aboutImages: aboutAt.images, socials: snap.socials, images: snap.images, actions: snap.actions, extras: dedupeExtras(grounded.kept, [site.about ?? "", site.tagline ?? "", ...quotes.kept.map((q) => q.quote)]), catalog: attachImages(fillFromPage(splitPrints(grounded2.kept, snap), snap), snap.images), testimonials: quotes.kept, signup: snap.signup, linksSeen: snap.linksSeen, sourceUrl: snap.rootUrl, dropped, pagesRead: snap.pages.length, readPages: snap.pages.map((p) => ({ url: p.url, chars: p.text.length })), textChars, warnings }, usage };
 }
