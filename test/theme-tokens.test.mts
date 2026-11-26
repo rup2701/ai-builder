@@ -42,10 +42,13 @@ await test("a wrong shape is named", () => {
   assert.equal(bad((t) => { delete t.radius; }), "radius is missing");
 });
 
-const brief = { site: { name: "PickPal", kind: "product-showcase" } };
-const designBrief = { skipped: null, passedToRunner: true, json: { a: 1 } } as never;
+const brief = G.brief as Record<string, unknown>;
+const json = G.savedDesignBrief;
+const designBrief = { skipped: null, passedToRunner: true, json } as never;
 const savedWith = (tile: unknown) => ({ v: 1, token: "t", status: "done", tile });
-const goodTile = () => ({ v: 1, fingerprint: tileFingerprint({ a: 1 } as never, brief), renderedAt: "2026-11-26T00:00:00Z", html: "<p>", tokens: T, checks: null, error: null });
+/** The tile's tokens carry a marker, so a test can tell tile tokens from computed ones. */
+const TILE_TOKENS = { ...clone(T), fromTile: true };
+const goodTile = () => ({ v: 1, fingerprint: tileFingerprint(json, brief), renderedAt: "2026-11-26T00:00:00Z", html: "<p>", tokens: TILE_TOKENS, checks: null, error: null });
 const dbWith = (saved: unknown) => ({ query: async () => ({ rows: [{ design_brief: saved }] }) });
 const run = async (opts: Partial<Parameters<typeof themeForBuild>[0]> = {}) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "theme-"));
@@ -54,42 +57,78 @@ const run = async (opts: Partial<Parameters<typeof themeForBuild>[0]> = {}) => {
   return { r, file };
 };
 
-await test("tokens present: written for the runner, with the tile's fingerprint", async () => {
+await test("tile: a saved tile drawn from this design brief and brief gives its own tokens", async () => {
   const { r, file } = await run();
   assert.equal(r.used, true);
+  assert.equal(r.source, "tile");
   assert.equal(r.file, file);
   assert.equal(r.fingerprint, goodTile().fingerprint);
-  assert.deepEqual(JSON.parse(await readFile(file, "utf8")), T);
+  assert.equal(r.renderedAt, "2026-11-26T00:00:00Z");
+  assert.equal(r.tileWhy, undefined);
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")), TILE_TOKENS);
 });
 
-await test("each reason to go without tokens is named, and nothing is written", async () => {
+await test("computed: with no tile that fits, the same tokens are worked out from the design brief and brief", async () => {
+  const cases: [Partial<Parameters<typeof themeForBuild>[0]>, RegExp][] = [
+    [{ db: dbWith(null) }, /no Visual design tile/],
+    [{ db: dbWith(savedWith(undefined)) }, /no Visual design tile/],
+    [{ db: dbWith(savedWith({ ...goodTile(), tokens: null, html: null, error: "could not draw" })) }, /no tokens \(could not draw\)/],
+    [{ db: dbWith(savedWith({ ...goodTile(), fingerprint: "other" })) }, /fingerprint mismatch/],
+    [{ db: dbWith(savedWith({ ...goodTile(), tokens: { version: 1 } })) }, /wrong shape \(mode/],
+  ];
+  for (const [opts, tileWhy] of cases) {
+    const { r, file } = await run(opts);
+    assert.equal(r.used, true, String(tileWhy));
+    assert.equal(r.source, "computed");
+    assert.match(r.tileWhy ?? "", tileWhy);
+    assert.equal(r.fingerprint, goodTile().fingerprint);
+    assert.equal(r.renderedAt, null);
+    assert.deepEqual(JSON.parse(await readFile(file, "utf8")), designTokens(json, brief), "the tokens the tile would be drawn with");
+  }
+  // The brief changed after the tile was drawn: the tokens follow the brief the build uses.
+  const changed = { ...clone(brief), look: { ...(brief.look as object), background: "#101820" } };
+  const { r, file } = await run({ brief: changed });
+  assert.equal(r.source, "computed");
+  assert.match(r.tileWhy ?? "", /fingerprint mismatch/);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).color.background, "#101820");
+});
+
+await test("off: the switch and a missing design brief mean no tokens, and nothing is written", async () => {
   const cases: [Partial<Parameters<typeof themeForBuild>[0]>, RegExp][] = [
     [{ env: { WORKER_THEME_TOKENS: "off" } as NodeJS.ProcessEnv }, /WORKER_THEME_TOKENS=off/],
+    [{ env: { WORKER_THEME_TOKENS: "off" } as NodeJS.ProcessEnv, db: dbWith(null) }, /WORKER_THEME_TOKENS=off/],
     [{ designBrief: undefined }, /no design brief went to the runner/],
     [{ designBrief: { skipped: "switched off", passedToRunner: false } as never }, /no design brief went to the runner/],
-    [{ designBrief: { skipped: null, passedToRunner: false, json: { a: 1 } } as never }, /no design brief went to the runner/],
-    [{ db: dbWith(null) }, /no saved design brief/],
-    [{ db: dbWith(savedWith(undefined)) }, /no Visual design tile/],
-    [{ db: dbWith(savedWith({ ...goodTile(), fingerprint: "other" })) }, /fingerprint mismatch/],
-    [{ brief: { ...brief, look: { accent: "#000000" } } }, /fingerprint mismatch/],
-    [{ db: dbWith(savedWith({ ...goodTile(), tokens: { version: 1 } })) }, /wrong shape \(mode/],
+    [{ designBrief: { skipped: null, passedToRunner: false, json } as never }, /no design brief went to the runner/],
   ];
   for (const [opts, why] of cases) {
     const { r, file } = await run(opts);
     assert.equal(r.used, false, String(why));
+    assert.equal(r.source, null);
     assert.match(r.why ?? "", why);
     await assert.rejects(() => readFile(file), "nothing is written");
   }
 });
 
-await test("an error is logged and the build goes on without tokens", async () => {
+await test("error: a tile that cannot be read falls back to computed; tokens that cannot be worked out or written mean none, logged", async () => {
   const lines: string[] = [];
-  const { r } = await run({ db: { query: async () => { throw new Error("connection lost"); } }, log: (l) => lines.push(l) });
-  assert.equal(r.used, false);
-  assert.match(r.why ?? "", /error: connection lost/);
-  assert.match(lines.join("\n"), /theme tokens not used.*connection lost/);
-  const w = await run({ file: "/nonexistent-folder/x.theme.json", log: () => {} });
-  assert.equal(w.r.used, false, "a file that cannot be written means no tokens");
+  const a = await run({ db: { query: async () => { throw new Error("connection lost"); } }, log: (l) => lines.push(l) });
+  assert.equal(a.r.used, true);
+  assert.equal(a.r.source, "computed");
+  assert.match(a.r.tileWhy ?? "", /error: connection lost/);
+  assert.match(lines.join("\n"), /working out the tokens instead: connection lost/);
+
+  lines.length = 0;
+  const b = await run({ db: dbWith(null), designBrief: { skipped: null, passedToRunner: true, json: { broken: true } } as never, log: (l) => lines.push(l) });
+  assert.equal(b.r.used, false);
+  assert.equal(b.r.source, null);
+  assert.match(b.r.why ?? "", /^error: /);
+  assert.match(lines.join("\n"), /theme tokens not used, the build goes on without them/);
+  await assert.rejects(() => readFile(b.file));
+
+  const c = await run({ file: "/nonexistent-folder/x.theme.json" });
+  assert.equal(c.r.used, false, "a file that cannot be written means no tokens");
+  assert.match(c.r.tileWhy ?? "", /^error: /);
 });
 
 await test("the runner's shape check is the same as this one (when the runner sits next to the Builder)", async () => {

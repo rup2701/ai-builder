@@ -16,8 +16,9 @@
  *   designBrief                       showcase builds (APP-42): the design brief JSON, its markdown (specs/design-brief.md), the quote
  *                                     check, other problems, attempts, model, tokens and cost, and whether it went to the runner.
  *                                     A brief that failed its checks is kept here too, with what failed. Null for other packs.
- *   theme                             whether the build started from the Visual design tile's tokens (PR B): used, why not,
- *                                     the tile's fingerprint, and whether the runner wrote src/theme.ts
+ *   theme                             whether the build started from the Visual design tokens (PR B): used, source (tile: the
+ *                                     saved tile; computed: worked out at build start), why not, why the tile was not used,
+ *                                     the fingerprint, and whether the runner wrote src/theme.ts
  *   deploy                            the runner's deploy.json without anything that looks like a secret
  *   site, timing, failure             the address, private test or not, the dates, and where a failed build stopped
  *   ownerId, projectCreatedAt         raw facts for working out later whether the site was kept or rebuilt

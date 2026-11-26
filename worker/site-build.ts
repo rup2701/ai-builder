@@ -287,12 +287,13 @@ export async function runSiteBuild(db: Db, job: Job, env: NodeJS.ProcessEnv = pr
           .query(`INSERT INTO usage (project_id, job_id, step, model, input_tokens, output_tokens, cost_usd) VALUES ($1, $2, 'design_brief', $3, $4, $5, $6)`, [job.project_id, job.id, step.model, t.input + t.cacheRead + t.cacheWrite, t.output, step.costUsd])
           .catch(() => {});
       }
-      // 1c. PR B: the tokens of the Visual design tile, when the tile was drawn from this same design brief and brief. The
-      // runner writes them into the site as src/theme.ts. Without them (or with WORKER_THEME_TOKENS=off) the build is as before.
+      // 1c. PR B: the tokens of the Visual design tile, when the tile was drawn from this same design brief and brief, or else
+      // the same tokens worked out now. The runner writes them into the site as src/theme.ts. Without them (or with
+      // WORKER_THEME_TOKENS=off) the build is as before.
       record.theme = await themeForBuild({ db, projectId: job.project_id, designBrief: record.designBrief, brief, file: briefFile.replace(/\.json$/, ".theme.json"), env });
       if (record.theme.used) designArgs.push("--theme", path.relative(runner, record.theme.file!));
     } else {
-      record.theme = { used: false, why: "only showcase sites have a Visual design", file: null, fingerprint: null, renderedAt: null };
+      record.theme = { used: false, source: null, why: "only showcase sites have a Visual design", file: null, fingerprint: null, renderedAt: null };
     }
 
     // 2. Build: create runs the main build, the look pass and the independent checks.
